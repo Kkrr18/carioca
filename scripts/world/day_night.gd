@@ -12,6 +12,7 @@ const HOUR_SECONDS := 60.0
 var hour := 9.5
 var paused := false
 var weather := "claro"   # claro | nublado | chuva
+var night_amount := 0.0  # 0 = dia pleno, 1 = noite fechada (janelas)
 
 var sun: DirectionalLight3D
 var moon: DirectionalLight3D
@@ -64,6 +65,7 @@ func apply() -> void:
 	var sin_e := sin(angle)
 	var daylight := smoothstep(-0.18, 0.22, sin_e)
 	var dusk := clampf(1.0 - absf(sin_e) * 3.4, 0.0, 1.0)
+	night_amount = clampf(0.35 - sin_e * 2.0, 0.0, 1.0)
 
 	var sky_top := Color(0.055, 0.09, 0.17).lerp(Color(0.20, 0.40, 0.72), daylight)
 	var horizon := Color(0.10, 0.13, 0.20).lerp(Color(0.68, 0.79, 0.88), daylight)

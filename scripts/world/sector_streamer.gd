@@ -27,6 +27,7 @@ var _busy: Dictionary = {}       # Vector2i -> id da tarefa no WorkerThreadPool
 var _mutex := Mutex.new()
 var _focus := Vector2i(-999, -999)
 var _material: StandardMaterial3D
+var _win_mat: StandardMaterial3D
 var _requests_this_frame := 0
 
 var generated_total: int = 0
@@ -39,6 +40,19 @@ func _ready() -> void:
 	_material.vertex_color_is_srgb = false
 	_material.roughness = 1.0
 	_material.metallic_specular = 0.1
+	# Material das janelas (surface 1 de cada setor): acende a noite.
+	_win_mat = StandardMaterial3D.new()
+	_win_mat.vertex_color_use_as_albedo = true
+	_win_mat.vertex_color_is_srgb = false
+	_win_mat.roughness = 0.4
+	_win_mat.emission_enabled = true
+	_win_mat.emission = Color(1.0, 0.85, 0.55)
+	_win_mat.emission_energy_multiplier = 0.0
+
+
+## Intensidade da iluminacao das janelas (0 = dia, 1 = noite).
+func set_window_glow(f: float) -> void:
+	_win_mat.emission_energy_multiplier = clampf(f, 0.0, 1.0) * 1.4
 
 
 func update_stream(focus: Vector3, delta: float) -> void:
@@ -134,8 +148,8 @@ func _install(sec: Vector2i, lod: int, res: Array) -> void:
 	var cols: PackedColorArray = res[2]
 	var colliders: Array = res[3]
 	var defs: Array = res[4]
-	if res.size() > 5:
-		last_generate_ms = float(res[5])
+	if res.size() > 8:
+		last_generate_ms = float(res[8])
 	if verts.is_empty():
 		return
 
@@ -147,11 +161,26 @@ func _install(sec: Vector2i, lod: int, res: Array) -> void:
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	mesh.surface_set_material(0, _material)
+	# Fachadas de vidro em surface propria, com emissao controlada por
+	# set_window_glow() conforme o ciclo dia/noite.
+	var win_v: PackedVector3Array = res[5]
+	if win_v.size() > 0:
+		var warrays := []
+		warrays.resize(Mesh.ARRAY_MAX)
+		warrays[Mesh.ARRAY_VERTEX] = win_v
+		warrays[Mesh.ARRAY_NORMAL] = res[6]
+		warrays[Mesh.ARRAY_COLOR] = res[7]
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, warrays)
+		mesh.surface_set_material(1, _win_mat)
 
 	var node := Node3D.new()
 	node.name = "S%d_%d" % [sec.x, sec.y]
 	var mi := MeshInstance3D.new()
 	mi.mesh = mesh
+	# Distancia de visibilidade: o setor detalhado some antes do grosso,
+	# com dithering (mais barato que alpha) na transicao.
+	mi.visibility_range_end = 1500.0 if lod == CityGen.LOD_FULL else 2400.0
+	mi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DITHER
 	node.add_child(mi)
 	if not defs.is_empty():
 		node.add_child(_prop_multimesh(defs))
@@ -176,6 +205,10 @@ func _prop_multimesh(defs: Array) -> MultiMeshInstance3D:
 	for i in defs.size():
 		var d: Dictionary = defs[i]
 		var c: Vector3 = d["c"]
+		c += Vector3(
+			float(d.get("dx", 0.0)),
+			float(d.get("dy", 0.0)),
+			float(d.get("dz", 0.0)))
 		var kind := String(d.get("kind", "tree"))
 		var hue := float(d.get("hue", 0.5))
 		var h := float(d.get("h", 6.0))
@@ -190,6 +223,8 @@ func _prop_multimesh(defs: Array) -> MultiMeshInstance3D:
 	mat.vertex_color_is_srgb = false
 	mat.roughness = 1.0
 	mmi.material_override = mat
+	mmi.visibility_range_end = 700.0
+	mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DITHER
 	return mmi
 
 

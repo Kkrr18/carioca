@@ -23,6 +23,22 @@ static func color_for(kind: String, hue: float) -> Color:
 			return KIOSK_A.lerp(KIOSK_B, hue)
 		"umbrella":
 			return UMBRELLA_A.lerp(UMBRELLA_B, hue)
+		"poste":
+			return Color(0.55, 0.55, 0.58)
+		"lampadaria":
+			return Color(1.0, 0.93, 0.72)
+		"banco":
+			return Color(0.50, 0.36, 0.22)
+		"lixeira":
+			return Color(0.20, 0.30, 0.24)
+		"carro":
+			if hue < 0.33:
+				return Color(0.75, 0.18, 0.15)
+			elif hue < 0.66:
+				return Color(0.16, 0.34, 0.60)
+			return Color(0.88, 0.87, 0.85)
+		"carro_top":
+			return Color(0.75, 0.82, 0.88)
 		_:
 			return LEAF
 
@@ -41,5 +57,17 @@ static func shape_for(kind: String, h: float) -> Array:
 			return [1.6, Vector3(4.5, 3.2, 3.5)]
 		"umbrella":
 			return [2.2, Vector3(3.4, 0.2, 3.4)]
+		"poste":
+			return [h * 0.5, Vector3(0.22, h, 0.22)]
+		"lampadaria":
+			return [h + 0.2, Vector3(1.3, 0.3, 0.5)]
+		"banco":
+			return [0.3, Vector3(2.0, 0.4, 0.6)]
+		"lixeira":
+			return [0.55, Vector3(0.55, 1.0, 0.55)]
+		"carro":
+			return [0.35, Vector3(4.2, 1.3, 1.8)]
+		"carro_top":
+			return [1.15, Vector3(2.2, 0.65, 1.6)]
 		_:
 			return [h * 0.5, Vector3(1.0, h, 1.0)]

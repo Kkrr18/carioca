@@ -35,6 +35,7 @@ func _initialize() -> void:
 	_test_normals()
 	_test_heights()
 	_test_props()
+	_test_windows()
 	_test_save_roundtrip()
 	_test_save_rejects()
 	_test_sectors()
@@ -217,6 +218,30 @@ func _test_props() -> void:
 		if size.length() < 0.4 or size.length() > 20.0:
 			ok = false
 	check(ok, "props com forma plausivel (5 tipos)")
+
+
+func _test_windows() -> void:
+	# Fachadas de vidro: existem no LOD full, nao existem no LOD far nem no mar.
+	var full := CityGen.generate(3, 0, 20260922, CityGen.LOD_FULL)
+	var far := CityGen.generate(3, 0, 20260922, CityGen.LOD_FAR)
+	var sea := CityGen.generate(3, -1, 20260922, CityGen.LOD_FULL)
+	var wv: PackedVector3Array = full[5]
+	var wf: PackedVector3Array = far[5]
+	var ws: PackedVector3Array = sea[5]
+	print("  info: fachadas de vidro no setor full = %d vertices" % wv.size())
+	check(wv.size() > 0 and wv.size() % 3 == 0, "fachadas de vidro geradas no LOD full (%d)" % wv.size())
+	check(wf.is_empty(), "fachadas de vidro ausentes no LOD far")
+	check(ws.is_empty(), "fachadas de vidro ausentes no setor de mar")
+	var props_ok := true
+	for s in ["poste", "lampadaria", "banco", "lixeira", "carro", "carro_top"]:
+		var sh := PropFactory.shape_for(s, 5.5)
+		if sh.size() != 2:
+			props_ok = false
+	var car_col := PropFactory.color_for("carro", 0.5)
+	var lamp_col := PropFactory.color_for("lampadaria", 0.0)
+	if car_col.r < 0.0 or lamp_col.r < 0.0:
+		props_ok = false
+	check(props_ok, "props de rua com forma e cor (%d defs no setor)" % full[4].size())
 
 
 # --- Salvamento --------------------------------------------------------------

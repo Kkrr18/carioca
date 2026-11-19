@@ -37,6 +37,7 @@ const TRUNK := Color(0.34, 0.27, 0.18)
 const LEAF := Color(0.22, 0.42, 0.24)
 const GRASS := Color(0.33, 0.45, 0.27)
 const FOREST := Color(0.20, 0.31, 0.18)
+const GLASS := Color(0.55, 0.68, 0.78)   # fachada de janelas (surface proprio)
 
 const PALETTE := [
 	Color(0.90, 0.88, 0.82), Color(0.82, 0.80, 0.74), Color(0.94, 0.92, 0.86),
@@ -62,6 +63,7 @@ const CUBE_FACES := [
 ## a fronteira de setor (ver CITY_MIN_Z = 128 = 2 x 64).
 static func generate(sx: int, sz: int, world_seed: int, lod: int) -> Array:
 	var gb := GBuf.new()
+	var win := GBuf.new()
 	var defs: Array = []
 	var colliders: Array = []
 	var ox := float(sx) * Cfg.SECTOR_SIZE
@@ -81,9 +83,9 @@ static func generate(sx: int, sz: int, world_seed: int, lod: int) -> Array:
 		if z_axis < Cfg.CITY_MIN_Z or z_axis > Cfg.CITY_MAX_Z:
 			continue
 		for i in range(i0, i1 + 1):
-			_block(gb, defs, colliders, float(i) * BLOCK, z_axis, world_seed, i, j, lod)
+			_block(gb, win, defs, colliders, float(i) * BLOCK, z_axis, world_seed, i, j, lod)
 
-	return [gb.v, gb.n, gb.c, colliders, defs]
+	return [gb.v, gb.n, gb.c, colliders, defs, win.v, win.n, win.c]
 
 
 # --- Terreno -----------------------------------------------------------------
@@ -122,6 +124,8 @@ static func _beach(gb: GBuf, defs: Array, ox: float, lod: int) -> void:
 	var z0 := 112.0
 	var z1 := 126.0
 	var end := ox + Cfg.SECTOR_SIZE
+	# Piso de asfalto da avenida, entre a areia e o calçadão.
+	_add_flat(gb, ox, 97.0, end, 110.0, ASPHALT)
 	var x := ox
 	while x < end - 0.01:
 		var x1 := minf(x + 64.0, end)
@@ -139,6 +143,22 @@ static func _beach(gb: GBuf, defs: Array, ox: float, lod: int) -> void:
 	while px < end - 4.0:
 		defs.append({"c": Vector3(px, Cfg.height_at(px, 88.0), 88.0), "kind": "palm", "h": 7.0})
 		px += 32.0
+	# Mobiliario do calçadão: bancos e lixeiras a cada 32 m.
+	var bx := ox + 16.0
+	while bx < end - 4.0:
+		defs.append({"c": Vector3(bx, Cfg.height_at(bx, 118.0), 118.0), "kind": "banco", "h": 0.6})
+		defs.append({"c": Vector3(bx + 8.0, Cfg.height_at(bx + 8.0, 118.0), 118.0), "kind": "lixeira", "h": 1.0})
+		bx += 32.0
+	# Carros estacionados na avenida, com cor variada e deterministicos.
+	var cx := ox + 9.0
+	while cx < end - 4.0:
+		if rng.chance(0.65):
+			var car_z := rng.range_f(100.5, 104.5)
+			var hue := rng.unit()
+			var car_y := Cfg.height_at(cx, car_z)
+			defs.append({"c": Vector3(cx, car_y, car_z), "kind": "carro", "hue": hue})
+			defs.append({"c": Vector3(cx, car_y, car_z), "kind": "carro_top", "hue": hue})
+		cx += 17.0
 	for k in 3:
 		if not rng.chance(0.75):
 			continue
@@ -150,7 +170,7 @@ static func _beach(gb: GBuf, defs: Array, ox: float, lod: int) -> void:
 
 # --- Quadras -----------------------------------------------------------------
 
-static func _block(gb: GBuf, defs: Array, colliders: Array, ax: float, az: float,
+static func _block(gb: GBuf, win: GBuf, defs: Array, colliders: Array, ax: float, az: float,
 		world_seed: int, bi: int, bj: int, lod: int) -> void:
 	# Semente propria da quadra: o conteudo nao depende do setor que a desenha.
 	var rng := Rng.new(mix3(world_seed, bi * 4096 + 1, bj * 4096 + 7))
@@ -159,6 +179,18 @@ static func _block(gb: GBuf, defs: Array, colliders: Array, ax: float, az: float
 	_add_roads(gb, ax, az)
 	# Calcada: miolo da quadra, entre as meias-ruas (sem sobreposicao com a rua).
 	_add_flat(gb, ax + edge, az + edge, ax + BLOCK - edge, az + BLOCK - edge, WALK_COL)
+
+	# Postes com luminaria nos cantos da calçada (em qualquer tipo de quadra).
+	if lod == LOD_FULL:
+		for p2 in [
+			Vector2(ax + 6.0, az + 6.0),
+			Vector2(ax + BLOCK - 6.0, az + 6.0),
+			Vector2(ax + 6.0, az + BLOCK - 6.0),
+			Vector2(ax + BLOCK - 6.0, az + BLOCK - 6.0),
+		]:
+			var py := Cfg.height_at(p2.x, p2.y)
+			defs.append({"c": Vector3(p2.x, py, p2.y), "kind": "poste", "h": 5.5})
+			defs.append({"c": Vector3(p2.x, py, p2.y), "kind": "lampadaria", "h": 5.5})
 
 	if rng.chance(0.07):
 		_add_flat(gb, ax + 14.0, az + 14.0, ax + BLOCK - 14.0, az + BLOCK - 14.0, PLAZA, PLAZA_LIFT)
@@ -178,12 +210,12 @@ static func _block(gb: GBuf, defs: Array, colliders: Array, ax: float, az: float
 		for b in LOT_ROWS:
 			var lx := x0 + lot_w * 0.5 + float(a) * (lot_w + ALLEY)
 			var lz := z0 + lot_d * 0.5 + float(b) * (lot_d + ALLEY)
-			_lot(gb, defs, colliders, rng, lx, lz, lot_w, lot_d, lod)
+			_lot(gb, win, defs, colliders, rng, lx, lz, lot_w, lot_d, lod)
 
 
 ## Um lote. Sorteia SEMPRE todos os valores (mesmo em LOD far), para o layout
 ## nao mudar entre os dois LODs.
-static func _lot(gb: GBuf, defs: Array, colliders: Array, rng: Rng,
+static func _lot(gb: GBuf, win: GBuf, defs: Array, colliders: Array, rng: Rng,
 		lx: float, lz: float, lot_w: float, lot_d: float, lod: int) -> void:
 	var empty := not rng.chance(0.92)
 	var floors := rng.range_i(1, 7)
@@ -209,6 +241,13 @@ static func _lot(gb: GBuf, defs: Array, colliders: Array, rng: Rng,
 	_add_box(gb, Vector3(lx, base_y + total * 0.5, lz), Vector3(w, total, d), col)
 	if lod == LOD_FULL:
 		_add_box(gb, Vector3(lx, base_y + total + 1.3, lz), Vector3(w * 0.42, 2.6, d * 0.42), ROOF)
+		# Fachada de vidro: envolucro que SALTA 15 cm por fora dos andares
+		# uteis (se ficasse afundado, o prédio opaco o esconderia), desenhado
+		# na surface propria (acende à noite via material com emissao).
+		var win_h := h - 2.2
+		if win_h > 1.0:
+			var win_y := base_y + total - h + 1.2 + win_h * 0.5
+			_add_box(win, Vector3(lx, win_y, lz), Vector3(w + 0.3, win_h, d + 0.3), GLASS)
 		if awning and h < 40.0:
 			_add_box(gb, Vector3(lx, ground_y + 3.4, lz + d * 0.5 + 1.1), Vector3(w * 0.85, 0.25, 2.2), ROOF)
 	colliders.append(Rect2(lx - w * 0.5, lz - d * 0.5, w, d))
