@@ -36,6 +36,7 @@ func _initialize() -> void:
 	_test_heights()
 	_test_props()
 	_test_windows()
+	_test_scripts_compile()
 	_test_save_roundtrip()
 	_test_save_rejects()
 	_test_sectors()
@@ -242,6 +243,40 @@ func _test_windows() -> void:
 	if car_col.r < 0.0 or lamp_col.r < 0.0:
 		props_ok = false
 	check(props_ok, "props de rua com forma e cor (%d defs no setor)" % full[4].size())
+
+
+func _test_scripts_compile() -> void:
+	# B-20 e B-23 foram erros de compilacao em scripts que os demais testes
+	# nao carregam (player, sector_streamer...). Compila cada um aqui. Os
+	# autoloads ficam de fora: o modo -s nao os registra, e main.gd os
+	# referencia (isso e coberto ao abrir o jogo).
+	var paths := [
+		"res://scripts/core/cfg.gd",
+		"res://scripts/core/geo.gd",
+		"res://scripts/core/perf_log.gd",
+		"res://scripts/world/city_gen.gd",
+		"res://scripts/world/prop_factory.gd",
+		"res://scripts/world/sector_streamer.gd",
+		"res://scripts/world/day_night.gd",
+		"res://scripts/player/player.gd",
+		"res://scripts/ui/touch_controls.gd",
+		"res://scripts/ui/hud.gd",
+	]
+	var all_ok := true
+	var details := ""
+	for p in paths:
+		var f := FileAccess.open(p, FileAccess.READ)
+		if f == null:
+			all_ok = false
+			details += " " + p + " (nao abriu)"
+			continue
+		var gds := GDScript.new()
+		gds.source_code = f.get_as_text()
+		f.close()
+		if gds.reload() != OK:
+			all_ok = false
+			details += " " + p
+	check(all_ok, "scripts do jogo compilam (falhas:%s)" % details)
 
 
 # --- Salvamento --------------------------------------------------------------

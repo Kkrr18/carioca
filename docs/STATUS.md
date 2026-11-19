@@ -127,6 +127,18 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
 - B-22: O shader da agua e a iluminacao de janelas nao sao exercidos pelos
   testes headless (exigem GPU). Validar no Safari do iPhone apos o proximo
   deploy do Pages.
+- B-23: O Passo B-D quebrou o boot: usei GeometryInstance3D.
+  VISIBILITY_RANGE_FADE_DITHER, constante que NAO existe no Godot 4 (o
+  certo e VISIBILITY_RANGE_FADE_SELF_DITHER). Como main.gd pre-carrega
+  sector_streamer.gd, a cena inteira parou de montar (mesmo sintoma da
+  tela azul do B-20), confirmado por inspecao do Safari em 19/11/2026.
+  Corrigido nesta revisao; revalidar no aparelho.
+- B-24: Os testes headless nao carregavam main.gd, player.gd, hud.gd,
+  touch_controls.gd nem sector_streamer.gd, entao erros de compilacao
+  neles passavam despercebidos no CI (aconteceu em B-20 e B-23). RESOLVIDO:
+  o runner agora compila 10 scripts do jogo via GDScript.reload() e recusa
+  qualquer falha (autoloads World/SaveManager continuam fora desse teste
+  porque o modo -s nao os registra).
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 

@@ -180,7 +180,7 @@ func _install(sec: Vector2i, lod: int, res: Array) -> void:
 	# Distancia de visibilidade: o setor detalhado some antes do grosso,
 	# com dithering (mais barato que alpha) na transicao.
 	mi.visibility_range_end = 1500.0 if lod == CityGen.LOD_FULL else 2400.0
-	mi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DITHER
+	mi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF_DITHER
 	node.add_child(mi)
 	if not defs.is_empty():
 		node.add_child(_prop_multimesh(defs))
@@ -224,7 +224,7 @@ func _prop_multimesh(defs: Array) -> MultiMeshInstance3D:
 	mat.roughness = 1.0
 	mmi.material_override = mat
 	mmi.visibility_range_end = 700.0
-	mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DITHER
+	mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF_DITHER
 	return mmi
 
 
