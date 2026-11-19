@@ -4,7 +4,9 @@ Jogo 3D de mundo aberto inspirado no Rio de Janeiro e em Niterói.
 Godot 4.4 · GDScript · alvo iPhone 12 · custo zero (OpenStreetMap, DEM público,
 Python e Blender).
 
-Estado: **Fase 1 (Fundação)** — em andamento, código nunca executado ainda.
+Estado: **Fase 1 (Fundação)** — em andamento. Fundação jogável validada no
+Safari de um iPhone (jogo carrega, anda, pula e salva), via build Web no
+GitHub Pages. Meta de 30 FPS e app nativo iOS ainda NÃO medidos/gerados.
 Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
 
 ## O que já existe

@@ -44,7 +44,8 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
 
 ## Em desenvolvimento
 
-- Fase 1: validar que o projeto abre no Godot 4.4 sem erros de compilacao.
+- Fase 1: encerramento — fundacao jogavel validada no iPhone (web). Falta
+  apenas o poligono valido (B-14/B-16) para o CI ficar 100% verde.
 
 ## Testados
 
@@ -54,15 +55,16 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   nao do codigo do jogo.
 - CI (job "Exportar Web"): o projeto exporta para Web sem erro.
 - Deploy no GitHub Pages: ativo, https://kkrr18.github.io/carioca/ responde.
-  O motor sobe no Safari do iPhone (barra de carregamento completa), mas o
-  jogo ainda nao mostra cena (B-20, correcao enviada, pendente de validacao).
+- JOGAVEL CONFIRMADO NO IPHONE (Safari, iOS 18): o usuario jogou — cidade
+  carrega, personagem anda/pula, controles de toque respondem. NAO medido
+  ainda: FPS real no aparelho (B-09), aquecimento, bateria.
 
 ## Bugs conhecidos
 
-- B-01: Nao compilado LOCALMENTE (o Godot nao roda neste dispositivo). A
-  compilacao passou a ser validada pelo CI: em 2026-02, o job "Godot headless"
-  rodou os 45 testes (37 ok). O player.gd tinha erros de compilacao que os
-  testes nao pegavam (B-20), corrigidos; confirmacao final pendente de CI.
+- B-01: RESOLVIDO. Compilacao validada no CI (job "Godot headless") e no
+  aparelho: em 2026-02 o usuario confirmou o jogo jogavel no Safari do iPhone
+  apos a correcao do B-20. O Godot continua sem rodar neste dispositivo; a
+  validacao de compilacao continua sendo do CI.
 - B-02: A area do poligono nao foi medida. O valor do arquivo nao e confiavel.
 - B-03: O poligono e um anel unico montado pela concatenacao de 3 grupos
   (rio-oeste, corredor da ponte, Niteroi). A ligacao entre eles nao foi
@@ -76,18 +78,16 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
 - B-08: O save guarda posicao e relogio; nao guarda estado do mundo.
 - B-09: Sem verificacao de desempenho em aparelho. A meta de 30 FPS no iPhone 12
   e uma hipotese ate medirmos (docs/OTIMIZACAO_IPHONE12.md).
-- B-10: PARCIALMENTE RESOLVIDO. O workflow web.yml rodou, o export Web passou e
-  o Pages publica em https://kkrr18.github.io/carioca/ (B-17 e B-19 resolvidos
-  pelo usuario). No Safari de um iPhone (iOS 18.7), o motor sobe e a barra de
-  carregamento completa, mas a tela fica numa cor solida: a cena nao monta.
-  Causa encontrada: B-20. Correcao enviada; validar no proximo deploy.
-- B-20: player.gd tinha duas declaracoes coladas na mesma linha
+- B-10: RESOLVIDO. O workflow web.yml roda, o export Web passa e o Pages
+  publica em https://kkrr18.github.io/carioca/. Validado pelo usuario no
+  Safari de um iPhone: o jogo carrega e da para jogar.
+- B-20: RESOLVIDO. player.gd tinha duas declaracoes coladas na mesma linha
   (preload de TouchControls + const WALK_SPEED) e quatro chamadas a
   Input.is_key_down(), metodo que NAO existe no Godot 4 (o certo e
   Input.is_key_pressed). Os testes headless nao pegavam porque nao carregam
   player.gd. O erro derrubava a compilacao de main.gd (que o pre-carrega) e
-  deixava o jogo sem cena nenhuma (tela azul no Safari). Corrigido nesta
-  revisao; confirmacao pendente de CI + teste no aparelho.
+  deixava o jogo sem cena nenhuma (tela azul no Safari). Corrigido em
+  824c7a9 e confirmado jogando no iPhone.
 - B-11: O projeto nao tem remote Git configurado. Ate fazer push, nem o CI de
   testes nem o build Web rodam.
 - B-12: No build Web o export padrao nao tem threads: a geracao de setor passa
@@ -115,10 +115,10 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   errado antes ("Pages e gratis") e esta corrigido aqui e em docs/TESTAR.md.
 - B-18: O erro de deploy do Pages aparece se Pages nao estiver ligado.
 
-## Proximas tarefas (Fase 1)
+## Proximas tarefas (Fase 1 -> Fase 2)
 
 1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
-2. Ligar o Pages uma vez em Settings (B-17) e confirmar o build web no Safari (B-10).
-3. Verificar a ligacao dos blocos do poligono (B-03).
-4. Confirmar com o usuario a instalacao do Godot 4.4 e a exportacao iOS.
+2. Medir FPS no iPhone jogando uma sessao real (B-09): o botao PERF grava CSV.
+3. Pedir ao usuario que toque em SALVAR e CARREGAR no jogo e confirme que o save volta (valida o B-08 no aparelho).
+4. Fase 2: pipeline OSM/DEM (Overpass -> recorte do poligono -> tiles) e a ponte Rio-Niteroi como malha (B-04).
 
