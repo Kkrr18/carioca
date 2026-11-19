@@ -15,6 +15,8 @@ const SaveManager = preload("res://scripts/autoload/save_manager.gd")
 const PropFactory = preload("res://scripts/world/prop_factory.gd")
 const Car = preload("res://scripts/vehicles/car.gd")
 const ModelProp = preload("res://scripts/world/model_prop.gd")
+const Player = preload("res://scripts/player/player.gd")
+const TouchControls = preload("res://scripts/ui/touch_controls.gd")
 
 var _pass := 0
 var _fail := 0
@@ -38,6 +40,7 @@ func _initialize() -> void:
 	_test_heights()
 	_test_props()
 	_test_car_physics()
+	_test_car_scene_enter_exit()
 	_test_model_prop()
 	_test_model_asset()
 	_test_windows()
@@ -252,6 +255,56 @@ func _test_car_physics() -> void:
 		"taxa de guinada inverte na marcha a re (modelo bicycle)")
 	check(Car.steer_limit(20.0) < Car.steer_limit(0.0) * 0.7,
 		"esterco maximo cai com a velocidade")
+
+
+func _test_car_scene_enter_exit() -> void:
+	# B-38: separa "a logica de entrar e andar funciona" de "o toque chegou".
+	# Monta uma cena minima (personagem + carro) no root do SceneTree e faz o
+	# MESMO caminho do botao ENTRAR: ocupa, acelera pelo pedal ACEL, sai.
+	# Sem GPU e sem dedo: se isto passa, o que falta e so a entrada de toque.
+	if root == null:
+		known(false, "cena do carro (SceneTree.root indisponivel)")
+		return
+	var holder := Node3D.new()
+	root.add_child(holder)
+	var player := Player.new()
+	player.streamer = null
+	holder.add_child(player)
+	var car := Car.new()
+	car.player = player
+	car.streamer = null
+	car.position = Vector3(1600.0, Cfg.height_at(1600.0, 96.0), 96.0)
+	car.rotation.y = PI * 0.5
+	holder.add_child(car)
+
+	check(car.camera != null and player.camera != null, "cena do carro montou (cameras)")
+	if car.camera == null or player.camera == null:
+		holder.free()
+		return
+
+	check(not car.occupied, "carro comeca livre")
+	car.toggle_occupant()
+	check(car.occupied, "ENTRAR ocupa o carro")
+	check(not player.enabled, "entrar desliga o personagem")
+	check(not player.visible, "entrar esconde o personagem")
+	check(car.camera.current, "camera do carro assume ao entrar")
+
+	# 1 s de pedal ACEL, a 30 Hz: a mesma entrada que o TouchControls entrega.
+	var start: Vector3 = car.position
+	TouchControls.pedal_gas_s = true
+	for i in 30:
+		car._drive(1.0 / 30.0)
+	TouchControls.pedal_gas_s = false
+	check(car.input_throttle > 0.99, "pedal ACEL chega ao carro (throttle %.2f)" % car.input_throttle)
+	check(car.speed > 1.0, "carro ganha velocidade (%.1f m/s)" % car.speed)
+	var moved: float = car.position.distance_to(start)
+	check(moved > 1.0, "carro anda de verdade (%.1f m em 1 s)" % moved)
+
+	car.toggle_occupant()
+	check(not car.occupied, "SAIR libera o carro")
+	check(player.enabled and player.visible, "sair devolve o personagem")
+	check(player.camera.current, "camera do personagem volta ao sair")
+	holder.free()
 
 
 func _test_model_prop() -> void:
