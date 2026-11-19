@@ -57,9 +57,9 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   codigo (sem VehicleBody3D, mesma filosofia de colisao do player), rodas que
   giram e estercam, carroceria que inclina com o relevo, camera propria,
   farois/lanternas emissivos. Nesta rodada, para o usuario conseguir ENTRAR e
-  ANDAR no iPhone (B-36): o carro nasce a ~6 m do spawn com marcador flutuante,
-  o raio do botao ENTRAR subiu de 3,5 m para 12 m, o botao do topo leva o
-  jogador ate o carro, e dirigindo os botoes de toque viram ACEL/FREIO. A
+  ANDAR no iPhone (B-36): o carro nasce a ~5,7 m do spawn (o botao ENTRAR ja
+  aparece no primeiro quadro) com marcador flutuante, o raio do botao subiu de
+  3,5 m para 12 m, e dirigindo os botoes de toque viram ACEL/FREIO. A
   telemetria mostra "carro dirigindo/livre, dist, km/h, acel %, volante %".
   Pendente: validacao no aparelho.
 - Medicao de FPS (B-09): o HUD ganhou o botao MEDIR — 15 s sem o limite de 30
@@ -242,9 +242,8 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   vez de posicoes fixas em _process.
 - B-36: RESOLVIDO ESCRITO (falta validar no aparelho). O usuario jogou e nao
   conseguiu entrar/andar no carro. Causas provaveis, todas tratadas: o carro
-  ficava a 14 m do spawn e o botao so aparecia a 3,5 m (agora nasce a ~6 m e o
-  raio e 12 m); nao havia como chegar ao carro pela interface (o botao do topo
-  agora leva o jogador ate ele); o acelerador era o eixo Y do joystick que
+  ficava a 14 m do spawn e o botao so aparecia a 3,5 m (agora nasce a ~5,7 m e
+  o raio e 12 m, entao o botao aparece no nascimento); o acelerador era o eixo Y do joystick que
   tambem vira o volante (agora ha pedais ACEL/FREIO dedicados); e o carro nao
   tinha marcador (agora tem um poste com esfera). A telemetria passou a
   mostrar carro/velocidade/acelerador/volante, para diagnosticar no aparelho

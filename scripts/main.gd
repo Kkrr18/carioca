@@ -303,9 +303,10 @@ func _on_hud_action(which: String) -> void:
 				car.toggle_occupant()
 				hud.toast("Voce saiu do carro.")
 			else:
-				# Longe do carro, este botao leva o jogador ate ele: no iPhone,
-				# com a interface pequena, caminhar ate o veiculo era o que
-				# travava a Fase 4 (B-36). Perto, apenas entra.
+				# Rede de seguranca: o botao de contexto so aparece dentro de
+				# Car.PROXIMITY, mas a distancia pode mudar entre o desenho do
+				# botao e o toque. Se estiver longe, o jogador vai para o lado do
+				# carro antes de entrar (B-36).
 				if player.position.distance_to(car.global_position) > Car.PROXIMITY:
 					var side := Vector3(cos(car.rotation.y), 0.0, -sin(car.rotation.y))
 					player.teleport(car.global_position + side * 2.4)
