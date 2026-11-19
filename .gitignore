@@ -1,0 +1,27 @@
+# Dependencias e artefatos gerados (nada disso vai para o repositorio)
+
+# Godot
+.godot/
+*.import
+export.cfg
+export_credentials.cfg
+build/
+*.pck
+*.zip
+*.ipa
+*.xcarchive
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Dados brutos baixados pela pipeline (grandes; ver tools/pipeline/README)
+data/osm/
+data/dem/
+data/cache/
+
+# Editores e sistema
+.DS_Store
+.vscode/
+.idea/
