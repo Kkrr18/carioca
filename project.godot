@@ -1,0 +1,57 @@
+; Engine configuration file.
+; CARIOCA - jogo 3D de mundo aberto inspirado no Rio de Janeiro e em Niteroi.
+; Godot 4.4+, renderer Compatibility (iOS / OpenGL ES 3.0 / Meta).
+; Este arquivo e editavel a mao; o editor reescreve o que precisar.
+
+config_version=5
+
+[application]
+
+config/name="CARIOCA"
+config/description="Mundo aberto 3D inspirado no Rio de Janeiro e Niteroi. Fase 1 - Fundacao."
+config/version="0.1.0-dev"
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.4", "Mobile")
+config/icon="res://icon.svg"
+boot_splash/bg_color=Color(0.05, 0.09, 0.15, 1)
+boot_splash/show_image=false
+
+[autoload]
+
+World="*res://scripts/autoload/world.gd"
+SaveManager="*res://scripts/autoload/save_manager.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/handheld/orientation=0
+window/stretch/mode="viewport"
+window/stretch/aspect="expand"
+
+[input_devices]
+
+pointing/emulate_mouse_from_touch=false
+pointing/emulate_touch_from_mouse=true
+
+[physics]
+
+common/physics_ticks_per_second=60
+common/max_physics_steps_per_frame=4
+3d/default_gravity=14.0
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
+anti_aliasing/quality/msaa_3d=0
+environment/defaults/default_clear_color=Color(0.42, 0.58, 0.72, 1)
+limits/opengl/max_renderable_elements=131072
+lights_and_shadows/directional_shadow/size=2048
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=0
+
+[debug]
+
+gdscript/warnings/unsafe_property_access=0
+gdscript/warnings/unsafe_method_access=0

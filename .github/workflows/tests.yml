@@ -1,0 +1,34 @@
+name: testes
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  godot-headless:
+    name: Godot headless (testes)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Baixar Godot 4.4.1 (Linux headless)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/godot.zip \
+            https://github.com/godotengine/godot/releases/download/4.4.1-stable/Godot_v4.4.1-stable_linux.x86_64.zip
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          mv /tmp/godot/Godot_v4.4.1-stable_linux.x86_64 /usr/local/bin/godot
+          chmod +x /usr/local/bin/godot
+          godot --version
+      - name: Rodar os testes do jogo
+        run: godot --headless --path . -s tests/runner.gd
+
+  poligono:
+    name: Area do poligono (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 tools/geo/polygon_area.py

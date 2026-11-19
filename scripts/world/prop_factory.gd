@@ -1,0 +1,45 @@
+extends RefCounted
+## PropFactory: aparencia dos props instanciados (palmeira, arvore, quiosque,
+## guarda-sol). O streamer usa MultiMesh com o cubo unitario; aqui ficam as
+## cores por instancia. Na Fase 5 estes props viram malhas proprias (Blender).
+## Acessado via preload nos scripts; sem class_name de proposito.
+
+const TRUNK := Color(0.34, 0.27, 0.18)
+const LEAF := Color(0.22, 0.42, 0.24)
+const BUSH := Color(0.28, 0.44, 0.22)
+const KIOSK_A := Color(0.95, 0.86, 0.55)
+const KIOSK_B := Color(0.55, 0.75, 0.85)
+const UMBRELLA_A := Color(0.92, 0.35, 0.30)
+const UMBRELLA_B := Color(0.30, 0.55, 0.85)
+
+
+static func color_for(kind: String, hue: float) -> Color:
+	match kind:
+		"palm":
+			return LEAF.darkened(0.05)
+		"tree", "bush":
+			return BUSH.lerp(LEAF, hue)
+		"kiosk":
+			return KIOSK_A.lerp(KIOSK_B, hue)
+		"umbrella":
+			return UMBRELLA_A.lerp(UMBRELLA_B, hue)
+		_:
+			return LEAF
+
+
+## Deslocamento vertical e escala do cubo unitario para cada tipo de prop.
+## Retorna [offset_y, tamanho] para a instancia.
+static func shape_for(kind: String, h: float) -> Array:
+	match kind:
+		"palm":
+			return [h * 0.5, Vector3(0.5, h, 0.5)]
+		"tree":
+			return [h * 0.5, Vector3(h * 0.55, h, h * 0.55)]
+		"bush":
+			return [h * 0.5, Vector3(h, h, h)]
+		"kiosk":
+			return [1.6, Vector3(4.5, 3.2, 3.5)]
+		"umbrella":
+			return [2.2, Vector3(3.4, 0.2, 3.4)]
+		_:
+			return [h * 0.5, Vector3(1.0, h, 1.0)]
