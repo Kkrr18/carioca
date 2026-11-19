@@ -152,6 +152,13 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   so log melhorado) os dois compilaram. Provavel idiossincrasia de
   GDScript.reload() com recurso em cache no CI. Se voltar, as mensagens
   de get_errors() agora sao impressas.
+- B-27: Depois da reversao do shader do mar (B-25), o jogo continua sem
+  desenhar nada no Safari (canvas so limpa a cor de fundo). O console do
+  Godot, onde o erro real aparece, nao e visivel no iPhone. MITIGACAO: o
+  workflow web.yml agora injeta no build Web um painel verde que mostra no
+  proprio jogo tudo o que o Godot imprime no console. Proxima leitura desse
+  painel deve apontar o erro exato (script, shader ou runtime). O painel e
+  temporario e sera removido quando a Fase 1.5 estiver validada.
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 

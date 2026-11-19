@@ -71,6 +71,42 @@ jobs:
       - name: Desativar Jekyll
         run: touch build/web/.nojekyll
 
+      # Diagnostico (B-25/B-27): injeta no jogo um painel que mostra tudo que
+      # o Godot imprime no console (erros de script, shader e runtime) —
+      # o console do Safari no iPhone nao e visivel. Remover quando a
+      # Fase 1.5 estiver validada.
+      - name: Injetar console visivel no build Web
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("build/web/index.html")
+          html = p.read_text()
+          shim = """<script>
+          (function () {
+            var box = document.createElement('pre');
+            box.style.cssText = 'position:fixed;bottom:0;left:0;right:0;max-height:28%;overflow:auto;margin:0;padding:4px;background:rgba(0,0,0,.75);color:#7dff7d;font:11px/1.35 monospace;z-index:99999;white-space:pre-wrap;pointer-events:none;';
+            document.addEventListener('DOMContentLoaded', function () { document.body.appendChild(box); });
+            ['log', 'warn', 'error'].forEach(function (k) {
+              var orig = console[k].bind(console);
+              console[k] = function () {
+                var t = '[' + k + '] ';
+                for (var i = 0; i < arguments.length; i++) t += String(arguments[i]) + ' ';
+                box.textContent += t + '\\n';
+                box.scrollTop = box.scrollHeight;
+                orig.apply(null, arguments);
+              };
+            });
+          })();
+          </script>"""
+          if "</body>" in html:
+              html = html.replace("</body>", shim + "</body>", 1)
+          else:
+              html += shim
+          p.write_text(html)
+          print("console shim injetado em build/web/index.html")
+          PY
+
       # Reserva: mesmo que a publicacao falhe, o build fica baixavel no artifact.
       - name: Guardar o build como artifact
         uses: actions/upload-artifact@v4
