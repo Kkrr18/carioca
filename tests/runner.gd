@@ -13,6 +13,7 @@ const Geo = preload("res://scripts/core/geo.gd")
 const CityGen = preload("res://scripts/world/city_gen.gd")
 const SaveManager = preload("res://scripts/autoload/save_manager.gd")
 const PropFactory = preload("res://scripts/world/prop_factory.gd")
+const Car = preload("res://scripts/vehicles/car.gd")
 
 var _pass := 0
 var _fail := 0
@@ -35,6 +36,7 @@ func _initialize() -> void:
 	_test_normals()
 	_test_heights()
 	_test_props()
+	_test_car_physics()
 	_test_windows()
 	_test_scripts_compile()
 	_test_save_roundtrip()
@@ -221,6 +223,27 @@ func _test_props() -> void:
 	check(ok, "props com forma plausivel (5 tipos)")
 
 
+func _test_car_physics() -> void:
+	# Nucleo puro de scripts/vehicles/car.gd (sem cena, sem GPU).
+	check(Car.advance_speed(0.0, 1.0, 0.1) > 0.0, "carro acelera com o acelerador")
+	check(absf(Car.advance_speed(10.0, -1.0, 0.1) - 8.4) < 0.001,
+		"freio tira 1,6 m/s em 0,1 s (16 m/s2)")
+	check(Car.advance_speed(0.05, -1.0, 0.1) == 0.0,
+		"freio para exatamente em zero, sem engatar a re")
+	check(Car.advance_speed(0.0, -1.0, 1.0) == -Car.REVERSE_MAX,
+		"marcha a re satura em REVERSE_MAX")
+	check(Car.advance_speed(10.0, 0.0, 0.1) < 10.0,
+		"acelerador solto perde velocidade (atrito)")
+	var s := 0.0
+	for i in 1200:
+		s = Car.advance_speed(s, 1.0, 1.0 / 30.0)
+	check(absf(s - Car.MAX_SPEED) < 0.01, "acelerador satura em MAX_SPEED (%.2f)" % s)
+	check(Car.yaw_rate(10.0, 0.3) > 0.0 and Car.yaw_rate(-10.0, 0.3) < 0.0,
+		"taxa de guinada inverte na marcha a re (modelo bicycle)")
+	check(Car.steer_limit(20.0) < Car.steer_limit(0.0) * 0.7,
+		"esterco maximo cai com a velocidade")
+
+
 func _test_windows() -> void:
 	# Fachadas de vidro: existem no LOD full, nao existem no LOD far nem no mar.
 	var full := CityGen.generate(3, 0, 20260922, CityGen.LOD_FULL)
@@ -258,6 +281,7 @@ func _test_scripts_compile() -> void:
 		"res://scripts/world/prop_factory.gd",
 		"res://scripts/world/sector_streamer.gd",
 		"res://scripts/world/day_night.gd",
+		"res://scripts/vehicles/car.gd",
 		"res://scripts/player/player.gd",
 		"res://scripts/ui/touch_controls.gd",
 		"res://scripts/ui/hud.gd",

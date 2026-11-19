@@ -8,6 +8,7 @@ extends Node3D
 ##   5. salvamento/carregamento versionado (SaveManager)
 
 const Cfg = preload("res://scripts/core/cfg.gd")
+const Car = preload("res://scripts/vehicles/car.gd")
 const CityGen = preload("res://scripts/world/city_gen.gd")
 const SectorStreamer = preload("res://scripts/world/sector_streamer.gd")
 const DayNight = preload("res://scripts/world/day_night.gd")
@@ -23,6 +24,7 @@ var environment: Environment
 var sea: MeshInstance3D
 var streamer = null
 var player = null
+var car = null
 var day_night = null
 var hud = null
 var perf_log = null
@@ -107,6 +109,17 @@ func _ready() -> void:
 	add_child(player)
 	hud.setup(player, streamer, day_night)
 
+	# Fase 4 (incremento minimo): um carro dirigivel estacionado na Av.
+	# Atlantica, fora da faixa dos carros estacionados (z 100.5-104.5).
+	_boot_step("carro")
+	car = Car.new()
+	car.name = "Car"
+	car.player = player
+	car.streamer = streamer
+	car.position = Vector3(1612.0, Cfg.height_at(1612.0, 107.5), 107.5)
+	car.rotation.y = PI * 0.5
+	add_child(car)
+
 	_boot_step("toque")
 	var touch_layer := CanvasLayer.new()
 	touch_layer.name = "TouchLayer"
@@ -130,7 +143,7 @@ func _ready() -> void:
 
 	_boot_step("pronto")
 	_boot_log.text = ""
-	hud.toast("Toque na esquerda para andar. Arraste na direita para olhar.")
+	hud.toast("Esquerda: andar. Direita: olhar. Chegue perto do carro e toque ENTRAR.")
 
 
 func _build_environment() -> void:
@@ -234,6 +247,14 @@ func _process(delta: float) -> void:
 	if sea != null and player != null:
 		# Mar "infinito": acompanha o jogador no plano XZ.
 		sea.global_position = Vector3(player.position.x, Cfg.SEA_LEVEL, player.position.z)
+	# Prompt de contexto do veiculo (Fase 4): botao CARRO perto do carro.
+	if hud != null and car != null and player != null:
+		var prompt := ""
+		if car.occupied:
+			prompt = "SAIR DO CARRO"
+		elif player.position.distance_to(car.position) < Car.PROXIMITY:
+			prompt = "ENTRAR NO CARRO"
+		hud.set_car_prompt(prompt)
 	perf_log.sample(delta)
 
 
@@ -243,6 +264,12 @@ func _on_hud_action(which: String) -> void:
 			save_game()
 		"load":
 			load_game()
+		"car":
+			if car != null and player != null and (
+					car.occupied or player.position.distance_to(car.position) < Car.PROXIMITY):
+				car.toggle_occupant()
+				hud.toast("Dirija: joystick acelera e vira (ou W A S D)." if car.occupied
+						else "Voce saiu do carro.")
 
 
 func collect_state() -> Dictionary:

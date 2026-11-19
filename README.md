@@ -26,6 +26,12 @@ Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
 - Fase 1.5 visual: água com ondas/fresnel, glow + tonemap ACES, sombra de
   contato, fachadas de vidro que acendem à noite, postes, bancos, lixeiras
   e carros estacionados (plano completo em docs/DETALHES_VISUAIS.md).
+- Carro dirigível (primeiro incremento da Fase 4): entre/saia pelo botão
+  CARRO quando estiver perto do veículo (ou tecla E), direção cinemática
+  estável, rodas que giram e estercam, carroceria que acompanha o relevo e
+  câmera própria.
+- Caderno de estilo visual ([docs/ESTILO.md](docs/ESTILO.md)): low-poly
+  estilizado com iluminação moderna, paleta do Rio, regras de render.
 - HUD com telemetria e gravador de desempenho em CSV.
 - Salvamento versionado (`schema`, sha256, gzip, escrita atômica, recusa de
   versão futura e de arquivo corrompido).
@@ -69,6 +75,7 @@ Passo a passo completo em [docs/EXPORTACAO_IOS.md](docs/EXPORTACAO_IOS.md).
 - [docs/TESTAR.md](docs/TESTAR.md) — como rodar e testar, com e sem computador.
 - [docs/AUDITORIA.md](docs/AUDITORIA.md) — diagnóstico do que foi encontrado.
 - [docs/ARQUITETURA.md](docs/ARQUITETURA.md) — decisões técnicas e por quê.
+- [docs/ESTILO.md](docs/ESTILO.md) — caderno de estilo visual (paleta, render, animação).
 - [docs/ROADMAP.md](docs/ROADMAP.md) — as 9 fases com critério de saída.
 - [docs/DETALHES_VISUAIS.md](docs/DETALHES_VISUAIS.md) — pesquisa e plano de
   detalhes visuais (modelos, texturas e técnicas CC0).

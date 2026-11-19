@@ -23,6 +23,7 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
 | Controles por toque | Escrito | scripts/ui/touch_controls.gd |
 | HUD e telemetria | Escrito | scripts/ui/hud.gd, scripts/core/perf_log.gd |
 | Ciclo dia/noite e clima (2 estados de tempo) | Escrito | scripts/world/day_night.gd |
+| Veiculo dirigivel (carro — Fase 4, incremento minimo) | Escrito | scripts/vehicles/car.gd |
 | Salvamento versionado (schema 1, sha256, gzip) | Escrito | scripts/autoload/save_manager.gd |
 | Testes headless | Escrito | tests/runner.gd |
 | Cena principal | Escrito | scenes/main.tscn, scripts/main.gd |
@@ -51,6 +52,12 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   com janelas que acendem a noite, postes com luminaria, bancos, lixeiras,
   carros estacionados na avenida, distancias de visibilidade com fade).
   Pendente: validacao no aparelho (jogar + FPS) e assets externos (B-21).
+- Fase 4 (incremento minimo): carro dirigivel — cinematica "bicycle" por
+  codigo (sem VehicleBody3D, mesma filosofia de colisao do player), entrar/
+  sair pelo botao CARRO do HUD (ou tecla E), rodas que giram e estercam,
+  carroceria que inclina com o relevo, camera propria, farois/lanternas
+  emissivos. Caderno de estilo visual criado em docs/ESTILO.md. Pendente:
+  validacao no aparelho (entrar, dirigir na avenida, sair + FPS).
 
 ## Testados
 
@@ -165,9 +172,10 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
 1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
 2. Medir FPS no iPhone jogando uma sessao real (B-09): o botao PERF grava CSV.
 3. Pedir ao usuario que toque em SALVAR e CARREGAR no jogo e confirme que o save volta (valida o B-08 no aparelho).
-4. Fase 2: pipeline OSM/DEM (Overpass -> recorte do poligono -> tiles) e a ponte Rio-Niteroi como malha (B-04).
-5. Fase 1.5 (visual, paralela): plano em docs/DETALHES_VISUAIS.md. Passos A-D
+4. Fase 4 (incremento minimo): testar o carro no iPhone (entrar, dirigir na avenida, sair) e medir FPS com ele em cena; se estiver liso, trafego basico (carros de passeio seguindo as ruas) e a meta "dirigir do Rio ate Niteroi".
+5. Fase 2: pipeline OSM/DEM (Overpass -> recorte do poligono -> tiles) e a ponte Rio-Niteroi como malha (B-04).
+6. Fase 1.5 (visual, paralela): plano em docs/DETALHES_VISUAIS.md. Passos A-D
    em codigo (procedural); falta validar no aparelho e medir FPS.
-6. B-21: quando houver acesso a um PC, baixar Kenney/KayKit/Poly Haven e
+7. B-21: quando houver acesso a um PC, baixar Kenney/KayKit/Poly Haven e
    substituir os props procedurais pelos modelos CC0.
 

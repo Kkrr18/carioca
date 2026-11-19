@@ -25,6 +25,8 @@ var _toast_t := 0.0
 var _refresh := 0.0
 var _perf_on := true
 var _cap30 := true
+var _car_btn: Button
+var _car_label := ""
 
 var _frame_times: Array[float] = []
 var _frame_i := 0
@@ -53,6 +55,18 @@ func _ready() -> void:
 	_bar_button(bar, "PERF", _on_perf)
 	_bar_button(bar, "+1h", _on_plus_hour)
 	_bar_button(bar, "LIMITAR 30", _on_cap)
+
+	# Botao de contexto do veiculo (Fase 4): so aparece quando o jogador
+	# esta perto do carro (ou dirigindo). O main manda o texto via
+	# set_car_prompt() e o clique volta pelo signal action("car").
+	_car_btn = Button.new()
+	_car_btn.text = "ENTRAR NO CARRO"
+	_car_btn.custom_minimum_size = Vector2(200.0, 54.0)
+	_car_btn.focus_mode = Control.FOCUS_NONE
+	_car_btn.add_theme_font_size_override("font_size", 14)
+	_car_btn.visible = false
+	_car_btn.pressed.connect(_on_car)
+	root.add_child(_car_btn)
 
 	_title = Label.new()
 	_title.text = "CARIOCA  v%s  -  Fase 1 (fundacao jogavel)" % Cfg.APP_VERSION
@@ -101,9 +115,27 @@ func toast(msg: String) -> void:
 	_toast_t = 2.5
 
 
+## Texto do botao de contexto do veiculo. String vazia esconde o botao.
+func set_car_prompt(label: String) -> void:
+	if label == _car_label:
+		return
+	_car_label = label
+	_car_btn.text = label if label != "" else "ENTRAR NO CARRO"
+	_car_btn.visible = label != ""
+
+
+func _on_car() -> void:
+	action.emit("car")
+
+
 func _process(delta: float) -> void:
 	_toast_t = maxf(0.0, _toast_t - delta)
 	_toast.modulate.a = clampf(_toast_t, 0.0, 1.0)
+	if _car_btn != null and _car_btn.visible:
+		# Ancorado a mao: o canto inferior direito fica com os botoes de toque
+		# (PULAR/CORRER ficam abaixo; sem sobreposicao).
+		var vs := get_viewport_rect().size
+		_car_btn.position = Vector2(vs.x - 216.0, vs.y - 254.0)
 	_frame_times.resize(240)
 	_frame_times[_frame_i % 240] = delta * 1000.0
 	_frame_i += 1
