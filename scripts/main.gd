@@ -33,15 +33,42 @@ var _camera: Camera3D
 var _loading := true
 var _loading_label: Label
 var _play_time := 0.0
+var _boot_log: Label
+
+
+## Marca a etapa atual do boot na tela. O console do WebGL no Safari nao e
+## visivel para o jogador; se _ready abortar em algum erro, o ULTIMO texto
+## aqui mostrado indica exatamente onde o jogo parou (B-20/B-23 passaram
+## despercebidos por isso).
+func _boot_step(m: String) -> void:
+	if _boot_log != null:
+		_boot_log.text = "BOOT: " + m
 
 
 func _ready() -> void:
 	world_seed = World.world_seed
 	randomize()
 
+	# Log de boot visivel na tela.
+	var boot_layer := CanvasLayer.new()
+	boot_layer.name = "BootLogLayer"
+	boot_layer.layer = 10
+	add_child(boot_layer)
+	_boot_log = Label.new()
+	_boot_log.text = "BOOT: iniciando"
+	_boot_log.position = Vector2(12.0, 70.0)
+	_boot_log.add_theme_font_size_override("font_size", 14)
+	_boot_log.add_theme_color_override("font_color", Color(1, 1, 1, 0.9))
+	_boot_log.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+	_boot_log.add_theme_constant_override("outline_size", 3)
+	boot_layer.add_child(_boot_log)
+
+	_boot_step("ambiente")
 	_build_environment()
+	_boot_step("mar")
 	_build_sea()
 
+	_boot_step("streamer")
 	streamer = SectorStreamer.new()
 	streamer.name = "SectorStreamer"
 	streamer.world_seed = world_seed
@@ -56,18 +83,31 @@ func _ready() -> void:
 		streamer.far_ring = 1
 	add_child(streamer)
 
-	player = Player.new()
-	player.name = "Player"
-	player.streamer = streamer
-	player.spawn_position = SPAWN
-	add_child(player)
-
+	_boot_step("relogio")
 	day_night = DayNight.new()
 	day_night.name = "DayNight"
 	add_child(day_night)
 	day_night.setup(_sun, _moon, environment)
 	day_night.set_hour(9.5)
 
+	# HUD antes do player: se o player abortar, a interface e o log de boot
+	# continuam visiveis (e o diagnostics fica na tela).
+	_boot_step("interface")
+	hud = Hud.new()
+	hud.name = "Hud"
+	add_child(hud)
+	hud.setup(player, streamer, day_night)
+	hud.action.connect(_on_hud_action)
+
+	_boot_step("player")
+	player = Player.new()
+	player.name = "Player"
+	player.streamer = streamer
+	player.spawn_position = SPAWN
+	add_child(player)
+	hud.setup(player, streamer, day_night)
+
+	_boot_step("toque")
 	var touch_layer := CanvasLayer.new()
 	touch_layer.name = "TouchLayer"
 	touch_layer.layer = 1
@@ -76,12 +116,7 @@ func _ready() -> void:
 	touch.name = "TouchControls"
 	touch_layer.add_child(touch)
 
-	hud = Hud.new()
-	hud.name = "Hud"
-	add_child(hud)
-	hud.setup(player, streamer, day_night)
-	hud.action.connect(_on_hud_action)
-
+	_boot_step("telemetria")
 	perf_log = PerfLog.new()
 	perf_log.name = "PerfLog"
 	add_child(perf_log)
@@ -93,6 +128,8 @@ func _ready() -> void:
 	_loading_label.position = Vector2(24.0, 200.0)
 	hud.add_child(_loading_label)
 
+	_boot_step("pronto")
+	_boot_log.text = ""
 	hud.toast("Toque na esquerda para andar. Arraste na direita para olhar.")
 
 
