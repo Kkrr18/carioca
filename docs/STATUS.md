@@ -61,10 +61,13 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
 
 ## Testados
 
-- CI (job "Godot headless", 45 testes): geracao de setor deterministica,
-  limites de malha, LOD, colisores, props, mar/praia/interior, save/load
-  versionado e setor_of — 37 passaram; as 7 falhas sao do poligono (B-14),
-  nao do codigo do jogo.
+- CI (job "Godot headless"): geracao de setor deterministica, limites de
+  malha, LOD, colisores, props, mar/praia/interior, save/load versionado,
+  setor_of e compilacao de TODOS os scripts do jogo (agora incluindo main.gd
+  e os autoloads). As checagens de DADO do poligono (area, auto-intersecao,
+  pontos de referencia) aparecem como DESVIO enquanto o poligono for rascunho
+  (B-14): CI verde quer dizer "o codigo compila e as checagens de codigo
+  passam", NAO "o mapa esta validado".
 - CI (job "Exportar Web"): o projeto exporta para Web sem erro.
 - Deploy no GitHub Pages: ativo, https://kkrr18.github.io/carioca/ responde.
 - JOGAVEL CONFIRMADO NO IPHONE (Safari, iOS 18): o usuario jogou — cidade
@@ -134,12 +137,10 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
 - B-22: O shader da agua e a iluminacao de janelas nao sao exercidos pelos
   testes headless (exigem GPU). Validar no Safari do iPhone apos o proximo
   deploy do Pages.
-- B-23: O Passo B-D quebrou o boot: usei GeometryInstance3D.
-  VISIBILITY_RANGE_FADE_DITHER, constante que NAO existe no Godot 4 (o
-  certo e VISIBILITY_RANGE_FADE_SELF_DITHER). Como main.gd pre-carrega
-  sector_streamer.gd, a cena inteira parou de montar (mesmo sintoma da
-  tela azul do B-20), confirmado por inspecao do Safari em 19/11/2026.
-  Corrigido nesta revisao; revalidar no aparelho.
+- B-23: MEIO CORRIGIDO — ver B-29. A constante usada era
+  GeometryInstance3D.VISIBILITY_RANGE_FADE_DITHER, que nao existe no Godot 4.
+  O "conserto" para VISIBILITY_RANGE_FADE_SELF_DITHER TAMBEM estava errado,
+  entao o setor continuou sem compilar por mais dois commits.
 - B-24: Os testes headless nao carregavam main.gd, player.gd, hud.gd,
   touch_controls.gd nem sector_streamer.gd, entao erros de compilacao
   neles passavam despercebidos no CI (aconteceu em B-20 e B-23). RESOLVIDO:
@@ -157,15 +158,52 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
 - B-26: No build abc6dd8 o teste de compilacao acusou falha em
   sector_streamer.gd e hud.gd; no commit seguinte (mesmo codigo de jogo,
   so log melhorado) os dois compilaram. Provavel idiossincrasia de
-  GDScript.reload() com recurso em cache no CI. Se voltar, as mensagens
-  de get_errors() agora sao impressas.
+  GDScript.reload() com recurso em cache no CI. Se voltar, o proprio Godot
+  imprime o "Parse Error" com arquivo e linha no log (ver B-30).
 - B-27: Depois da reversao do shader do mar (B-25), o jogo continua sem
   desenhar nada no Safari (canvas so limpa a cor de fundo). O console do
   Godot, onde o erro real aparece, nao e visivel no iPhone. MITIGACAO: o
   workflow web.yml agora injeta no build Web um painel verde que mostra no
   proprio jogo tudo o que o Godot imprime no console. Proxima leitura desse
   painel deve apontar o erro exato (script, shader ou runtime). O painel e
-  temporario e sera removido quando a Fase 1.5 estiver validada.
+  temporario e sera removido quando a Fase 1.5 estiver validada. CUMPRIU O
+  PAPEL: a leitura de 19/11/2026 apontou o B-28.
+- B-28: RESOLVIDO. A tela azul do Safari NAO era o shader do mar (B-25/B-27):
+  era `environment.tonemap_mode = Environment.TONEMAPPER_ACES` em main.gd. O
+  enum do Godot 4 e ToneMapper com prefixo TONE_MAPPER_ (TONE_MAPPER_ACES). O
+  script nao compilava, a cena nao montava e o canvas ficava so na cor de
+  limpeza. Lido no painel do B-27: "Parse Error: Cannot find member
+  TONEMAPPER_ACES in base Environment ... res://scripts/main.gd". Corrigido.
+- B-29: RESOLVIDO. `GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF_DITHER`
+  (o "conserto" do B-23) tambem nao existe: o enum VisibilityRangeFadeMode
+  tem DISABLED, _SELF e _DEPENDENCIES. Pior: a doc do 4.4 diz que o fade so
+  vale no Forward+ — no Compatibility ele faz o mesmo que DISABLED. Entao
+  sector_streamer.gd agora usa DISABLED (corte seco, comentario honesto) e o
+  "dithering" saiu do codigo e do ESTILO.md.
+- B-30: RESOLVIDO. O teste de compilacao do runner era um alarme que nao
+  tocava: chamava `GDScript.get_errors()`, que NAO existe no Godot 4, dentro
+  do ramo de erro. A excecao abortava a funcao antes do `check()` — quando um
+  script falhava, a checagem inteira desaparecia do log e o CI podia ficar
+  verde. Foi assim que B-28/B-29 chegaram ao aparelho. Junto: _test_save_rejects
+  fazia `str(bytes)` (PackedByteArray nao vira o texto do cabecalho) e
+  estourava no indice 3, pulando 3 checagens em silencio (o log mostrou
+  "Out of bounds get index '3'"). Agora a falha e sempre reportada com os
+  arquivos, o cabecalho e lido com get_string_from_utf8(), e main.gd e os
+  dois autoloads entram na lista — o arquivo que monta a cena era o unico
+  que o CI nunca compilava.
+- B-31: RESOLVIDO. O teste de ida e volta lon/lat <-> metros acusava erro de
+  0,057 m: Vector2 e float32 no Godot e 1234,5 m perde precisao na conversao.
+  Nao e bug do jogo (a conversao e a mesma do Python); tolerancia do teste
+  virou 0,2 m.
+- B-32: RESOLVIDO. hud.gd chamava `Performance.RENDER_TOTAL_TRIANGLES`, que
+  nao existe no enum Monitor do Godot 4 (so PRIMITIVES e DRAW_CALLS). Como o
+  main monta o HUD antes do player, esse erro pararia o jogo inteiro. Agora
+  usa RENDER_TOTAL_PRIMITIVES_IN_FRAME como proxy e o rotulo diz "prim".
+- B-33: Fase 4 — corrigido antes de validar: enquanto o jogador dirigia, o
+  streaming e o mar continuavam no ponto onde ele saiu do carro, entao a
+  cidade nao carregava na frente do veiculo. Agora o foco do mundo e o carro
+  quando esta ocupado (main.gd), e o arrasto de olhar e descartado ao dirigir
+  (a camera do personagem nao da mais um salto ao sair).
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 

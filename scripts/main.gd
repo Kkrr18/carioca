@@ -168,7 +168,9 @@ func _build_environment() -> void:
 	environment.fog_sky_affect = 0.6
 	# Pos-processamento barato (suportado no renderer Compatibility):
 	# tonemap ACES + glow dao o "haze" de cidade litoranea.
-	environment.tonemap_mode = Environment.TONEMAPPER_ACES
+	# O enum do Godot 4 e Environment.ToneMapper com o prefixo TONE_MAPPER_:
+	# "TONEMAPPER_ACES" nao existe e quebrava a compilacao deste arquivo (B-28).
+	environment.tonemap_mode = Environment.TONE_MAPPER_ACES
 	environment.tonemap_exposure = 1.05
 	environment.glow_enabled = true
 	environment.glow_intensity = 0.35
@@ -236,17 +238,25 @@ func _process(delta: float) -> void:
 		day_night.process_frame(delta)
 		if streamer != null:
 			streamer.set_window_glow(day_night.night_amount)
+	# Foco do mundo: o personagem a pe ou o carro, quando estiver dirigindo.
+	# Sem isso o streaming e o mar ficariam parados onde o personagem desceu do
+	# carro, e a cidade nao carregaria na frente do veiculo (Fase 4).
+	var focus := Vector3.ZERO
+	if player != null:
+		focus = player.position
+	if car != null and car.occupied:
+		focus = car.global_position
 	if streamer != null and player != null:
-		streamer.update_stream(player.position, delta)
-		if _loading and streamer.has_ready_at(player.position):
+		streamer.update_stream(focus, delta)
+		if _loading and streamer.has_ready_at(focus):
 			_loading = false
 			if _loading_label != null:
 				_loading_label.visible = false
 		if _loading_label != null:
 			_loading_label.visible = _loading
 	if sea != null and player != null:
-		# Mar "infinito": acompanha o jogador no plano XZ.
-		sea.global_position = Vector3(player.position.x, Cfg.SEA_LEVEL, player.position.z)
+		# Mar "infinito": acompanha o foco no plano XZ.
+		sea.global_position = Vector3(focus.x, Cfg.SEA_LEVEL, focus.z)
 	# Prompt de contexto do veiculo (Fase 4): botao CARRO perto do carro.
 	if hud != null and car != null and player != null:
 		var prompt := ""

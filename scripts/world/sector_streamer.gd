@@ -177,10 +177,13 @@ func _install(sec: Vector2i, lod: int, res: Array) -> void:
 	node.name = "S%d_%d" % [sec.x, sec.y]
 	var mi := MeshInstance3D.new()
 	mi.mesh = mesh
-	# Distancia de visibilidade: o setor detalhado some antes do grosso,
-	# com dithering (mais barato que alpha) na transicao.
+	# Distancia de visibilidade: o setor detalhado some antes do grosso (corta
+	# draw calls). O enum do Godot 4 e VisibilityRangeFadeMode e as constantes
+	# tem o prefixo VISIBILITY_RANGE_FADE_ — "SELF_DITHER" nao existe (B-29).
+	# E o fade so funciona no Forward+: no Compatibility ele faz o mesmo que
+	# DISABLED, entao aqui o corte e seco e honesto.
 	mi.visibility_range_end = 1500.0 if lod == CityGen.LOD_FULL else 2400.0
-	mi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF_DITHER
+	mi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
 	node.add_child(mi)
 	if not defs.is_empty():
 		node.add_child(_prop_multimesh(defs))
@@ -224,7 +227,7 @@ func _prop_multimesh(defs: Array) -> MultiMeshInstance3D:
 	mat.roughness = 1.0
 	mmi.material_override = mat
 	mmi.visibility_range_end = 700.0
-	mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF_DITHER
+	mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
 	return mmi
 
 

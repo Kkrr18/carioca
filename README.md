@@ -35,7 +35,11 @@ Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
 - HUD com telemetria e gravador de desempenho em CSV.
 - Salvamento versionado (`schema`, sha256, gzip, escrita atômica, recusa de
   versão futura e de arquivo corrompido).
-- Polígono do mundo em GeoJSON e ferramenta Python que mede a área.
+- Polígono do mundo em GeoJSON e ferramenta Python que mede a área
+  (`--strict` só quando o polígono real entrar, na Fase 2: hoje é rascunho).
+- Build Web publica no GitHub Pages com um painel de console verde embutido
+  (temporário): é por ele que se lê, no próprio iPhone, qualquer erro de
+  script que o Safari esconde.
 
 ## Como testar
 

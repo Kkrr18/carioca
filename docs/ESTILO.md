@@ -56,7 +56,8 @@ fora do espectre definido:
   threshold ~1.1, nevoia. Fora: SSAO, SSR, bloom pesado, screen-space de tela
   cheia que o Compatibility nao sustenta.
 - Orcamentos atuais: setor full < 40k vertices; props somem a 700 m; malha de
-  setor some a 1500 m (full) / 2400 m (LOD far), com fade por dither.
+  setor some a 1500 m (full) / 2400 m (LOD far). O fade suave (dither) so
+  existe no Forward+, nao no Compatibility: no alvo o corte e seco (B-29).
 - Sombra direcional em 2 splits, max 110 m. Sombras de contato = disco escuro
   unshaded (nao existe Decal no Compatibility).
 

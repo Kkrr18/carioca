@@ -213,6 +213,9 @@ func _drive(delta: float) -> void:
 		steer_in = -1.0
 	if Input.is_key_pressed(KEY_D):
 		steer_in = 1.0
+	# Dirigindo, o arrasto de olhar nao move nada: descarta o acumulado, senao a
+	# camera do personagem da um salto ao sair do carro.
+	TouchControls.consume_look()
 
 	speed = advance_speed(speed, throttle, delta)
 	steer = move_toward(steer, -steer_in * steer_limit(speed), STEER_SPEED * delta)

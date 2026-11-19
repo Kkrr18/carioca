@@ -153,7 +153,10 @@ func _refresh_stats() -> void:
 		return
 	var p: Vector3 = player.position
 	var st: Dictionary = streamer.stats() if streamer != null else {}
-	var tri := int(Performance.get_monitor(Performance.RENDER_TOTAL_TRIANGLES)) if _metric_ok() else 0
+	# O enum Performance.Monitor do Godot 4 nao tem monitor de triangulos:
+	# RENDER_TOTAL_TRIANGLES nao existe (B-32). Primitivas por frame sao o
+	# numero equivalente (inclui prepass/sombras) e servem de proxy.
+	var tri := int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)) if _metric_ok() else 0
 	var lines: Array[String] = []
 	lines.append("FPS %d   frame %.1f ms   p95 %.1f ms" % [
 		int(Engine.get_frames_per_second()),
@@ -173,7 +176,7 @@ func _refresh_stats() -> void:
 		String(day_night.weather) if day_night != null else "-",
 		"30" if _cap30 else "livre"])
 	if not st.is_empty():
-		lines.append("setores %d   na fila %d   gerados %d   ger %.0f ms   tris %d" % [
+		lines.append("setores %d   na fila %d   gerados %d   ger %.0f ms   prim %d" % [
 			int(st.get("loaded", 0)), int(st.get("inflight", 0)), int(st.get("generated", 0)),
 			float(st.get("gen_ms", 0.0)), tri])
 	_stats.text = "\n".join(lines)
