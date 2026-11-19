@@ -1,0 +1,83 @@
+{
+  "version": 2,
+  "name": "CARIOCA - area principal (rascunho v2)",
+  "target_km2": 83.0,
+  "target_range_km2": [75.0, 95.0],
+  "origin": {"lat": -22.97430, "lon": -43.18280},
+  "notes": [
+    "Um UNICO anel: os vertices de 'zones' sao concatenados na ordem do arquivo.",
+    "A area NAO foi medida ainda. Quem mede e tools/geo/polygon_area.py e",
+    "tests/runner.gd (ambos reportam o valor real). Nenhum numero deste arquivo",
+    "e resultado de medicao.",
+    "Coordenadas de referencia obtidas do OpenStreetMap/Nominatim e de conferencia",
+    "visual no Google Maps (ver docs/AUDITORIA.md). Dados derivados mantem a",
+    "atribuicao ODbL em data/ATTRIBUTION.md.",
+    "A ponte e representada pelo eixo simplificado em bridge_centerline (6 pontos)."
+  ],
+  "zones": [
+    {
+      "id": "rio-oeste",
+      "role": "rio",
+      "nodes": [
+        [-43.2400, -22.9930],
+        [-43.2850, -22.9550],
+        [-43.2750, -22.9150],
+        [-43.2650, -22.8850],
+        [-43.2550, -22.8600],
+        [-43.2450, -22.8450],
+        [-43.2350, -22.8330],
+        [-43.2256, -22.8786],
+        [-43.2450, -22.9050],
+        [-43.2600, -22.9500]
+      ]
+    },
+    {
+      "id": "corredor-ponte",
+      "role": "corridor",
+      "nodes": [
+        [-43.1954, -22.8643],
+        [-43.1655, -22.8632],
+        [-43.1290, -22.8660],
+        [-43.1020, -22.8710],
+        [-43.1032, -22.8830],
+        [-43.1290, -22.8795],
+        [-43.1655, -22.8760],
+        [-43.1954, -22.8770],
+        [-43.2040, -22.8850],
+        [-43.2210, -22.8920],
+        [-43.2440, -22.9080]
+      ]
+    },
+    {
+      "id": "niteroi-centro-icarai",
+      "role": "niteroi",
+      "nodes": [
+        [-43.0950, -22.8910],
+        [-43.0900, -22.8990],
+        [-43.1080, -22.9170],
+        [-43.1290, -22.9270],
+        [-43.1800, -22.9340],
+        [-43.2600, -22.9420],
+        [-43.2770, -22.9550],
+        [-43.2700, -22.9750],
+        [-43.2300, -22.9950],
+        [-43.2050, -23.0000]
+      ]
+    }
+  ],
+  "excluded": [
+    {"name": "Niteroi - praias oceanicas (Itacoatiara, Itaipu, Camboinhas, Piratininga)", "reason": "etapa posterior"},
+    {"name": "Barra da Tijuca e Zona Oeste", "reason": "etapa posterior"},
+    {"name": "Zona Norte (Tijuca, Meier, Maracana)", "reason": "etapa posterior"},
+    {"name": "Ilha do Governador e Fundao", "reason": "etapa posterior"},
+    {"name": "Sao Goncalo", "reason": "etapa posterior"}
+  ],
+  "bridge_centerline": [
+    [-43.21671, -22.88464],
+    [-43.20660, -22.87380],
+    [-43.19430, -22.86750],
+    [-43.16139, -22.87057],
+    [-43.13637, -22.87278],
+    [-43.11574, -22.87792]
+  ]
+}
