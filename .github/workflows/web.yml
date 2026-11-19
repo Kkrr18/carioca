@@ -1,0 +1,87 @@
+name: build web
+
+# Gera o build Web do Godot e publica no GitHub Pages.
+# Depois do primeiro deploy, o jogo abre no Safari do iPhone pelo endereco:
+#   https://<usuario>.github.io/<repositorio>/
+#
+# Pre-requisito (uma vez, no GitHub): Settings > Pages > Source = "GitHub Actions".
+# Nao foi executado nenhuma vez: se falhar, veja o log do job "build".
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: 4.4.1-stable
+
+jobs:
+  build:
+    name: Exportar Web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache do Godot e dos modelos de exportacao
+        uses: actions/cache@v4
+        with:
+          path: |
+            /opt/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-templates
+
+      - name: Instalar Godot e modelos
+        run: |
+          set -euo pipefail
+          if [ ! -x /opt/godot/godot ]; then
+            sudo mkdir -p /opt/godot
+            curl -fsSL -o /tmp/godot.zip \
+              "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+            sudo unzip -q -o /tmp/godot.zip -d /opt/godot
+            sudo mv "/opt/godot/Godot_v${GODOT_VERSION}_linux.x86_64" /opt/godot/godot
+            sudo chmod +x /opt/godot/godot
+          fi
+          if [ ! -d "$HOME/.local/share/godot/export_templates/4.4.1.stable" ]; then
+            curl -fsSL -o /tmp/templates.tpz \
+              "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz"
+            mkdir -p "$HOME/.local/share/godot/export_templates"
+            unzip -q -o /tmp/templates.tpz -d /tmp/tpl
+            mv /tmp/tpl/templates "$HOME/.local/share/godot/export_templates/4.4.1.stable"
+          fi
+          /opt/godot/godot --version
+
+      - name: Importar e exportar
+        run: |
+          set -euo pipefail
+          mkdir -p build/web
+          /opt/godot/godot --headless --path . --import || true
+          /opt/godot/godot --headless --path . --export-release "Web" build/web/index.html
+          test -f build/web/index.html
+          ls -la build/web
+
+      - name: Desativar Jekyll
+        run: touch build/web/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    name: Publicar no Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

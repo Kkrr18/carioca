@@ -47,6 +47,13 @@ func _ready() -> void:
 	streamer.world_seed = world_seed
 	streamer.full_ring = 1
 	streamer.far_ring = 2
+	if OS.has_feature("web"):
+		# Build web (Safari / GitHub Pages) sem threads: WorkerThreadPool nao
+		# existe nessa variante do export, entao a geracao roda na thread
+		# principal e o raio de streaming e menor.
+		streamer.use_threads = false
+		streamer.full_ring = 0
+		streamer.far_ring = 1
 	add_child(streamer)
 
 	player = Player.new()

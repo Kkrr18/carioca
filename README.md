@@ -26,26 +26,18 @@ Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
   versão futura e de arquivo corrompido).
 - Polígono do mundo em GeoJSON e ferramenta Python que mede a área.
 
-## Como rodar (primeira vez)
-
-1. Instale o **Godot 4.4.1** (ou 4.4.x) — godotengine.org.
-2. Abra a pasta do projeto no Godot (ele importa o `icon.svg` sozinho).
-3. Aperte **F5** (Play). No desktop, WASD move, mouse com botão esquerdo
-   arrastado gira a câmera, espaço pula.
-
-Linha de comando equivalente:
-
-```
-godot --path . 
-```
-
 ## Como testar
 
-Testes headless (não precisam de GPU):
+Guia completo, com os três caminhos (editor no computador, build Web no Safari do
+iPhone via GitHub Pages, e só os testes automáticos): **[docs/TESTAR.md](docs/TESTAR.md)**.
 
-```
-godot --headless --path . -s tests/runner.gd
-```
+Resumo:
+
+- **Melhor:** instalar o Godot 4.4.x, abrir esta pasta e apertar F5.
+- **Sem computador:** publicar no GitHub e deixar o workflow `web.yml` gerar o
+  build Web no GitHub Pages (joga no Safari do iPhone).
+- **Só o código:** `godot --headless --path . -s tests/runner.gd` ou a aba
+  Actions do repositório.
 
 Medir a área do polígono:
 
@@ -53,7 +45,8 @@ Medir a área do polígono:
 python3 tools/geo/polygon_area.py
 ```
 
-O mesmo conjunto roda no GitHub Actions em cada push (`.github/workflows/tests.yml`).
+O conjunto de testes roda no GitHub Actions em cada push
+(`.github/workflows/tests.yml`).
 
 ## Exportar para iPhone (Fase 9)
 
@@ -65,6 +58,7 @@ Passo a passo completo em [docs/EXPORTACAO_IOS.md](docs/EXPORTACAO_IOS.md).
 ## Documentos
 
 - [docs/STATUS.md](docs/STATUS.md) — sistemas, bugs conhecidos, próximas tarefas.
+- [docs/TESTAR.md](docs/TESTAR.md) — como rodar e testar, com e sem computador.
 - [docs/AUDITORIA.md](docs/AUDITORIA.md) — diagnóstico do que foi encontrado.
 - [docs/ARQUITETURA.md](docs/ARQUITETURA.md) — decisões técnicas e por quê.
 - [docs/ROADMAP.md](docs/ROADMAP.md) — as 9 fases com critério de saída.

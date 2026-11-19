@@ -26,6 +26,7 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
 | Salvamento versionado (schema 1, sha256, gzip) | Escrito | scripts/autoload/save_manager.gd |
 | Testes headless | Escrito | tests/runner.gd |
 | Cena principal | Escrito | scenes/main.tscn, scripts/main.gd |
+| Build Web (GitHub Pages) e preset de exportacao Web | Escrito, nunca executado | .github/workflows/web.yml, export_presets.cfg |
 | Atribuicao de dados | Escrito | data/ATTRIBUTION.md |
 
 ## Planejados (ainda nao escritos)
@@ -54,9 +55,9 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
 - B-01: Nao compilado. Pode haver erros de sintaxe ou de tipo do GDScript que
   so o Godot revela. Prioridade maxima.
 - B-02: A area do poligono nao foi medida. O valor do arquivo nao e confiavel.
-- B-03: O poligono usa 3 blocos separados (rio-oeste, corredor da ponte,
-  Niteroi). A ligacao entre eles nao foi validada; pode gerar auto-intersecao
-  (o runner testa isso).
+- B-03: O poligono e um anel unico montado pela concatenacao de 3 grupos
+  (rio-oeste, corredor da ponte, Niteroi). A ligacao entre eles nao foi
+  validada; pode gerar auto-intersecao (o runner testa isso).
 - B-04: A ponte e um eixo, nao uma malha. O personagem ainda nao sobe nela.
 - B-05: O relevo e analitico (funcao seno/cosseno), nao o real. Nao ha morros
   do Rio de verdade.
@@ -65,12 +66,18 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
 - B-07: Sem audio.
 - B-08: O save guarda posicao e relogio; nao guarda estado do mundo.
 - B-09: Sem verificacao de desempenho em aparelho. A meta de 30 FPS no iPhone 12
-  e uma hipotese ate medirmos (docs/OTIMIZACAO.md, a criar na fase 8).
+  e uma hipotese ate medirmos (docs/OTIMIZACAO_IPHONE12.md).
+- B-10: O build Web (.github/workflows/web.yml) nunca rodou. Pode falhar na
+  instalacao do Godot, na exportacao ou na publicacao.
+- B-11: O projeto nao tem remote Git configurado. Ate fazer push, nem o CI de
+  testes nem o build Web rodam.
+- B-12: No build Web o export padrao nao tem threads: a geracao de setor passa
+  para a thread principal, com raio menor. Previsto no codigo, nao medido.
 
 ## Proximas tarefas (Fase 1)
 
-1. Abrir o CI e corrigir erros de compilacao (B-01).
-2. Medir a area do poligono e corrigir o rascunho ate a faixa 75-95 km2 (B-02).
-3. Verificar a ligacao dos blocos do poligono (B-03).
-4. Escrever docs/ARQUITETURA.md com as decisoes ja tomadas.
+1. Fazer push para Kkrr18/carioca e corrigir os erros de compilacao no CI (B-01, B-11).
+2. Ligar/varrer o GitHub Pages e validar o build Web (B-10).
+3. Medir a area do poligono e corrigir o rascunho ate a faixa 75-95 km2 (B-02).
+4. Verificar a ligacao dos blocos do poligono (B-03).
 5. Confirmar com o usuario a instalacao do Godot 4.4 e a exportacao iOS.
