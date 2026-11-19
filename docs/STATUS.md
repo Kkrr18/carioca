@@ -249,6 +249,13 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   tinha marcador (agora tem um poste com esfera). A telemetria passou a
   mostrar carro/velocidade/acelerador/volante, para diagnosticar no aparelho
   sem o console do Safari.
+- B-37: RESOLVIDO. O `.glb` da Kenney NAO e auto-contido: ele referencia
+  `Textures/colormap.png` por caminho relativo. O `--import` do CI acusou
+  "Can't open file from path 'res://assets/models/Textures/colormap.png'" e
+  importou o modelo SEM textura (o teste teria passado, o jogador veria um
+  caminhao cinza). Corrigido baixando o PNG (10 KB) e mantendo a pasta
+  `Textures/` ao lado do `.glb`. Licao: ao trazer um `.glb`, trazer tambem as
+  texturas que ele referencia; o log do import no CI mostra o caminho exato.
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 

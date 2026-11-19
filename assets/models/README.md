@@ -12,6 +12,13 @@ copyright de jogo comercial.
 | Arquivo | Origem | Licenca | Tamanho | Uso |
 |---|---|---|---|---|
 | vehicle-truck-red.glb | [Kenney — Starter Kit Racing](https://github.com/KenneyNL/Starter-Kit-Racing) (`models/vehicle-truck-red.glb`) | CC0 1.0 (assets; o codigo do kit e MIT) | 90 KB | piloto de asset: caminhao estacionado na areia, carregado por `scripts/world/model_prop.gd` |
+| Textures/colormap.png | idem (`models/Textures/colormap.png`) | CC0 1.0 | 10 KB | atlas de cores que o `.glb` acima referencia por caminho relativo |
+
+**O `.glb` da Kenney nao e auto-contido**: ele aponta para
+`Textures/colormap.png` ao lado dele. Sem esse PNG o import funciona, mas o
+modelo entra SEM textura (foi o que o CI mostrou na primeira importacao —
+B-37). Ao trazer outro `.glb`, baixe tambem as texturas que ele referencia e
+mantenha a mesma estrutura de pastas.
 
 O `ModelProp` normaliza escala, eixo e pivo do modelo automaticamente
 (AABB): escala para N metros no eixo Z, apoia no chao e centra. E por isso que

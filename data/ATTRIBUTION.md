@@ -25,12 +25,14 @@
 
 ## Modelos 3D externos
 
-- `assets/models/vehicle-truck-red.glb` — caminhao low-poly do
+- `assets/models/vehicle-truck-red.glb` + `assets/models/Textures/colormap.png`
+  — caminhao low-poly e o atlas de cores do
   **Starter Kit: Racing** de **Kenney** (https://kenney.nl,
   https://github.com/KenneyNL/Starter-Kit-Racing). Os assets 3D do pacote sao
   **CC0 1.0** (https://creativecommons.org/publicdomain/zero/1.0/); o codigo
-  do kit e MIT. Usado como piloto de asset externo (B-21): um unico arquivo,
-  carregado por `scripts/world/model_prop.gd`.
+  do kit e MIT. Usado como piloto de asset externo (B-21): um unico modelo,
+  carregado por `scripts/world/model_prop.gd`. O `.glb` referencia o PNG por
+  caminho relativo, entao os dois arquivos andam juntos (B-37).
 - Regra do projeto: so CC0 ou CC-BY, com origem e licenca anotadas aqui e em
   [assets/models/README.md](../assets/models/README.md). Nada de conteudo com
   copyright de jogo comercial.
