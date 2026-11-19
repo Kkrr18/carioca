@@ -9,7 +9,9 @@ extends CharacterBody3D
 ## - O personagem nao entra em agua mais funda que MIN_WADE_DEPTH.
 
 const Cfg = preload("res://scripts/core/cfg.gd")
-const TouchControls = preload("res://scripts/ui/touch_controls.gd")const WALK_SPEED := 4.2
+const TouchControls = preload("res://scripts/ui/touch_controls.gd")
+
+const WALK_SPEED := 4.2
 const RUN_SPEED := 8.5
 const ACCEL := 26.0
 const AIR_ACCEL := 7.0
@@ -181,13 +183,13 @@ func _physics_process(delta: float) -> void:
 	if TouchControls.is_active():
 		input = TouchControls.stick()
 	else:
-		if Input.is_key_down(KEY_A):
+		if Input.is_key_pressed(KEY_A):
 			input.x -= 1.0
-		if Input.is_key_down(KEY_D):
+		if Input.is_key_pressed(KEY_D):
 			input.x += 1.0
-		if Input.is_key_down(KEY_W):
+		if Input.is_key_pressed(KEY_W):
 			input.y -= 1.0
-		if Input.is_key_down(KEY_S):
+		if Input.is_key_pressed(KEY_S):
 			input.y += 1.0
 		if input.length() > 1.0:
 			input = input.normalized()

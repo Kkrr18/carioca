@@ -48,12 +48,21 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
 
 ## Testados
 
-- Nada ainda. O primeiro resultado vem do CI (tests.yml) apos o primeiro push.
+- CI (job "Godot headless", 45 testes): geracao de setor deterministica,
+  limites de malha, LOD, colisores, props, mar/praia/interior, save/load
+  versionado e setor_of — 37 passaram; as 7 falhas sao do poligono (B-14),
+  nao do codigo do jogo.
+- CI (job "Exportar Web"): o projeto exporta para Web sem erro.
+- Deploy no GitHub Pages: ativo, https://kkrr18.github.io/carioca/ responde.
+  O motor sobe no Safari do iPhone (barra de carregamento completa), mas o
+  jogo ainda nao mostra cena (B-20, correcao enviada, pendente de validacao).
 
 ## Bugs conhecidos
 
-- B-01: Nao compilado. Pode haver erros de sintaxe ou de tipo do GDScript que
-  so o Godot revela. Prioridade maxima.
+- B-01: Nao compilado LOCALMENTE (o Godot nao roda neste dispositivo). A
+  compilacao passou a ser validada pelo CI: em 2026-02, o job "Godot headless"
+  rodou os 45 testes (37 ok). O player.gd tinha erros de compilacao que os
+  testes nao pegavam (B-20), corrigidos; confirmacao final pendente de CI.
 - B-02: A area do poligono nao foi medida. O valor do arquivo nao e confiavel.
 - B-03: O poligono e um anel unico montado pela concatenacao de 3 grupos
   (rio-oeste, corredor da ponte, Niteroi). A ligacao entre eles nao foi
@@ -67,8 +76,18 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
 - B-08: O save guarda posicao e relogio; nao guarda estado do mundo.
 - B-09: Sem verificacao de desempenho em aparelho. A meta de 30 FPS no iPhone 12
   e uma hipotese ate medirmos (docs/OTIMIZACAO_IPHONE12.md).
-- B-10: O build Web (.github/workflows/web.yml) nunca rodou. Pode falhar na
-  instalacao do Godot, na exportacao ou na publicacao.
+- B-10: PARCIALMENTE RESOLVIDO. O workflow web.yml rodou, o export Web passou e
+  o Pages publica em https://kkrr18.github.io/carioca/ (B-17 e B-19 resolvidos
+  pelo usuario). No Safari de um iPhone (iOS 18.7), o motor sobe e a barra de
+  carregamento completa, mas a tela fica numa cor solida: a cena nao monta.
+  Causa encontrada: B-20. Correcao enviada; validar no proximo deploy.
+- B-20: player.gd tinha duas declaracoes coladas na mesma linha
+  (preload de TouchControls + const WALK_SPEED) e quatro chamadas a
+  Input.is_key_down(), metodo que NAO existe no Godot 4 (o certo e
+  Input.is_key_pressed). Os testes headless nao pegavam porque nao carregam
+  player.gd. O erro derrubava a compilacao de main.gd (que o pre-carrega) e
+  deixava o jogo sem cena nenhuma (tela azul no Safari). Corrigido nesta
+  revisao; confirmacao pendente de CI + teste no aparelho.
 - B-11: O projeto nao tem remote Git configurado. Ate fazer push, nem o CI de
   testes nem o build Web rodam.
 - B-12: No build Web o export padrao nao tem threads: a geracao de setor passa
@@ -89,6 +108,11 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   codigo do jogo esteja errado: e o poligono.
 - B-17: Pages precisa ser ligado manualmente uma vez: Settings > Pages >
   Source = GitHub Actions. O token do workflow nao tem permissao para isso.
+- B-19: GitHub Pages NAO funciona em repositorio privado no plano Free. A tela
+  do GitHub oferece "Upgrade or make this repository public to enable Pages".
+  Opcoes gratuitas: repositorio publico (Pages e Actions gratis) ou hospedar o
+  build em Cloudflare Pages/Netlify. Opcao paga: GitHub Pro/Team. Isso foi dito
+  errado antes ("Pages e gratis") e esta corrigido aqui e em docs/TESTAR.md.
 - B-18: O erro de deploy do Pages aparece se Pages nao estiver ligado.
 
 ## Proximas tarefas (Fase 1)
