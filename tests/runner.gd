@@ -103,7 +103,7 @@ func _test_geo_roundtrip() -> void:
 	check(absf(q.x - 1234.5) < 0.01 and absf(q.y - 678.9) < 0.01,
 		"ida e volta lon/lat <-> metros (erro %.4f m)" % maxf(absf(q.x - 1234.5), absf(q.y - 678.9)))
 	var d := Geo.distance_m(-43.1828, -22.9743, -43.1828, -22.9843)
-	check(absf(d - 1105.4) < 2.0, "0,01 grau de latitude = %.1f m (esperado ~1105)" % d)
+	check(absf(d - 1111.9) < 2.0, "0,01 grau de latitude = %.1f m na esfera (esperado ~1111,9)" % d)
 
 
 func _test_bridge_length() -> void:

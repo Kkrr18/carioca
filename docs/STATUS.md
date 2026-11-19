@@ -77,10 +77,24 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   publicado so existe depois que o workflow `web.yml` gera `build/web/`. Se um
   dia o build web for commitado na raiz, esse arquivo e substituido.
 
+- B-14: O poligono de data/geo/world_polygon.json foi escrito a mao e NAO e
+  valido. O CI (run 44447685635) mostrou: arestas 0 e 27 se cruzam (nao e
+  simples), area 97,9 km2 (faixa 75-95), e os pontos de Botafogo e Caju caem
+  fora. O rascunho deve ser refeito a partir do recorte OSM, nao ajustado no
+  olho.
+- B-15: O teste do grau de latitude usava 1105,4 m (aproximacao elipsoidal),
+  mas o jogo e o haversine usam a esfera (111,19 km/grau). Corrigido o teste
+  para 1111,9 m. A projecao do jogo (110540 m/grau) continua sendo a local.
+- B-16: O CI de testes ainda acusa falhas (ver B-14). Nao e sinal de que o
+  codigo do jogo esteja errado: e o poligono.
+- B-17: Pages precisa ser ligado manualmente uma vez: Settings > Pages >
+  Source = GitHub Actions. O token do workflow nao tem permissao para isso.
+- B-18: O erro de deploy do Pages aparece se Pages nao estiver ligado.
+
 ## Proximas tarefas (Fase 1)
 
-1. Fazer push para Kkrr18/carioca e corrigir os erros de compilacao no CI (B-01, B-11).
-2. Ligar/varrer o GitHub Pages e validar o build Web (B-10).
-3. Medir a area do poligono e corrigir o rascunho ate a faixa 75-95 km2 (B-02).
-4. Verificar a ligacao dos blocos do poligono (B-03).
-5. Confirmar com o usuario a instalacao do Godot 4.4 e a exportacao iOS.
+1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
+2. Ligar o Pages uma vez em Settings (B-17) e confirmar o build web no Safari (B-10).
+3. Verificar a ligacao dos blocos do poligono (B-03).
+4. Confirmar com o usuario a instalacao do Godot 4.4 e a exportacao iOS.
+

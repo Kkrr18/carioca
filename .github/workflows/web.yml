@@ -31,12 +31,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Preparar o GitHub Pages
-        id: pages
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true
-
       - name: Cache do Godot e dos modelos de exportacao
         uses: actions/cache@v4
         with:
