@@ -203,44 +203,18 @@ func _build_sea() -> void:
 	sea = MeshInstance3D.new()
 	sea.name = "Sea"
 	sea.mesh = plane
-	var smat := ShaderMaterial.new()
-	var sh := Shader.new()
-	sh.code = SEA_SHADER
-	smat.shader = sh
-	sea.material_override = smat
+	# Material PBR padrao (sem shader custom): um ShaderMaterial sobre este
+	# plano congelou o render no Safari/WebGL (B-25), entao o brilho do mar
+	# vem de roughness baixa + specular com o sol do dia/noite.
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(0.10, 0.26, 0.38)
+	m.roughness = 0.12
+	m.metallic = 0.0
+	m.metallic_specular = 0.7
+	m.disable_receive_shadows = true
+	sea.material_override = m
 	sea.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(sea)
-
-
-## Agua procedural: ondas pequenas pela posicao de mundo + tempo, fresnel
-## misturando para a cor do ceu. Sem reflexo de tela (nao existe no
-## renderer Compatibility) e opaco (transparencia custa fill rate).
-const SEA_SHADER := "
-shader_type spatial;
-render_mode cull_back;
-uniform vec3 deep_color : source_color = vec3(0.09, 0.23, 0.34);
-uniform vec3 sky_color : source_color = vec3(0.68, 0.79, 0.88);
-uniform float wave_scale = 0.045;
-uniform float wave_speed = 0.8;
-varying vec3 wpos;
-void vertex() {
-	wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-}
-void fragment() {
-	float t = TIME * wave_speed;
-	float wx = wpos.x * wave_scale;
-	float wz = wpos.z * wave_scale;
-	float dwx = 0.02 * cos(wx + t) + 0.012 * cos(wz * 1.7 - t * 1.3);
-	float dwz = 0.02 * cos(wz + t * 0.8) + 0.012 * cos(wx * 1.9 + t);
-	vec3 n_world = normalize(vec3(-dwx, 1.0, -dwz));
-	vec3 n_view = normalize((INV_VIEW_MATRIX * vec4(n_world, 0.0)).xyz);
-	NORMAL = n_view;
-	float fres = pow(1.0 - clamp(dot(n_view, normalize(VIEW)), 0.0, 1.0), 3.0);
-	ALBEDO = mix(deep_color, sky_color, fres * 0.55);
-	ROUGHNESS = mix(0.85, 0.2, fres);
-	SPECULAR = 0.55;
-}
-"
 
 
 func _process(delta: float) -> void:

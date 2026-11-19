@@ -139,6 +139,19 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   o runner agora compila 10 scripts do jogo via GDScript.reload() e recusa
   qualquer falha (autoloads World/SaveManager continuam fora desse teste
   porque o modo -s nao os registra).
+- B-25: O shader customizado do mar (ondas + fresnel do Passo A) congelou
+  o render no Safari/WebGL: depois do load, NENHUM frame chegava a ser
+  desenhado (nem o rótulo BOOT nem o HUD apareciam), o que aponta o
+  primeiro draw do plano do mar — unico codigo meu que so roda em GPU e
+  nunca exercido em GPU pelos testes. REVERTIDO ao StandardMaterial3D
+  (roughness 0.12 + specular, brilho pelo sol do dia/noite). Agua animada
+  fica para reavaliar com NoiseTexture2D como normal map (sem shader
+  custom). Validar no proximo deploy.
+- B-26: No build abc6dd8 o teste de compilacao acusou falha em
+  sector_streamer.gd e hud.gd; no commit seguinte (mesmo codigo de jogo,
+  so log melhorado) os dois compilaram. Provavel idiossincrasia de
+  GDScript.reload() com recurso em cache no CI. Se voltar, as mensagens
+  de get_errors() agora sao impressas.
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 
