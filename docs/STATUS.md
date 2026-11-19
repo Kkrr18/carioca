@@ -204,6 +204,13 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   cidade nao carregava na frente do veiculo. Agora o foco do mundo e o carro
   quando esta ocupado (main.gd), e o arrasto de olhar e descartado ao dirigir
   (a camera do personagem nao da mais um salto ao sair).
+- B-34: RESOLVIDO. hud.gd chamava `get_viewport_rect()` — metodo de CanvasItem
+  — dentro de um CanvasLayer, e o HUD inteiro nao compilava. Introduzido no
+  incremento do carro, ao posicionar o botao CARRO. Achado pelo teste de
+  compilacao na primeira execucao em que ele realmente compilou main.gd
+  (B-30): "Parse Error: Function get_viewport_rect() not found in base self",
+  em hud.gd:137. O tamanho visivel agora vem de
+  get_viewport().get_visible_rect().size.
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 

@@ -134,7 +134,10 @@ func _process(delta: float) -> void:
 	if _car_btn != null and _car_btn.visible:
 		# Ancorado a mao: o canto inferior direito fica com os botoes de toque
 		# (PULAR/CORRER ficam abaixo; sem sobreposicao).
-		var vs := get_viewport_rect().size
+		# CanvasLayer nao tem get_viewport_rect() (e metodo de CanvasItem):
+		# o tamanho visivel vem do Viewport (B-34, achado pelo teste de
+		# compilacao agora que ele compila main.gd).
+		var vs := get_viewport().get_visible_rect().size
 		_car_btn.position = Vector2(vs.x - 216.0, vs.y - 254.0)
 	_frame_times.resize(240)
 	_frame_times[_frame_i % 240] = delta * 1000.0
