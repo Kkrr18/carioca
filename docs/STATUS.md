@@ -81,6 +81,13 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   pontos de referencia) aparecem como DESVIO enquanto o poligono for rascunho
   (B-14): CI verde quer dizer "o codigo compila e as checagens de codigo
   passam", NAO "o mapa esta validado".
+- CI (job "Godot headless"), teste de CENA do carro (B-38): monta personagem +
+  carro numa cena minima, chama o mesmo caminho do botao ENTRAR, acelera pelo
+  pedal ACEL por 1 s a 30 Hz e sai. Resultado: carro ocupado, personagem
+  desligado e invisivel, camera do carro assume, throttle 1.00, 7,5 m/s,
+  3,9 m andados em 1 s, e ao sair o personagem e a camera voltam. 76 checagens
+  verdes, 0 falhas. Isto prova a LOGICA de entrar/andar/sair; nao prova que o
+  toque chega ao jogo — isso so o aparelho diz.
 - CI (job "Exportar Web"): o projeto exporta para Web sem erro.
 - Build Web de 19/11/2026 (commit 1f0632f): o jogo RENDERIZA no navegador.
   Inspecao do Pages em viewport de telefone: ceu com gradiente, mar, areia,
