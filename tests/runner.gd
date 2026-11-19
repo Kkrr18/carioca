@@ -276,6 +276,14 @@ func _test_car_scene_enter_exit() -> void:
 	car.position = Vector3(1600.0, Cfg.height_at(1600.0, 96.0), 96.0)
 	car.rotation.y = PI * 0.5
 	holder.add_child(car)
+	# Em `-s` (headless) o motor so propaga o _ready dos nos adicionados em
+	# _initialize no primeiro quadro, que aqui nunca chega (quit() no fim).
+	# Chamar o _ready na mao reproduz o mesmo caminho do jogo; nao duplica
+	# nada porque nao ha quadro seguinte.
+	if player.camera == null:
+		player._ready()
+	if car.camera == null:
+		car._ready()
 
 	check(car.camera != null and player.camera != null, "cena do carro montou (cameras)")
 	if car.camera == null or player.camera == null:
