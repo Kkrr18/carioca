@@ -32,6 +32,7 @@ static var jump_pressed_s := false
 static var sprint_held_s := false
 static var pedal_gas_s := false
 static var pedal_brake_s := false
+static var car_press_s := false
 
 var _stick_index := NONE
 var _stick_origin := Vector2.ZERO
@@ -42,6 +43,10 @@ var _jump_pos := Vector2.ZERO
 var _sprint_pos := Vector2.ZERO
 var _font: Font = null
 var _driving := false
+var car_available := false
+var car_occupied := false
+var _car_index := NONE
+var _car_pos := Vector2.ZERO
 var _ui := 1.0
 var _radius := BUTTON_RADIUS
 var _stick_max := STICK_MAX
@@ -61,6 +66,8 @@ func _layout_buttons() -> void:
 	_stick_max = STICK_MAX * _ui
 	_jump_pos = Vector2(vs.x - 86.0 * _ui, vs.y - 100.0 * _ui)
 	_sprint_pos = Vector2(vs.x - 196.0 * _ui, vs.y - 64.0 * _ui)
+	# Botao ENTRAR/SAIR do carro: acima dos pedais, no lado direito.
+	_car_pos = Vector2(vs.x - 86.0 * _ui, vs.y - 240.0 * _ui)
 
 
 func _notification(what: int) -> void:
@@ -107,6 +114,28 @@ static func pedal_gas() -> bool:
 ## Pedal do freio / marcha a re.
 static func pedal_brake() -> bool:
 	return pedal_brake_s
+
+
+## Consome o toque no botao ENTRAR/SAIR do carro (o main le a cada quadro).
+static func take_car_press() -> bool:
+	var out := car_press_s
+	car_press_s = false
+	return out
+
+
+## O main avisa se o carro esta ao alcance e se o jogador esta dirigindo.
+## Este botao vive aqui, e nao no HUD, porque no iPhone o toque em Button do
+## Godot nao chegava ao jogo (B-38) — ja o toque tratado pelo TouchControls,
+## como o PULAR, sempre funcionou.
+func set_car_state(near: bool, occupied: bool) -> void:
+	if car_available == near and car_occupied == occupied:
+		return
+	car_available = near
+	car_occupied = occupied
+	if not near and not occupied:
+		car_press_s = false
+		_car_index = NONE
+	queue_redraw()
 
 
 # --- Direcao (o main chama ao entrar/sair do carro) --------------------------
@@ -167,11 +196,20 @@ func _touch(index: int, pos: Vector2, pressed: bool) -> void:
 			sprint_held_s = false
 			pedal_brake_s = false
 			queue_redraw()
+		elif index == _car_index:
+			_car_index = NONE
+			queue_redraw()
 		return
 
 	var vs := get_viewport_rect().size
 	if pos.y < vs.y * TOP_UI:
 		return  # faixa da interface
+
+	if car_available and pos.distance_to(_car_pos) < _radius * 1.5:
+		_car_index = index
+		car_press_s = true
+		queue_redraw()
+		return
 
 	if pos.distance_to(_jump_pos) < _radius * 1.5:
 		_jump_index = index
@@ -206,7 +244,7 @@ func _drag(index: int, pos: Vector2, relative: Vector2) -> void:
 		if d.length() > STICK_MAX:
 			d = d.normalized() * STICK_MAX
 			_stick_origin = pos - d
-		stick_vec = d / STICK_MAX
+		stick_vec = d / maxf(1.0, _stick_max)
 		queue_redraw()
 	elif index == _look_index:
 		look_delta += relative
@@ -224,6 +262,10 @@ func _draw() -> void:
 	else:
 		draw_circle(hint, 62.0 * _ui, Color(1, 1, 1, 0.05))
 		draw_circle(hint, 26.0 * _ui, Color(1, 1, 1, 0.12))
+
+	if car_available:
+		_draw_button(_car_pos, "SAIR" if car_occupied else "ENTRAR",
+			Color(1.0, 0.78, 0.20, 0.60), car_press_s)
 
 	if _driving:
 		_draw_button(_jump_pos, "ACEL", Color(0.30, 0.72, 0.40, 0.55), pedal_gas_s)

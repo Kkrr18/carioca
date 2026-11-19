@@ -4,8 +4,8 @@ extends CanvasLayer
 ## - Canto superior esquerdo: estado do mundo e telemetria (FPS, frame time,
 ##   p95, draw calls, primitivas, memoria, setores, carro e modelo externo).
 ## - Faixa superior direita: SALVAR, CARREGAR, PERF, MEDIR, +1h, LIMITAR 30.
-## - Botao de contexto do veiculo (ENTRAR/SAIR NO CARRO) quando perto do carro.
-## - Aviso curto ("toast") para confirmar acoes.
+## - Aviso curto ("toast") para confirmar acoes. O botao ENTRAR/SAIR do veiculo
+##   fica no TouchControls, junto dos botoes de toque (B-38).
 ##
 ## Toda a interface e criada por codigo: menos arquivos .tscn para manter e
 ## nada de imagem/textura nesta fase.
@@ -35,8 +35,6 @@ var _toast_t := 0.0
 var _refresh := 0.0
 var _perf_on := true
 var _cap30 := true
-var _car_btn: Button
-var _car_label := ""
 var _model_note := ""
 
 var _ui := 1.0
@@ -62,7 +60,7 @@ func _ready() -> void:
 	# Escala da interface (B-35): derivada da altura logica do viewport, que no
 	# iPhone esticado pode chegar a ~2770 px em retrato.
 	var vs := get_viewport().get_visible_rect().size
-	_ui = clampf(vs.y / 640.0, 1.15, 2.6)
+	_ui = clampf(vs.y / 640.0, 1.15, 2.2)
 	_btn_w = 96.0 * _ui
 	_btn_h = 46.0 * _ui
 	var root := Control.new()
@@ -73,50 +71,48 @@ func _ready() -> void:
 	var labels := ["SALVAR", "CARREGAR", "PERF", "MEDIR", "+1h", "LIMITAR 30"]
 	var cbs: Array[Callable] = [_on_save, _on_load, _on_perf, _on_bench, _on_plus_hour, _on_cap]
 	var gap := 6.0 * _ui
-	var bar := HBoxContainer.new()
-	bar.add_theme_constant_override("separation", int(gap))
-	root.add_child(bar)
+	# Duas fileiras de tres. Com os seis botoes numa linha so, a barra ficava
+	# mais larga que a tela em retrato e os primeiros saiam pela borda esquerda
+	# (visto no iPhone: "CARREGAR" cortado).
+	var cols := VBoxContainer.new()
+	cols.add_theme_constant_override("separation", int(gap))
+	root.add_child(cols)
+	var rows: Array[HBoxContainer] = []
+	for r in 2:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", int(gap))
+		cols.add_child(row)
+		rows.append(row)
 	for i in labels.size():
-		_bar_button(bar, String(labels[i]), cbs[i])
-	# Retangulo explicito: com 6 botoes o deslocamento fixo antigo (-440 px)
-	# sairia da tela em retrato.
-	bar.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	bar.offset_left = -float(labels.size()) * (_btn_w + gap)
-	bar.offset_right = -12.0 * _ui
-	bar.offset_top = 8.0 * _ui
-	bar.offset_bottom = 8.0 * _ui + _btn_h
+		var row: HBoxContainer = rows[0] if i < 3 else rows[1]
+		_bar_button(row, String(labels[i]), cbs[i])
+	cols.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	cols.offset_left = -3.0 * (_btn_w + gap) - 12.0 * _ui
+	cols.offset_right = -12.0 * _ui
+	cols.offset_top = 8.0 * _ui
+	cols.offset_bottom = 8.0 * _ui + 2.0 * _btn_h + gap
+	var bar_bottom := 8.0 * _ui + 2.0 * _btn_h + gap
 
-	# Botao de contexto do veiculo (Fase 4): so aparece quando o jogador
-	# esta perto do carro (ou dirigindo). O main manda o texto via
-	# set_car_prompt() e o clique volta pelo signal action("car").
-	_car_btn = Button.new()
-	_car_btn.text = "ENTRAR NO CARRO"
-	_car_btn.focus_mode = Control.FOCUS_NONE
-	_car_btn.add_theme_font_size_override("font_size", int(19.0 * _ui))
-	_car_btn.visible = false
-	_car_btn.pressed.connect(_on_car)
-	root.add_child(_car_btn)
-	# Preso no canto inferior direito, logo acima dos botoes de toque (que se
-	# movem com a tela). Antes era posicionado em _process com numeros fixos:
-	# ficava fora de lugar e pequeno demais no iPhone (B-34/B-35). CanvasLayer
-	# nao tem get_viewport_rect() — o tamanho vem de get_viewport() (B-34).
-	_car_btn.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	_car_btn.offset_left = -250.0 * _ui
-	_car_btn.offset_right = -16.0 * _ui
-	_car_btn.offset_top = -222.0 * _ui
-	_car_btn.offset_bottom = -158.0 * _ui
+	# O botao ENTRAR/SAIR do carro NAO fica aqui: no iPhone o toque em Button do
+	# Godot nao chegava ao jogo (B-38), enquanto o toque tratado pelo
+	# TouchControls (PULAR/CORRER) sempre funcionou. Ver
+	# scripts/ui/touch_controls.gd: _car_pos / take_car_press().
 
 	_title = Label.new()
-	_title.text = "CARIOCA  v%s  -  Fase 1 + carro (Fase 4)" % Cfg.APP_VERSION
+	_title.text = "CARIOCA  v%s" % Cfg.APP_VERSION
 	_title.position = Vector2(12.0 * _ui, 8.0 * _ui)
-	_title.add_theme_font_size_override("font_size", int(17.0 * _ui))
+	_title.add_theme_font_size_override("font_size", int(16.0 * _ui))
 	_title.add_theme_color_override("font_color", Color(1, 1, 1, 0.92))
 	_title.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.65))
 	_title.add_theme_constant_override("outline_size", 3)
 	root.add_child(_title)
 
 	_stats = Label.new()
-	_stats.position = Vector2(12.0 * _ui, 32.0 * _ui)
+	# Abaixo da barra de botoes: em retrato a barra ocupa o topo, e a telemetria
+	# por baixo dela nao se sobrepoe (era o que acontecia no iPhone).
+	_stats.position = Vector2(12.0 * _ui, bar_bottom + 10.0 * _ui)
+	_stats.size = Vector2(vs.x - 24.0 * _ui, 0.0)
+	_stats.clip_text = true
 	_stats.add_theme_font_size_override("font_size", int(13.0 * _ui))
 	_stats.add_theme_color_override("font_color", Color(0.85, 0.95, 1.0, 0.95))
 	_stats.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
@@ -128,8 +124,8 @@ func _ready() -> void:
 	var half := minf(330.0 * _ui, vs.x * 0.44)
 	_toast.offset_left = -half
 	_toast.offset_right = half
-	_toast.offset_top = -320.0 * _ui
-	_toast.offset_bottom = -252.0 * _ui
+	_toast.offset_top = -400.0 * _ui
+	_toast.offset_bottom = -332.0 * _ui
 	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_toast.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_toast.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -158,15 +154,6 @@ func toast(msg: String) -> void:
 	_toast_t = 2.5
 
 
-## Texto do botao de contexto do veiculo. String vazia esconde o botao.
-func set_car_prompt(label: String) -> void:
-	if label == _car_label:
-		return
-	_car_label = label
-	_car_btn.text = label if label != "" else "ENTRAR NO CARRO"
-	_car_btn.visible = label != ""
-
-
 ## Carro para a linha de diagnostico da telemetria (pode ser null).
 func set_car(c: Node) -> void:
 	car = c
@@ -175,10 +162,6 @@ func set_car(c: Node) -> void:
 ## Linha livre sobre o modelo externo (piloto de asset, B-21).
 func set_model_note(t: String) -> void:
 	_model_note = t
-
-
-func _on_car() -> void:
-	action.emit("car")
 
 
 func _process(delta: float) -> void:

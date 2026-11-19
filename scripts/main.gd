@@ -276,17 +276,16 @@ func _process(delta: float) -> void:
 	if sea != null and player != null:
 		# Mar "infinito": acompanha o foco no plano XZ.
 		sea.global_position = Vector3(focus.x, Cfg.SEA_LEVEL, focus.z)
-	# Carro: avisa o toque para trocar PULAR/CORRER por ACEL/FREIO e mostra o
-	# botao de contexto (ENTRAR perto do carro, SAIR dirigindo).
-	if car != null and touch != null and touch.is_driving() != car.occupied:
-		touch.set_driving(car.occupied)
-	if hud != null and car != null and player != null:
-		var prompt := ""
-		if car.occupied:
-			prompt = "SAIR DO CARRO"
-		elif player.position.distance_to(car.global_position) < Car.PROXIMITY:
-			prompt = "ENTRAR NO CARRO"
-		hud.set_car_prompt(prompt)
+	# Carro: o TouchControls desenha e trata o botao ENTRAR/SAIR (B-38: no iPhone
+	# o toque em Button do Godot nao chegava ao jogo) e, dirigindo, troca
+	# PULAR/CORRER por ACEL/FREIO.
+	if car != null and touch != null and player != null:
+		if touch.is_driving() != car.occupied:
+			touch.set_driving(car.occupied)
+		var near: bool = player.position.distance_to(car.global_position) < Car.PROXIMITY
+		touch.set_car_state(near or car.occupied, car.occupied)
+		if touch.take_car_press():
+			_on_hud_action("car")
 	perf_log.sample(delta)
 
 

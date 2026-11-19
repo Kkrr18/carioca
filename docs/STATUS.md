@@ -57,9 +57,10 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   codigo (sem VehicleBody3D, mesma filosofia de colisao do player), rodas que
   giram e estercam, carroceria que inclina com o relevo, camera propria,
   farois/lanternas emissivos. Nesta rodada, para o usuario conseguir ENTRAR e
-  ANDAR no iPhone (B-36): o carro nasce a ~5,7 m do spawn (o botao ENTRAR ja
-  aparece no primeiro quadro) com marcador flutuante, o raio do botao subiu de
-  3,5 m para 12 m, e dirigindo os botoes de toque viram ACEL/FREIO. A
+  ANDAR no iPhone (B-36/B-38): o carro nasce a ~5,7 m do spawn com marcador
+  flutuante, o raio do botao subiu de 3,5 m para 12 m, o botao ENTRAR/SAIR e
+  desenhado e tratado pelo TouchControls (nao e mais Button do HUD) e,
+  dirigindo, PULAR/CORRER viram ACEL/FREIO. A
   telemetria mostra "carro dirigindo/livre, dist, km/h, acel %, volante %".
   Pendente: validacao no aparelho.
 - Medicao de FPS (B-09): o HUD ganhou o botao MEDIR — 15 s sem o limite de 30
@@ -255,6 +256,22 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   caminhao cinza). Corrigido baixando o PNG (10 KB) e mantendo a pasta
   `Textures/` ao lado do `.glb`. Licao: ao trazer um `.glb`, trazer tambem as
   texturas que ele referencia; o log do import no CI mostra o caminho exato.
+- B-38: RESOLVIDO ESCRITO (falta validar no aparelho). O usuario tocou em
+  "ENTRAR NO CARRO" e nada aconteceu. A inspecao do build publicado deu o fato
+  decisivo: a telemetria dizia "carro livre dist 6 m acel 0% volante 0%" e o
+  botao aparecia grande na tela. Ou seja: o jogo sabia do carro e mostrava o
+  botao — o que nao chegava era o TOQUE. Os botoes do HUD sao `Button` do Godot
+  (entrada da GUI); os botoes do jogo (PULAR/CORRER) sao desenhados e tratados
+  pelo `TouchControls` via InputEventScreenTouch, e esses sempre funcionaram no
+  iPhone. Entao o ENTRAR/SAIR virou um botao do `TouchControls` (circulo ambar
+  acima dos pedais, lido por `take_car_press()`), o `Button` do HUD foi
+  removido e o main chama a acao direto, sem passar pelo signal.
+  Na mesma rodada, a barra do topo virou duas fileiras de 3: com 6 botoes numa
+  linha ela ficava mais larga que a tela em retrato e "CARREGAR" saia cortado
+  na borda esquerda (visto na inspecao), e a telemetria passou a comecar
+  abaixo da barra. A inspecao tambem confirmou, no build publicado, que o
+  caminhao da Kenney aparece na areia e que a telemetria informa
+  "modelo vehicle-truck-red.glb: 6 malhas, 946 tris, 5.4 m".
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 
