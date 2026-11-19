@@ -276,6 +276,8 @@ func _test_scripts_compile() -> void:
 		if gds.reload() != OK:
 			all_ok = false
 			details += " " + p
+			for e in gds.get_errors():
+				details += " [%d:%d %s]" % [int(e.get("line", -1)), int(e.get("column", -1)), str(e.get("message", "?"))]
 	check(all_ok, "scripts do jogo compilam (falhas:%s)" % details)
 
 
