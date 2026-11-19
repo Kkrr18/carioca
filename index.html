@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CARIOCA — mundo aberto no Rio</title>
+<meta name="description" content="CARIOCA: jogo 3D de mundo aberto inspirado no Rio de Janeiro e em Niterói, feito com Godot 4.4 e GDScript.">
+<style>
+  :root{
+    --noite:#0b1c2c; --mar:#12557a; --areia:#e9e0cc; --sol:#f2b632;
+    --texto:#eaf3f8; --fraco:#9fb8c9; --borda:rgba(234,243,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:linear-gradient(180deg,var(--noite) 0%, #0f2a40 55%, var(--mar) 100%);
+    color:var(--texto);
+    font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    min-height:100vh;
+    padding:max(24px,env(safe-area-inset-top)) 20px max(32px,env(safe-area-inset-bottom));
+  }
+  .wrap{max-width:720px;margin:0 auto}
+  header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+  h1{font-size:clamp(34px,9vw,56px);letter-spacing:.14em;margin:0;font-weight:800}
+  .versao{font-size:13px;color:var(--fraco);letter-spacing:.08em;text-transform:uppercase}
+  .tag{
+    display:inline-block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;
+    background:rgba(242,182,50,.16);color:var(--sol);border:1px solid rgba(242,182,50,.45);
+    border-radius:999px;padding:4px 10px;margin-bottom:18px;
+  }
+  p{margin:0 0 14px}
+  .fraco{color:var(--fraco)}
+  .card{
+    background:rgba(255,255,255,.045);border:1px solid var(--borda);border-radius:16px;
+    padding:18px 18px 6px;margin:18px 0;
+  }
+  h2{font-size:17px;margin:0 0 12px;letter-spacing:.02em}
+  a{color:var(--sol)}
+  .botao{
+    display:block;text-align:center;text-decoration:none;font-weight:700;
+    background:linear-gradient(180deg,#ffd166,var(--sol));color:#20180a;
+    border-radius:14px;padding:16px 18px;margin:18px 0 6px;font-size:17px;
+    box-shadow:0 10px 24px rgba(242,182,50,.22);
+  }
+  .botao.secundario{
+    background:transparent;color:var(--texto);border:1px solid var(--borda);
+    box-shadow:none;font-weight:600;font-size:15px;padding:12px 16px;
+  }
+  ul{margin:0 0 14px;padding-left:20px}
+  li{margin:4px 0}
+  code{
+    background:rgba(0,0,0,.35);border:1px solid var(--borda);border-radius:6px;
+    padding:2px 6px;font-size:14px;
+  }
+  footer{margin-top:28px;font-size:12px;color:var(--fraco);line-height:1.6}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>CARIOCA</h1>
+    <span class="versao">v0.1.0-dev</span>
+  </header>
+  <span class="tag">Fase 1 — fundação</span>
+
+  <p>
+    Jogo 3D de mundo aberto inspirado no Rio de Janeiro e em Niterói.
+    Feito com <strong>Godot 4.4</strong> e GDScript, alvo iPhone 12, custo zero.
+  </p>
+  <p class="fraco">
+    Esta página é um cartão de apresentação do projeto. O jogo é um aplicativo
+    Godot: o navegador só abre o build exportado pelo próprio motor, que é
+    gerado automaticamente pelo GitHub Actions e publicado no GitHub Pages.
+  </p>
+
+  <a class="botao" href="https://kkrr18.github.io/carioca/" rel="noopener">
+    Abrir o build web
+  </a>
+  <p class="fraco" style="font-size:13px;text-align:center">
+    Se ainda não abrir, o build web ainda não foi gerado. Veja como abaixo.
+  </p>
+
+  <div class="card">
+    <h2>Como jogar agora</h2>
+    <ul>
+      <li><strong>No iPhone:</strong> aba <em>Actions</em> do GitHub → workflow
+        <em>build web</em> verde → abra o endereço do GitHub Pages no Safari.</li>
+      <li><strong>No computador:</strong> instale o Godot 4.4.x, abra a pasta do
+        projeto e aperte <code>F5</code>.</li>
+      <li><strong>Só validar o código:</strong>
+        <code>godot --headless --path . -s tests/runner.gd</code></li>
+    </ul>
+    <p class="fraco">
+      Passo a passo completo em
+      <a href="https://github.com/Kkrr18/carioca/blob/main/docs/TESTAR.md">docs/TESTAR.md</a>.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Controles</h2>
+    <ul>
+      <li>Metade esquerda da tela — joystick de andar</li>
+      <li>Metade direita — arraste para girar a câmera</li>
+      <li>Botões <strong>PULAR</strong> e <strong>CORRER</strong></li>
+      <li>No teclado: <code>WASD</code>, <code>Shift</code>, <code>Espaço</code></li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>O que já funciona (escrito)</h2>
+    <ul>
+      <li>Cidade procedural por setores de 512 m, com streaming</li>
+      <li>Orla, avenida, ruas, quadras, prédios, praças e palmeiras</li>
+      <li>Personagem em terceira pessoa com câmera orbital</li>
+      <li>Ciclo dia/noite, clima e céu procedural</li>
+      <li>Salvamento versionado com checksum</li>
+    </ul>
+    <p class="fraco">
+      Nada disso foi executado ainda: o projeto nunca rodou no Godot. O estado real,
+      incluindo os bugs conhecidos, está em
+      <a href="https://github.com/Kkrr18/carioca/blob/main/docs/STATUS.md">docs/STATUS.md</a>.
+    </p>
+  </div>
+
+  <a class="botao secundario" href="https://github.com/Kkrr18/carioca">Ver o código no GitHub</a>
+
+  <footer>
+    CARIOCA — projeto original. Nenhum conteúdo de outros jogos.<br>
+    Dados geográficos: © colaboradores do OpenStreetMap, ODbL.
+  </footer>
+</div>
+</body>
+</html>

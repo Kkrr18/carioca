@@ -31,6 +31,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Preparar o GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
       - name: Cache do Godot e dos modelos de exportacao
         uses: actions/cache@v4
         with:
@@ -70,6 +76,13 @@ jobs:
 
       - name: Desativar Jekyll
         run: touch build/web/.nojekyll
+
+      # Reserva: mesmo que a publicacao falhe, o build fica baixavel no artifact.
+      - name: Guardar o build como artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: carioca-web
+          path: build/web
 
       - uses: actions/upload-pages-artifact@v3
         with:

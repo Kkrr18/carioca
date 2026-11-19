@@ -73,6 +73,9 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   testes nem o build Web rodam.
 - B-12: No build Web o export padrao nao tem threads: a geracao de setor passa
   para a thread principal, com raio menor. Previsto no codigo, nao medido.
+- B-13: `index.html` na raiz e uma pagina de apresentacao, NAO o jogo. O jogo
+  publicado so existe depois que o workflow `web.yml` gera `build/web/`. Se um
+  dia o build web for commitado na raiz, esse arquivo e substituido.
 
 ## Proximas tarefas (Fase 1)
 

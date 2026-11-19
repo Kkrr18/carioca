@@ -39,6 +39,9 @@ Resumo:
 - **Só o código:** `godot --headless --path . -s tests/runner.gd` ou a aba
   Actions do repositório.
 
+O `index.html` da raiz é apenas uma página de apresentação (o Godot não gera
+site): o jogo no navegador é o build publicado pelo GitHub Pages.
+
 Medir a área do polígono:
 
 ```
