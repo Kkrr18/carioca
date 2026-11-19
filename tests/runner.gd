@@ -14,6 +14,7 @@ const CityGen = preload("res://scripts/world/city_gen.gd")
 const SaveManager = preload("res://scripts/autoload/save_manager.gd")
 const PropFactory = preload("res://scripts/world/prop_factory.gd")
 const Car = preload("res://scripts/vehicles/car.gd")
+const ModelProp = preload("res://scripts/world/model_prop.gd")
 
 var _pass := 0
 var _fail := 0
@@ -37,6 +38,8 @@ func _initialize() -> void:
 	_test_heights()
 	_test_props()
 	_test_car_physics()
+	_test_model_prop()
+	_test_model_asset()
 	_test_windows()
 	_test_scripts_compile()
 	_test_save_roundtrip()
@@ -251,6 +254,57 @@ func _test_car_physics() -> void:
 		"esterco maximo cai com a velocidade")
 
 
+func _test_model_prop() -> void:
+	# Piloto de asset (B-21): a normalizacao e pura e garante que um modelo de
+	# qualquer escala/eixo vire `alvo` metros no eixo Z — o eixo em que carro e
+	# caminhao "apontam" neste jogo.
+	var a: Array = ModelProp.normalize_for(Vector3(2.0, 1.0, 4.0), 6.0)
+	check(absf(float(a[0]) - 1.5) < 0.001 and absf(float(a[1])) < 0.001,
+		"modelo de 4 m em Z escala para 6 m sem girar")
+	var b: Array = ModelProp.normalize_for(Vector3(4.0, 1.0, 2.0), 6.0)
+	check(absf(float(b[0]) - 1.5) < 0.001 and absf(float(b[1]) - PI * 0.5) < 0.001,
+		"modelo de 4 m em X gira 90 graus e escala para 6 m")
+	var c: Array = ModelProp.normalize_for(Vector3(1.0, 1.0, 1.0), 5.0)
+	check(absf(float(c[0]) - 5.0) < 0.001, "modelo cubico escala pelo maior eixo (%.2f)" % float(c[0]))
+
+
+func _test_model_asset() -> void:
+	# B-21: o primeiro asset externo do jogo. O CI roda `--import` antes deste
+	# teste, entao aqui se valida o caminho completo ate o Godot: arquivo no
+	# repositorio -> PackedScene importada -> AABB -> normalizacao.
+	var path := "res://assets/models/vehicle-truck-red.glb"
+	check(FileAccess.file_exists(path), "asset .glb no repositorio")
+	if not FileAccess.file_exists(path):
+		return
+	var f := FileAccess.open(path, FileAccess.READ)
+	var bytes := 0
+	if f != null:
+		bytes = int(f.get_length())
+		f.close()
+	check(bytes > 50000, "asset .glb com %d bytes (nao truncado)" % bytes)
+	if not ResourceLoader.exists(path):
+		known(false, "asset .glb importado pelo Godot (rodar --import antes)")
+		return
+	var res: Resource = load(path)
+	check(res is PackedScene, "asset .glb importado como PackedScene")
+	if not (res is PackedScene):
+		return
+	var inst := (res as PackedScene).instantiate() as Node3D
+	check(inst != null, "raiz do modelo e Node3D")
+	if inst == null:
+		return
+	var box: AABB = ModelProp.mesh_aabb(inst)
+	check(box.size.x > 0.01 and box.size.y > 0.01 and box.size.z > 0.01,
+		"modelo com volume (%.2f x %.2f x %.2f m)" % [box.size.x, box.size.y, box.size.z])
+	var norm: Array = ModelProp.normalize_for(box.size, 5.4)
+	var scaled: Vector3 = box.size * float(norm[0])
+	var along: float = scaled.x if absf(float(norm[1])) > 0.1 else scaled.z
+	check(absf(along - 5.4) < 0.05, "normalizado para 5,4 m de comprimento (%.2f)" % along)
+	var tris: int = ModelProp.count_tris(inst)
+	check(tris > 0, "modelo com %d triangulos" % tris)
+	inst.free()
+
+
 func _test_windows() -> void:
 	# Fachadas de vidro: existem no LOD full, nao existem no LOD far nem no mar.
 	var full := CityGen.generate(3, 0, 20260922, CityGen.LOD_FULL)
@@ -295,6 +349,7 @@ func _test_scripts_compile() -> void:
 		"res://scripts/core/perf_log.gd",
 		"res://scripts/world/city_gen.gd",
 		"res://scripts/world/prop_factory.gd",
+		"res://scripts/world/model_prop.gd",
 		"res://scripts/world/sector_streamer.gd",
 		"res://scripts/world/day_night.gd",
 		"res://scripts/vehicles/car.gd",

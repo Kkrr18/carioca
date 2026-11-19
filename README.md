@@ -26,10 +26,15 @@ Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
 - Fase 1.5 visual: água com ondas/fresnel, glow + tonemap ACES, sombra de
   contato, fachadas de vidro que acendem à noite, postes, bancos, lixeiras
   e carros estacionados (plano completo em docs/DETALHES_VISUAIS.md).
-- Carro dirigível (primeiro incremento da Fase 4): entre/saia pelo botão
-  CARRO quando estiver perto do veículo (ou tecla E), direção cinemática
+- Carro dirigível (primeiro incremento da Fase 4): nasce perto do ponto de
+  nascimento com um marcador flutuante; entre pelo botão ENTRAR (ou tecla E) e
+  dirija com o volante no joystick e os pedais ACEL/FREIO; direção cinemática
   estável, rodas que giram e estercam, carroceria que acompanha o relevo e
   câmera própria.
+- Botão MEDIR no HUD: 15 s sem o limite de 30 FPS, com média, p95 e pior frame
+  na telemetria — é assim que o FPS real é medido no aparelho.
+- Piloto de asset externo: um modelo .glb CC0 (Kenney) carregado e normalizado
+  por código (escala, eixo e apoio no chão), com o import verificado no CI.
 - Caderno de estilo visual ([docs/ESTILO.md](docs/ESTILO.md)): low-poly
   estilizado com iluminação moderna, paleta do Rio, regras de render.
 - HUD com telemetria e gravador de desempenho em CSV.

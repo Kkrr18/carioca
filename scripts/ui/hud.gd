@@ -2,21 +2,31 @@ extends CanvasLayer
 ## HUD: interface de jogo (Fase 1).
 ##
 ## - Canto superior esquerdo: estado do mundo e telemetria (FPS, frame time,
-##   draw calls, triangulos, memoria, setores).
-## - Faixa superior: botoes SALVAR, CARREGAR, PERF, +1h, LIMITAR 30.
+##   p95, draw calls, primitivas, memoria, setores, carro e modelo externo).
+## - Faixa superior direita: SALVAR, CARREGAR, PERF, MEDIR, +1h, LIMITAR 30.
+## - Botao de contexto do veiculo (ENTRAR/SAIR NO CARRO) quando perto do carro.
 ## - Aviso curto ("toast") para confirmar acoes.
 ##
 ## Toda a interface e criada por codigo: menos arquivos .tscn para manter e
 ## nada de imagem/textura nesta fase.
+##
+## ESCALA (B-35): o jogo e desenhado num viewport logico de 1280x720 esticado
+## para a tela do iPhone; em retrato a altura logica chega a ~2770 px e um
+## texto de 12 px aparecia com ~6 px reais. Fontes, botoes e deslocamentos sao
+## multiplicados por _ui (calculado uma vez em _ready).
 
 signal action(name: String)
 signal perf_toggled(on: bool)
 
 const Cfg = preload("res://scripts/core/cfg.gd")
 
+## Duracao da medicao de FPS do botao MEDIR (B-09).
+const BENCH_SECONDS := 15.0
+
 var player = null
 var streamer = null
 var day_night = null
+var car = null
 
 var _stats: Label
 var _title: Label
@@ -27,6 +37,15 @@ var _perf_on := true
 var _cap30 := true
 var _car_btn: Button
 var _car_label := ""
+var _model_note := ""
+
+var _ui := 1.0
+var _btn_w := 96.0
+var _btn_h := 46.0
+
+var _bench_t := -1.0
+var _bench_dt: Array[float] = []
+var _bench_result := ""
 
 var _frame_times: Array[float] = []
 var _frame_i := 0
@@ -40,46 +59,65 @@ func setup(p: Node, s: Node, dn: Node) -> void:
 
 func _ready() -> void:
 	layer = 2
+	# Escala da interface (B-35): derivada da altura logica do viewport, que no
+	# iPhone esticado pode chegar a ~2770 px em retrato.
+	var vs := get_viewport().get_visible_rect().size
+	_ui = clampf(vs.y / 640.0, 1.15, 2.6)
+	_btn_w = 96.0 * _ui
+	_btn_h = 46.0 * _ui
 	var root := Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
 
+	var labels := ["SALVAR", "CARREGAR", "PERF", "MEDIR", "+1h", "LIMITAR 30"]
+	var cbs: Array[Callable] = [_on_save, _on_load, _on_perf, _on_bench, _on_plus_hour, _on_cap]
+	var gap := 6.0 * _ui
 	var bar := HBoxContainer.new()
-	bar.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	bar.position = Vector2(-440.0, 10.0)
-	bar.add_theme_constant_override("separation", 6)
+	bar.add_theme_constant_override("separation", int(gap))
 	root.add_child(bar)
-	_bar_button(bar, "SALVAR", _on_save)
-	_bar_button(bar, "CARREGAR", _on_load)
-	_bar_button(bar, "PERF", _on_perf)
-	_bar_button(bar, "+1h", _on_plus_hour)
-	_bar_button(bar, "LIMITAR 30", _on_cap)
+	for i in labels.size():
+		_bar_button(bar, String(labels[i]), cbs[i])
+	# Retangulo explicito: com 6 botoes o deslocamento fixo antigo (-440 px)
+	# sairia da tela em retrato.
+	bar.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	bar.offset_left = -float(labels.size()) * (_btn_w + gap)
+	bar.offset_right = -12.0 * _ui
+	bar.offset_top = 8.0 * _ui
+	bar.offset_bottom = 8.0 * _ui + _btn_h
 
 	# Botao de contexto do veiculo (Fase 4): so aparece quando o jogador
 	# esta perto do carro (ou dirigindo). O main manda o texto via
 	# set_car_prompt() e o clique volta pelo signal action("car").
 	_car_btn = Button.new()
 	_car_btn.text = "ENTRAR NO CARRO"
-	_car_btn.custom_minimum_size = Vector2(200.0, 54.0)
 	_car_btn.focus_mode = Control.FOCUS_NONE
-	_car_btn.add_theme_font_size_override("font_size", 14)
+	_car_btn.add_theme_font_size_override("font_size", int(19.0 * _ui))
 	_car_btn.visible = false
 	_car_btn.pressed.connect(_on_car)
 	root.add_child(_car_btn)
+	# Preso no canto inferior direito, logo acima dos botoes de toque (que se
+	# movem com a tela). Antes era posicionado em _process com numeros fixos:
+	# ficava fora de lugar e pequeno demais no iPhone (B-34/B-35). CanvasLayer
+	# nao tem get_viewport_rect() — o tamanho vem de get_viewport() (B-34).
+	_car_btn.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_car_btn.offset_left = -250.0 * _ui
+	_car_btn.offset_right = -16.0 * _ui
+	_car_btn.offset_top = -222.0 * _ui
+	_car_btn.offset_bottom = -158.0 * _ui
 
 	_title = Label.new()
-	_title.text = "CARIOCA  v%s  -  Fase 1 (fundacao jogavel)" % Cfg.APP_VERSION
-	_title.position = Vector2(12.0, 8.0)
-	_title.add_theme_font_size_override("font_size", 15)
+	_title.text = "CARIOCA  v%s  -  Fase 1 + carro (Fase 4)" % Cfg.APP_VERSION
+	_title.position = Vector2(12.0 * _ui, 8.0 * _ui)
+	_title.add_theme_font_size_override("font_size", int(17.0 * _ui))
 	_title.add_theme_color_override("font_color", Color(1, 1, 1, 0.92))
 	_title.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.65))
 	_title.add_theme_constant_override("outline_size", 3)
 	root.add_child(_title)
 
 	_stats = Label.new()
-	_stats.position = Vector2(12.0, 28.0)
-	_stats.add_theme_font_size_override("font_size", 12)
+	_stats.position = Vector2(12.0 * _ui, 32.0 * _ui)
+	_stats.add_theme_font_size_override("font_size", int(13.0 * _ui))
 	_stats.add_theme_color_override("font_color", Color(0.85, 0.95, 1.0, 0.95))
 	_stats.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
 	_stats.add_theme_constant_override("outline_size", 3)
@@ -87,10 +125,15 @@ func _ready() -> void:
 
 	_toast = Label.new()
 	_toast.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_toast.position = Vector2(-260.0, -120.0)
-	_toast.size = Vector2(520.0, 28.0)
+	var half := minf(330.0 * _ui, vs.x * 0.44)
+	_toast.offset_left = -half
+	_toast.offset_right = half
+	_toast.offset_top = -320.0 * _ui
+	_toast.offset_bottom = -252.0 * _ui
 	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_toast.add_theme_font_size_override("font_size", 16)
+	_toast.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_toast.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_toast.add_theme_font_size_override("font_size", int(19.0 * _ui))
 	_toast.add_theme_color_override("font_color", Color(1, 1, 1, 0.95))
 	_toast.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
 	_toast.add_theme_constant_override("outline_size", 4)
@@ -102,9 +145,9 @@ func _ready() -> void:
 func _bar_button(parent: Node, text: String, cb: Callable) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.custom_minimum_size = Vector2(84.0, 40.0)
+	b.custom_minimum_size = Vector2(_btn_w, _btn_h)
 	b.focus_mode = Control.FOCUS_NONE
-	b.add_theme_font_size_override("font_size", 13)
+	b.add_theme_font_size_override("font_size", int(15.0 * _ui))
 	b.pressed.connect(cb)
 	parent.add_child(b)
 	return b
@@ -124,6 +167,16 @@ func set_car_prompt(label: String) -> void:
 	_car_btn.visible = label != ""
 
 
+## Carro para a linha de diagnostico da telemetria (pode ser null).
+func set_car(c: Node) -> void:
+	car = c
+
+
+## Linha livre sobre o modelo externo (piloto de asset, B-21).
+func set_model_note(t: String) -> void:
+	_model_note = t
+
+
 func _on_car() -> void:
 	action.emit("car")
 
@@ -131,14 +184,7 @@ func _on_car() -> void:
 func _process(delta: float) -> void:
 	_toast_t = maxf(0.0, _toast_t - delta)
 	_toast.modulate.a = clampf(_toast_t, 0.0, 1.0)
-	if _car_btn != null and _car_btn.visible:
-		# Ancorado a mao: o canto inferior direito fica com os botoes de toque
-		# (PULAR/CORRER ficam abaixo; sem sobreposicao).
-		# CanvasLayer nao tem get_viewport_rect() (e metodo de CanvasItem):
-		# o tamanho visivel vem do Viewport (B-34, achado pelo teste de
-		# compilacao agora que ele compila main.gd).
-		var vs := get_viewport().get_visible_rect().size
-		_car_btn.position = Vector2(vs.x - 216.0, vs.y - 254.0)
+	_bench_tick(delta)
 	_frame_times.resize(240)
 	_frame_times[_frame_i % 240] = delta * 1000.0
 	_frame_i += 1
@@ -182,6 +228,20 @@ func _refresh_stats() -> void:
 		lines.append("setores %d   na fila %d   gerados %d   ger %.0f ms   prim %d" % [
 			int(st.get("loaded", 0)), int(st.get("inflight", 0)), int(st.get("generated", 0)),
 			float(st.get("gen_ms", 0.0)), tri])
+	if car != null:
+		# Diagnostico do carro (Fase 4): se "entrar e nao andar" voltar, esta
+		# linha diz se o carro esta ocupado e o que ele recebe de acelerador e
+		# de volante — sem precisar do console do Safari.
+		lines.append("carro %s   dist %.0f m   %.0f km/h   acel %.0f%%   volante %.0f%%" % [
+			"dirigindo" if car.occupied else "livre",
+			player.position.distance_to(car.global_position),
+			absf(float(car.speed)) * 3.6,
+			float(car.input_throttle) * 100.0,
+			float(car.input_steer) * 100.0])
+	if not _model_note.is_empty():
+		lines.append(_model_note)
+	if not _bench_result.is_empty():
+		lines.append(_bench_result)
 	_stats.text = "\n".join(lines)
 
 
@@ -213,6 +273,54 @@ func _on_load() -> void:
 func _on_perf() -> void:
 	_perf_on = not _perf_on
 	perf_toggled.emit(_perf_on)
+
+
+## Medicao de FPS (B-09): com o limite de 30 ligado o numero mede o LIMITE, nao
+## o aparelho. Aqui o limite sai durante 15 s e o resultado fica na telemetria:
+## media, p95 do frame e o pior frame (e o pior que engasga no dedo).
+func _on_bench() -> void:
+	if _bench_t >= 0.0:
+		_finish_bench(false)
+		return
+	_bench_dt.clear()
+	_bench_t = BENCH_SECONDS
+	_bench_result = ""
+	_perf_on = true
+	Engine.max_fps = 0
+	toast("Medindo %.0f s SEM limite: ande ou dirija agora." % BENCH_SECONDS)
+
+
+func _bench_tick(delta: float) -> void:
+	if _bench_t < 0.0:
+		return
+	_bench_dt.append(delta)
+	_bench_t -= delta
+	if _bench_t <= 0.0:
+		_finish_bench(true)
+
+
+func _finish_bench(complete: bool) -> void:
+	_bench_t = -1.0
+	Engine.max_fps = 30 if _cap30 else 0
+	var n := _bench_dt.size()
+	if n < 10:
+		_bench_dt.clear()
+		toast("Medicao cancelada (poucos quadros).")
+		return
+	var total := 0.0
+	var worst := 0.0
+	for d in _bench_dt:
+		total += d
+		worst = maxf(worst, d)
+	var sorted_dt := _bench_dt.duplicate()
+	sorted_dt.sort()
+	var p95: float = sorted_dt[clampi(int(float(n) * 0.95), 0, n - 1)]
+	var avg := float(n) / maxf(0.0001, total)
+	_bench_result = "MEDICAO %.0f s: media %.0f fps (%.1f ms)   p95 %.1f ms   pior %.1f ms" % [
+		BENCH_SECONDS, avg, 1000.0 / maxf(0.001, avg), p95 * 1000.0, worst * 1000.0]
+	_bench_dt.clear()
+	if complete:
+		toast(_bench_result)
 
 
 func _on_plus_hour() -> void:

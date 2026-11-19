@@ -24,6 +24,7 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
 | HUD e telemetria | Escrito | scripts/ui/hud.gd, scripts/core/perf_log.gd |
 | Ciclo dia/noite e clima (2 estados de tempo) | Escrito | scripts/world/day_night.gd |
 | Veiculo dirigivel (carro — Fase 4, incremento minimo) | Escrito | scripts/vehicles/car.gd |
+| Piloto de asset externo (.glb CC0 normalizado pelo AABB) | Escrito | scripts/world/model_prop.gd, assets/models/ |
 | Salvamento versionado (schema 1, sha256, gzip) | Escrito | scripts/autoload/save_manager.gd |
 | Testes headless | Escrito | tests/runner.gd |
 | Cena principal | Escrito | scenes/main.tscn, scripts/main.gd |
@@ -53,11 +54,22 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   carros estacionados na avenida, distancias de visibilidade com fade).
   Pendente: validacao no aparelho (jogar + FPS) e assets externos (B-21).
 - Fase 4 (incremento minimo): carro dirigivel — cinematica "bicycle" por
-  codigo (sem VehicleBody3D, mesma filosofia de colisao do player), entrar/
-  sair pelo botao CARRO do HUD (ou tecla E), rodas que giram e estercam,
-  carroceria que inclina com o relevo, camera propria, farois/lanternas
-  emissivos. Caderno de estilo visual criado em docs/ESTILO.md. Pendente:
-  validacao no aparelho (entrar, dirigir na avenida, sair + FPS).
+  codigo (sem VehicleBody3D, mesma filosofia de colisao do player), rodas que
+  giram e estercam, carroceria que inclina com o relevo, camera propria,
+  farois/lanternas emissivos. Nesta rodada, para o usuario conseguir ENTRAR e
+  ANDAR no iPhone (B-36): o carro nasce a ~6 m do spawn com marcador flutuante,
+  o raio do botao ENTRAR subiu de 3,5 m para 12 m, o botao do topo leva o
+  jogador ate o carro, e dirigindo os botoes de toque viram ACEL/FREIO. A
+  telemetria mostra "carro dirigindo/livre, dist, km/h, acel %, volante %".
+  Pendente: validacao no aparelho.
+- Medicao de FPS (B-09): o HUD ganhou o botao MEDIR — 15 s sem o limite de 30
+  FPS e o resultado (media, p95 e pior frame) fica na telemetria. Pendente:
+  ler o numero no iPhone.
+- Piloto de asset externo (B-21): UM .glb CC0 (Kenney, caminhao) carregado por
+  scripts/world/model_prop.gd, com escala, eixo e apoio no chao normalizados
+  pelo AABB e fallback silencioso. O CI importa o .glb e TESTA que ele vira
+  PackedScene com volume e triangulos. Isolado de proposito: nao substitui o
+  carro dirigivel nem os props procedurais ate vermos o custo no aparelho.
 
 ## Testados
 
@@ -220,16 +232,34 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   (B-30): "Parse Error: Function get_viewport_rect() not found in base self",
   em hud.gd:137. O tamanho visivel agora vem de
   get_viewport().get_visible_rect().size.
+- B-35: RESOLVIDO ESCRITO (falta validar no aparelho). A interface era
+  pequena demais no iPhone: o jogo desenha num viewport logico de 1280x720
+  esticado para a tela, e em retrato a altura logica chega a ~2770 px, entao
+  um texto de 12 px aparecia com ~6 px reais e o botao ENTRAR do carro com
+  ~16 px. hud.gd e touch_controls.gd agora multiplicam fontes, botoes e
+  deslocamentos por _ui, derivado da altura logica do viewport; a barra do
+  topo e o botao do carro passaram a usar ancoras e retangulos explicitos em
+  vez de posicoes fixas em _process.
+- B-36: RESOLVIDO ESCRITO (falta validar no aparelho). O usuario jogou e nao
+  conseguiu entrar/andar no carro. Causas provaveis, todas tratadas: o carro
+  ficava a 14 m do spawn e o botao so aparecia a 3,5 m (agora nasce a ~6 m e o
+  raio e 12 m); nao havia como chegar ao carro pela interface (o botao do topo
+  agora leva o jogador ate ele); o acelerador era o eixo Y do joystick que
+  tambem vira o volante (agora ha pedais ACEL/FREIO dedicados); e o carro nao
+  tinha marcador (agora tem um poste com esfera). A telemetria passou a
+  mostrar carro/velocidade/acelerador/volante, para diagnosticar no aparelho
+  sem o console do Safari.
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 
 1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
 2. Medir FPS no iPhone jogando uma sessao real (B-09): o botao PERF grava CSV.
 3. Pedir ao usuario que toque em SALVAR e CARREGAR no jogo e confirme que o save volta (valida o B-08 no aparelho).
-4. Fase 4 (incremento minimo): testar o carro no iPhone (entrar, dirigir na avenida, sair) e medir FPS com ele em cena; se estiver liso, trafego basico (carros de passeio seguindo as ruas) e a meta "dirigir do Rio ate Niteroi".
+4. Fase 4 (incremento minimo): testar no iPhone (ENTRAR, ACEL/FREIO, SAIR) e tocar MEDIR para o FPS real; se estiver liso, trafego basico (carros de passeio seguindo as ruas) e a meta "dirigir do Rio ate Niteroi".
 5. Fase 2: pipeline OSM/DEM (Overpass -> recorte do poligono -> tiles) e a ponte Rio-Niteroi como malha (B-04).
 6. Fase 1.5 (visual, paralela): plano em docs/DETALHES_VISUAIS.md. Passos A-D
    em codigo (procedural); falta validar no aparelho e medir FPS.
-7. B-21: quando houver acesso a um PC, baixar Kenney/KayKit/Poly Haven e
-   substituir os props procedurais pelos modelos CC0.
+7. B-21: o piloto (um .glb CC0) ja entrou e e verificado pelo CI. O proximo
+   passo e medir no aparelho o custo em FPS e bytes; so entao importar
+   Kenney/KayKit/Poly Haven em lote e substituir os props procedurais.
 

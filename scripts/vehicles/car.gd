@@ -30,16 +30,23 @@ const STEER_MAX := 0.55        # rad de esterco maximo, parado
 const STEER_SPEED := 3.5       # resposta do volante (rad/s)
 const STEER_DROP := 0.55       # quanto o esterco maximo cai com a velocidade
 const WHEEL_RADIUS := 0.34
-const PROXIMITY := 3.5         # distancia (m) para o prompt ENTRAR aparecer
+# Distancia (m) para o prompt ENTRAR aparecer. Era 3,5 m: no iPhone o jogador
+# nao achava o carro e nao conseguia entrar (B-36).
+const PROXIMITY := 12.0
 
 var speed := 0.0               # m/s assinada (+ frente, - re)
 var steer := 0.0               # rad assinado (+ esquerda)
 var occupied := false
+# Entrada do ultimo quadro, somente para a telemetria do HUD: e por ela que se
+# ve, no aparelho, se o carro nao anda por falta de toque ou por outra coisa.
+var input_throttle := 0.0
+var input_steer := 0.0
 var player = null              # main conecta; usado para entrar/sair
 var streamer = null
 
 var camera: Camera3D
 var _camera_rig: Node3D
+var _marker: Node3D
 var _wheels: Array[Node3D] = []
 var _front_pivots: Array[Node3D] = []
 var _spin := 0.0
@@ -77,9 +84,13 @@ static func yaw_rate(speed: float, steer: float) -> float:
 # --- Cena ---------------------------------------------------------------------
 
 func _ready() -> void:
+	# O main posiciona o carro antes do add_child; aqui ele encosta no chao
+	# analitico para nao nascer flutuando nem enterrado.
+	position.y = Cfg.height_at(position.x, position.z)
 	_build_body()
 	_build_wheels()
 	_build_camera()
+	_build_marker()
 	set_physics_process(true)
 
 
@@ -185,6 +196,50 @@ func _build_camera() -> void:
 	_camera_rig.add_child(camera)
 
 
+## Marcador flutuante sobre o carro: um poste fino e uma esfera emissiva. O
+## carro e baixo e cinza no meio da areia; no iPhone o jogador nao o achava
+## (B-36). O marcador fica em pe (top_level: nao herda a inclinacao do carro) e
+## some ao dirigir.
+func _build_marker() -> void:
+	_marker = Node3D.new()
+	_marker.name = "CarMarker"
+	_marker.top_level = true
+	add_child(_marker)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(1.0, 0.85, 0.25)
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	var pole := MeshInstance3D.new()
+	var cyl := CylinderMesh.new()
+	cyl.height = 2.6
+	cyl.top_radius = 0.05
+	cyl.bottom_radius = 0.05
+	cyl.radial_segments = 6
+	pole.mesh = cyl
+	pole.material_override = mat
+	pole.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	pole.position = Vector3(0.0, 1.3, 0.0)
+	_marker.add_child(pole)
+	var bulb := MeshInstance3D.new()
+	var sph := SphereMesh.new()
+	sph.radius = 0.26
+	sph.height = 0.52
+	sph.radial_segments = 10
+	sph.rings = 5
+	bulb.mesh = sph
+	bulb.material_override = mat
+	bulb.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	bulb.position = Vector3(0.0, 2.7, 0.0)
+	_marker.add_child(bulb)
+	_update_marker()
+
+
+func _update_marker() -> void:
+	if _marker == null:
+		return
+	_marker.global_position = global_position
+	_marker.visible = not occupied
+
+
 # --- Direcao ------------------------------------------------------------------
 
 func _physics_process(delta: float) -> void:
@@ -194,6 +249,7 @@ func _physics_process(delta: float) -> void:
 		_update_camera(delta)
 	_update_wheels(delta)
 	_maybe_toggle()
+	_update_marker()
 
 
 func _drive(delta: float) -> void:
@@ -203,8 +259,15 @@ func _drive(delta: float) -> void:
 	var steer_in := 0.0
 	if TouchControls.is_active():
 		var s := TouchControls.stick()
-		throttle = clampf(-s.y, -1.0, 1.0)
+		# O joystick continua servindo de acelerador (arrastar para cima), mas
+		# so pela metade: dirigindo ele fica com o volante, e quem acelera de
+		# verdade sao os pedais ACEL/FREIO (touch_controls.set_driving).
+		throttle = clampf(-s.y, -1.0, 1.0) * 0.5
 		steer_in = clampf(s.x, -1.0, 1.0)
+	if TouchControls.pedal_gas():
+		throttle = 1.0
+	if TouchControls.pedal_brake():
+		throttle = -1.0
 	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
 		throttle = 1.0
 	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
@@ -213,6 +276,10 @@ func _drive(delta: float) -> void:
 		steer_in = -1.0
 	if Input.is_key_pressed(KEY_D):
 		steer_in = 1.0
+	# Diagnostico para o HUD: se o carro nao andar, esta linha diz se ele
+	# recebe acelerador e volante (B-36).
+	input_throttle = throttle
+	input_steer = steer_in
 	# Dirigindo, o arrasto de olhar nao move nada: descarta o acumulado, senao a
 	# camera do personagem da um salto ao sair do carro.
 	TouchControls.consume_look()
@@ -266,7 +333,9 @@ func _inclinar(delta: float) -> void:
 
 
 func _update_wheels(delta: float) -> void:
-	_spin += (speed / WHEEL_RADIUS) * delta
+	# wrapf mantem o angulo pequeno: sem isso o acumulo perde precisao float
+	# depois de alguns minutos dirigindo.
+	_spin = wrapf(_spin + (speed / WHEEL_RADIUS) * delta, -TAU, TAU)
 	for w in _wheels:
 		w.rotation.x = _spin
 	for p in _front_pivots:
@@ -314,6 +383,10 @@ func _enter() -> void:
 	if occupied or player == null:
 		return
 	occupied = true
+	speed = 0.0
+	steer = 0.0
+	if _marker != null:
+		_marker.visible = false
 	player.enabled = false
 	player.visible = false
 	if camera != null:

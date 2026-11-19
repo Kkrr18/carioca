@@ -15,6 +15,7 @@ const DayNight = preload("res://scripts/world/day_night.gd")
 const Player = preload("res://scripts/player/player.gd")
 const TouchControls = preload("res://scripts/ui/touch_controls.gd")
 const Hud = preload("res://scripts/ui/hud.gd")
+const ModelProp = preload("res://scripts/world/model_prop.gd")
 const PerfLog = preload("res://scripts/core/perf_log.gd")
 
 const SPAWN := Vector3(1600.0, 1.2, 100.0)
@@ -28,6 +29,8 @@ var car = null
 var day_night = null
 var hud = null
 var perf_log = null
+var touch = null
+var model_prop = null
 
 var _sun: DirectionalLight3D
 var _moon: DirectionalLight3D
@@ -109,23 +112,39 @@ func _ready() -> void:
 	add_child(player)
 	hud.setup(player, streamer, day_night)
 
-	# Fase 4 (incremento minimo): um carro dirigivel estacionado na Av.
-	# Atlantica, fora da faixa dos carros estacionados (z 100.5-104.5).
+	# Fase 4 (incremento minimo): um carro dirigivel na areia, a poucos metros do
+	# ponto de nascimento. Antes ele ficava a 14 m e o botao so aparecia a 3,5 m:
+	# no iPhone o jogador nao o encontrava (B-36). Agora ele nasce no campo de
+	# visao e tem um marcador flutuante.
 	_boot_step("carro")
 	car = Car.new()
 	car.name = "Car"
 	car.player = player
 	car.streamer = streamer
-	car.position = Vector3(1612.0, Cfg.height_at(1612.0, 107.5), 107.5)
+	car.position = Vector3(1604.0, Cfg.height_at(1604.0, 96.0), 96.0)
 	car.rotation.y = PI * 0.5
 	add_child(car)
+	hud.set_car(car)
+
+	# Piloto de assets (B-21): UM modelo .glb CC0 externo no mundo procedural.
+	# Serve para medir no aparelho o custo real (bytes e FPS) de sair do
+	# procedural; se o arquivo nao carregar, o no fica vazio e o jogo segue.
+	_boot_step("modelo")
+	model_prop = ModelProp.new()
+	model_prop.name = "ModelPropTruck"
+	model_prop.model_path = "res://assets/models/vehicle-truck-red.glb"
+	model_prop.target_length = 5.4
+	model_prop.position = Vector3(1594.0, Cfg.height_at(1594.0, 90.0), 90.0)
+	model_prop.rotation.y = PI * 0.5
+	add_child(model_prop)
+	hud.set_model_note(model_prop.describe())
 
 	_boot_step("toque")
 	var touch_layer := CanvasLayer.new()
 	touch_layer.name = "TouchLayer"
 	touch_layer.layer = 1
 	add_child(touch_layer)
-	var touch := TouchControls.new()
+	touch = TouchControls.new()
 	touch.name = "TouchControls"
 	touch_layer.add_child(touch)
 
@@ -143,7 +162,7 @@ func _ready() -> void:
 
 	_boot_step("pronto")
 	_boot_log.text = ""
-	hud.toast("Esquerda: andar. Direita: olhar. Chegue perto do carro e toque ENTRAR.")
+	hud.toast("Joystick anda, arraste na direita para olhar. O carro esta a sua frente.")
 
 
 func _build_environment() -> void:
@@ -257,12 +276,15 @@ func _process(delta: float) -> void:
 	if sea != null and player != null:
 		# Mar "infinito": acompanha o foco no plano XZ.
 		sea.global_position = Vector3(focus.x, Cfg.SEA_LEVEL, focus.z)
-	# Prompt de contexto do veiculo (Fase 4): botao CARRO perto do carro.
+	# Carro: avisa o toque para trocar PULAR/CORRER por ACEL/FREIO e mostra o
+	# botao de contexto (ENTRAR perto do carro, SAIR dirigindo).
+	if car != null and touch != null and touch.is_driving() != car.occupied:
+		touch.set_driving(car.occupied)
 	if hud != null and car != null and player != null:
 		var prompt := ""
 		if car.occupied:
 			prompt = "SAIR DO CARRO"
-		elif player.position.distance_to(car.position) < Car.PROXIMITY:
+		elif player.position.distance_to(car.global_position) < Car.PROXIMITY:
 			prompt = "ENTRAR NO CARRO"
 		hud.set_car_prompt(prompt)
 	perf_log.sample(delta)
@@ -275,11 +297,20 @@ func _on_hud_action(which: String) -> void:
 		"load":
 			load_game()
 		"car":
-			if car != null and player != null and (
-					car.occupied or player.position.distance_to(car.position) < Car.PROXIMITY):
+			if car == null or player == null:
+				return
+			if car.occupied:
 				car.toggle_occupant()
-				hud.toast("Dirija: joystick acelera e vira (ou W A S D)." if car.occupied
-						else "Voce saiu do carro.")
+				hud.toast("Voce saiu do carro.")
+			else:
+				# Longe do carro, este botao leva o jogador ate ele: no iPhone,
+				# com a interface pequena, caminhar ate o veiculo era o que
+				# travava a Fase 4 (B-36). Perto, apenas entra.
+				if player.position.distance_to(car.global_position) > Car.PROXIMITY:
+					var side := Vector3(cos(car.rotation.y), 0.0, -sin(car.rotation.y))
+					player.teleport(car.global_position + side * 2.4)
+				car.toggle_occupant()
+				hud.toast("Volante no joystick, ACEL acelera, FREIO freia/da re (ou W A S D).")
 
 
 func collect_state() -> Dictionary:

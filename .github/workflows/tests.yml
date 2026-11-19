@@ -20,6 +20,11 @@ jobs:
           mv /tmp/godot/Godot_v4.4.1-stable_linux.x86_64 /usr/local/bin/godot
           chmod +x /usr/local/bin/godot
           godot --version
+      - name: Importar assets (o .glb vira PackedScene no import)
+        # O teste _test_model_asset depende disso: sem import, o .glb existe mas
+        # o Godot ainda nao o conhece. Falhar aqui e o sinal de que o asset
+        # externo nao entrou no projeto.
+        run: godot --headless --path . --import
       - name: Rodar os testes do jogo
         run: godot --headless --path . -s tests/runner.gd
 
