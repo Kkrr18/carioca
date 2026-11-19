@@ -67,6 +67,8 @@ Passo a passo completo em [docs/EXPORTACAO_IOS.md](docs/EXPORTACAO_IOS.md).
 - [docs/AUDITORIA.md](docs/AUDITORIA.md) — diagnóstico do que foi encontrado.
 - [docs/ARQUITETURA.md](docs/ARQUITETURA.md) — decisões técnicas e por quê.
 - [docs/ROADMAP.md](docs/ROADMAP.md) — as 9 fases com critério de saída.
+- [docs/DETALHES_VISUAIS.md](docs/DETALHES_VISUAIS.md) — pesquisa e plano de
+  detalhes visuais (modelos, texturas e técnicas CC0).
 - [docs/OTIMIZACAO_IPHONE12.md](docs/OTIMIZACAO_IPHONE12.md) — medidas e metas.
 - [docs/PIPELINE_DADOS.md](docs/PIPELINE_DADOS.md) — como o Rio real vira dado.
 - [data/ATTRIBUTION.md](data/ATTRIBUTION.md) — licenças de dados.

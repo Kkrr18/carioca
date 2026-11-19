@@ -121,4 +121,6 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
 2. Medir FPS no iPhone jogando uma sessao real (B-09): o botao PERF grava CSV.
 3. Pedir ao usuario que toque em SALVAR e CARREGAR no jogo e confirme que o save volta (valida o B-08 no aparelho).
 4. Fase 2: pipeline OSM/DEM (Overpass -> recorte do poligono -> tiles) e a ponte Rio-Niteroi como malha (B-04).
+5. Fase 1.5 (visual, paralela): executar o plano de docs/DETALHES_VISUAIS.md
+   — passo A (ambiente/agua/sombra, sem assets) e medir FPS no iPhone.
 
