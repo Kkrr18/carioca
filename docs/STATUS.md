@@ -46,6 +46,11 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
 
 - Fase 1: encerramento — fundacao jogavel validada no iPhone (web). Falta
   apenas o poligono valido (B-14/B-16) para o CI ficar 100% verde.
+- Fase 1.5 (detalhes visuais): Passo A (tonemap/glow, agua com ondas e
+  fresnel, sombra de contato) e Passo B/C/D procedural (fachadas de vidro
+  com janelas que acendem a noite, postes com luminaria, bancos, lixeiras,
+  carros estacionados na avenida, distancias de visibilidade com fade).
+  Pendente: validacao no aparelho (jogar + FPS) e assets externos (B-21).
 
 ## Testados
 
@@ -114,6 +119,14 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   build em Cloudflare Pages/Netlify. Opcao paga: GitHub Pro/Team. Isso foi dito
   errado antes ("Pages e gratis") e esta corrigido aqui e em docs/TESTAR.md.
 - B-18: O erro de deploy do Pages aparece se Pages nao estiver ligado.
+- B-21: Os assets externos do plano visual (Kenney City Kit/Nature Kit,
+  KayKit, texturas Poly Haven/ambientCG) NAO foram incorporados: nao existe
+  forma de descompactar ZIPs neste dispositivo (sem terminal). O que entrou
+  foi o equivalente PROCEDURAL (fachadas, mobiliario, carros). Para os assets
+  reais: baixar em um PC, importar no Godot e commitar as cenas .glb/.tscn.
+- B-22: O shader da agua e a iluminacao de janelas nao sao exercidos pelos
+  testes headless (exigem GPU). Validar no Safari do iPhone apos o proximo
+  deploy do Pages.
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 
@@ -121,6 +134,8 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
 2. Medir FPS no iPhone jogando uma sessao real (B-09): o botao PERF grava CSV.
 3. Pedir ao usuario que toque em SALVAR e CARREGAR no jogo e confirme que o save volta (valida o B-08 no aparelho).
 4. Fase 2: pipeline OSM/DEM (Overpass -> recorte do poligono -> tiles) e a ponte Rio-Niteroi como malha (B-04).
-5. Fase 1.5 (visual, paralela): executar o plano de docs/DETALHES_VISUAIS.md
-   — passo A (ambiente/agua/sombra, sem assets) e medir FPS no iPhone.
+5. Fase 1.5 (visual, paralela): plano em docs/DETALHES_VISUAIS.md. Passos A-D
+   em codigo (procedural); falta validar no aparelho e medir FPS.
+6. B-21: quando houver acesso a um PC, baixar Kenney/KayKit/Poly Haven e
+   substituir os props procedurais pelos modelos CC0.
 

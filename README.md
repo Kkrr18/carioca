@@ -23,6 +23,9 @@ Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
 - Controles de toque: joystick na esquerda, arrasto para olhar na direita,
   botões PULAR e CORRER.
 - Ciclo dia/noite com céu procedural, nevoeiro e dois estados de tempo.
+- Fase 1.5 visual: água com ondas/fresnel, glow + tonemap ACES, sombra de
+  contato, fachadas de vidro que acendem à noite, postes, bancos, lixeiras
+  e carros estacionados (plano completo em docs/DETALHES_VISUAIS.md).
 - HUD com telemetria e gravador de desempenho em CSV.
 - Salvamento versionado (`schema`, sha256, gzip, escrita atômica, recusa de
   versão futura e de arquivo corrompido).
