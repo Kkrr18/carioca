@@ -69,6 +69,15 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   (B-14): CI verde quer dizer "o codigo compila e as checagens de codigo
   passam", NAO "o mapa esta validado".
 - CI (job "Exportar Web"): o projeto exporta para Web sem erro.
+- Build Web de 19/11/2026 (commit 1f0632f): o jogo RENDERIZA no navegador.
+  Inspecao do Pages em viewport de telefone: ceu com gradiente, mar, areia,
+  personagem de costas, HUD completo (titulo, telemetria, SALVAR/CARREGAR/
+  PERF/+1h/LIMITAR 30, PULAR/CORRER, joystick) e o toast de boas-vindas. O
+  painel de console mostra SO as duas linhas de boot do Godot ("Godot Engine
+  v4.4.1" e "OpenGL ES 3.0 (WebGL 2.0) - Compatibility"): nenhum SCRIPT
+  ERROR, nenhum Parse Error. O streaming gerou 2 setores. NAO verificado
+  ainda: FPS, movimento e o carro — a inspecao roda em segundo plano, com o
+  laco de render congelado; isso precisa de uma sessao real no aparelho.
 - Deploy no GitHub Pages: ativo, https://kkrr18.github.io/carioca/ responde.
 - JOGAVEL CONFIRMADO NO IPHONE (Safari, iOS 18): o usuario jogou — cidade
   carrega, personagem anda/pula, controles de toque respondem. NAO medido
