@@ -39,6 +39,7 @@ var _grounded := false
 var _bob := 0.0
 var _legs: Array[Node3D] = []
 var _arms: Array[Node3D] = []
+var contact_shadow: MeshInstance3D
 
 
 func _ready() -> void:
@@ -121,6 +122,26 @@ func _build_avatar() -> void:
 		leg_pivot.add_child(leg)
 		avatar.add_child(leg_pivot)
 		_legs.append(leg_pivot)
+
+	_build_contact_shadow()
+
+
+## Sombra de contato (nao existe Decal no renderer Compatibility): disco
+## escuro sob os pes, ancorado no chao analitico.
+func _build_contact_shadow() -> void:
+	contact_shadow = MeshInstance3D.new()
+	var quad := QuadMesh.new()
+	quad.size = Vector2(1.15, 1.15)
+	quad.orientation = PlaneMesh.FACE_Y
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.albedo_color = Color(0.0, 0.0, 0.0, 0.3)
+	quad.material = m
+	contact_shadow.mesh = quad
+	contact_shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	contact_shadow.top_level = true
+	add_child(contact_shadow)
 
 
 func _mat(col: Color) -> StandardMaterial3D:
@@ -233,6 +254,8 @@ func _physics_process(delta: float) -> void:
 	next.y = position.y
 
 	var ground_y := Cfg.height_at(next.x, next.z)
+	if contact_shadow != null:
+		contact_shadow.global_position = Vector3(next.x, ground_y + 0.07, next.z)
 	var y := position.y + _vy * delta
 	if y <= ground_y:
 		y = ground_y

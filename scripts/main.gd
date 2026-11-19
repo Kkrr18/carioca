@@ -116,6 +116,14 @@ func _build_environment() -> void:
 	environment.fog_light_color = Color(0.70, 0.79, 0.87)
 	environment.fog_density = 0.0011
 	environment.fog_sky_affect = 0.6
+	# Pos-processamento barato (suportado no renderer Compatibility):
+	# tonemap ACES + glow dao o "haze" de cidade litoranea.
+	environment.tonemap_mode = Environment.TONEMAPPER_ACES
+	environment.tonemap_exposure = 1.05
+	environment.glow_enabled = true
+	environment.glow_intensity = 0.35
+	environment.glow_bloom = 0.05
+	environment.glow_hdr_threshold = 1.1
 
 	var we := WorldEnvironment.new()
 	we.environment = environment
@@ -158,21 +166,52 @@ func _build_sea() -> void:
 	sea = MeshInstance3D.new()
 	sea.name = "Sea"
 	sea.mesh = plane
-	var m := StandardMaterial3D.new()
-	m.albedo_color = Color(0.10, 0.26, 0.38, 0.86)
-	m.roughness = 0.15
-	m.metallic = 0.0
-	m.metallic_specular = 0.6
-	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	sea.material_override = m
+	var smat := ShaderMaterial.new()
+	var sh := Shader.new()
+	sh.code = SEA_SHADER
+	smat.shader = sh
+	sea.material_override = smat
 	sea.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(sea)
+
+
+## Agua procedural: ondas pequenas pela posicao de mundo + tempo, fresnel
+## misturando para a cor do ceu. Sem reflexo de tela (nao existe no
+## renderer Compatibility) e opaco (transparencia custa fill rate).
+const SEA_SHADER := "
+shader_type spatial;
+render_mode cull_back;
+uniform vec3 deep_color : source_color = vec3(0.09, 0.23, 0.34);
+uniform vec3 sky_color : source_color = vec3(0.68, 0.79, 0.88);
+uniform float wave_scale = 0.045;
+uniform float wave_speed = 0.8;
+varying vec3 wpos;
+void vertex() {
+	wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+}
+void fragment() {
+	float t = TIME * wave_speed;
+	float wx = wpos.x * wave_scale;
+	float wz = wpos.z * wave_scale;
+	float dwx = 0.02 * cos(wx + t) + 0.012 * cos(wz * 1.7 - t * 1.3);
+	float dwz = 0.02 * cos(wz + t * 0.8) + 0.012 * cos(wx * 1.9 + t);
+	vec3 n_world = normalize(vec3(-dwx, 1.0, -dwz));
+	vec3 n_view = normalize((INV_VIEW_MATRIX * vec4(n_world, 0.0)).xyz);
+	NORMAL = n_view;
+	float fres = pow(1.0 - clamp(dot(n_view, normalize(VIEW)), 0.0, 1.0), 3.0);
+	ALBEDO = mix(deep_color, sky_color, fres * 0.55);
+	ROUGHNESS = mix(0.85, 0.2, fres);
+	SPECULAR = 0.55;
+}
+"
 
 
 func _process(delta: float) -> void:
 	_play_time += delta
 	if day_night != null:
 		day_night.process_frame(delta)
+		if streamer != null:
+			streamer.set_window_glow(day_night.night_amount)
 	if streamer != null and player != null:
 		streamer.update_stream(player.position, delta)
 		if _loading and streamer.has_ready_at(player.position):
