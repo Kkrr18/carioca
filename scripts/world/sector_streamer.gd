@@ -88,7 +88,10 @@ func _tex_material(path: String, fallback: Color) -> StandardMaterial3D:
 ## 0,88 = pedra branca. Faixas que ondulam como as ondas de Copacabana.
 ## Puro (sem GPU), para o teste conferir o padrao sem placa de video.
 static func calcada_value(u: float, v: float) -> float:
-	var wave := sin((u * 2.0 + v * 0.35) * TAU)
+	# A onda depende SO de u (comprimento): assim o padrao repete em u e em v,
+	# que e o que torna a textura tileavel. E o desenho certo tambem: as faixas
+	# correm paralelas a praia e ondulam ao longo do calcadao.
+	var wave := sin(u * 2.0 * TAU)
 	var band := fposmod(v * 4.0 + wave * 0.35, 1.0)
 	return 0.10 if band < 0.5 else 0.88
 
