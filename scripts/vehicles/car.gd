@@ -49,7 +49,10 @@ var streamer = null
 ## Modelo CC0 do carro (sedan). Vazio = so a caixa de codigo.
 var model_path := ""
 var model_loaded := false
-var _model_wheels: Array = []  # {node, rest, front, axle} de cada roda do modelo
+# {node: PIVO proprio da roda, front: bool, radius: float}. O giro acontece no
+# pivo (no centro da roda), nao no no do .glb (B-39).
+var _model_wheels: Array = []
+var _spin_radius := WHEEL_RADIUS
 
 var camera: Camera3D
 var _camera_rig: Node3D
@@ -205,24 +208,52 @@ func _build_model() -> void:
 		mp.free()
 		return
 	model_loaded = true
+	_model_wheels.clear()
+	var radii: Array[float] = []
 	for w in mp.wheel_info:
 		var node := w["node"] as Node3D
+		if node == null:
+			continue
+		# Posicao e tamanho da roda no espaco do CARRO. Isto tem que ser lido
+		# ANTES de mexer na arvore: o modelo vem escalado e girado pelo
+		# ModelProp.
+		var in_car: Transform3D = ModelProp.rel_xf(node, self)
+		var box: AABB = ModelProp.mesh_aabb(node)
+		var center: Vector3 = in_car * box.get_center()
+		var sc: float = in_car.basis.get_scale().y
+		var radius: float = maxf(0.05, 0.5 * maxf(box.size.y, box.size.z) * sc)
+		# Pivo novo NO CENTRO DA RODA. No .glb (obj2gltf) o no da roda tem a
+		# origem no centro do modelo, entao girar o no faz a roda ORBITAR o
+		# carro em vez de rodar em torno do proprio eixo (B-39).
+		var pivot := Node3D.new()
+		pivot.name = "WheelPivot"
+		pivot.position = center
+		add_child(pivot)
+		var parent := node.get_parent()
+		if parent != null:
+			parent.remove_child(node)
+		pivot.add_child(node)
+		node.transform = wheel_in_pivot(in_car, center)
 		_model_wheels.append({
-			"node": node,
-			"rest": w["rest"],
-			"front": w["front"],
-			"axle": roll_axis(ModelProp.mesh_aabb(node).size),
+			"node": pivot,
+			"front": bool(w["front"]),
+			"radius": radius,
 		})
+		radii.append(radius)
+	if not radii.is_empty():
+		var sum := 0.0
+		for r in radii:
+			sum += r
+		# Raio do proprio modelo: a velocidade angular tem que bater com a roda
+		# desenhada, senao ela "derrapa" visualmente.
+		_spin_radius = sum / float(radii.size())
 
 
-## Eixo de rolagem de uma roda: a menor dimensao do seu AABB e a espessura do
-## pneu, e o eixo de giro e essa direcao, no sistema local da roda.
-static func roll_axis(size: Vector3) -> Vector3:
-	if size.x <= size.y and size.x <= size.z:
-		return Vector3.RIGHT
-	if size.y <= size.x and size.y <= size.z:
-		return Vector3.UP
-	return Vector3.BACK
+## Transform da roda em relacao ao seu pivo proprio (centro da roda): a roda
+## fica exatamente onde estava no carro, mas passa a girar em torno do proprio
+## eixo. Puro e testado no CI, porque transformacao errada aqui = roda orbitando.
+static func wheel_in_pivot(in_car: Transform3D, center: Vector3) -> Transform3D:
+	return Transform3D(Basis(), center).affine_inverse() * in_car
 
 
 func _build_camera() -> void:
@@ -379,21 +410,21 @@ func _inclinar(delta: float) -> void:
 func _update_wheels(delta: float) -> void:
 	# wrapf mantem o angulo pequeno: sem isso o acumulo perde precisao float
 	# depois de alguns minutos dirigindo.
-	_spin = wrapf(_spin + (speed / WHEEL_RADIUS) * delta, -TAU, TAU)
+	_spin = wrapf(_spin + (speed / maxf(0.05, _spin_radius)) * delta, -TAU, TAU)
 	if model_loaded:
-		# Roda do modelo: a rotacao de rolagem vem no eixo da propria roda, e a
-		# de esterco (so nas dianteiras) vem em torno do Y do carro, na frente
-		# da transformacao de repouso.
 		for wi in _model_wheels:
-			var node := wi["node"] as Node3D
-			var rest: Transform3D = wi["rest"]
-			var axle: Vector3 = wi["axle"]
-			var roll := Basis(axle, _spin)
-			var steer_b := Basis(Vector3.UP, steer) if bool(wi["front"]) else Basis()
-			node.transform = Transform3D(steer_b * rest.basis * roll, rest.origin)
+			var pivot := wi["node"] as Node3D
+			if pivot == null:
+				continue
+			# Giro no eixo LATERAL do carro (X local), nao no eixo do no do .glb:
+			# num .glb o "eixo da roda" pode nao existir como eixo do no, e o no
+			# "BackWheels" carrega as duas rodas de tras. Sinal negativo: com o
+			# carro andando para -Z, o topo da roda vai para -Z (B-39).
+			pivot.rotation.x = -_spin
+			pivot.rotation.y = steer if bool(wi["front"]) else 0.0
 		return
 	for w in _wheels:
-		w.rotation.x = _spin
+		w.rotation.x = -_spin
 	for p in _front_pivots:
 		p.rotation.y = steer
 

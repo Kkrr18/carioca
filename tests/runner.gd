@@ -42,6 +42,7 @@ func _initialize() -> void:
 	_test_props()
 	_test_car_physics()
 	_test_car_scene_enter_exit()
+	_test_car_model_wheels_in_place()
 	_test_model_prop()
 	_test_model_asset()
 	_test_car_models()
@@ -320,6 +321,43 @@ func _test_car_scene_enter_exit() -> void:
 	holder.free()
 
 
+func _test_car_model_wheels_in_place() -> void:
+	# B-39 no carro de verdade: monta o carro COM o modelo CC0 e confere que
+	# girar a roda nao move o centro dela. Antes, o giro era aplicado no no do
+	# .glb (cuja origem fica no centro do modelo) e a roda orbitava o carro.
+	var holder := Node3D.new()
+	root.add_child(holder)
+	var car := Car.new()
+	car.model_path = "res://assets/models/quaternius-car.glb"
+	holder.add_child(car)
+	if car.camera == null:
+		car._ready()   # em -s o _ready nao roda antes do quit (ver teste acima)
+	check(car.model_loaded, "carro carregou o modelo CC0 do sedan")
+	check(car._model_wheels.size() >= 3, "carro com %d rodas do modelo" % car._model_wheels.size())
+	var ok := true
+	var detail := ""
+	for wi in car._model_wheels:
+		var pivot := wi["node"] as Node3D
+		if pivot == null or pivot.get_child_count() == 0:
+			ok = false
+			detail = "roda sem pivo"
+			continue
+		var wheel := pivot.get_child(0) as Node3D
+		if wheel == null:
+			ok = false
+			detail = "roda nao e Node3D"
+			continue
+		var before: Vector3 = ModelProp.rel_xf(wheel, car) * ModelProp.mesh_aabb(wheel).get_center()
+		pivot.rotation.x = 0.7
+		var after: Vector3 = ModelProp.rel_xf(wheel, car) * ModelProp.mesh_aabb(wheel).get_center()
+		var drift := before.distance_to(after)
+		if drift > 0.002:
+			ok = false
+			detail = "centro andou %.3f m" % drift
+	check(ok, "girar a roda nao move o centro dela (nao orbita o carro) %s" % detail)
+	holder.free()
+
+
 func _test_model_prop() -> void:
 	# Piloto de asset (B-21): a normalizacao e pura e garante que um modelo de
 	# qualquer escala/eixo vire `alvo` metros no eixo Z — o eixo em que carro e
@@ -440,9 +478,20 @@ func _test_facing_and_roll() -> void:
 		"placement soma meia volta so quando a frente esta errada")
 	ok_root.free()
 	bad_root.free()
-	check(Car.roll_axis(Vector3(0.3, 0.7, 0.7)) == Vector3.RIGHT, "roda fina em X: gira em X")
-	check(Car.roll_axis(Vector3(0.7, 0.3, 0.7)) == Vector3.UP, "roda fina em Y: gira em Y")
-	check(Car.roll_axis(Vector3(0.7, 0.7, 0.2)) == Vector3.BACK, "roda fina em Z: gira em Z")
+	# Pivo proprio da roda (B-39): girar o no do .glb fazia a roda ORBITAR o
+	# carro (a origem do no fica no centro do modelo) e o "eixo" saia errado
+	# quando o no continha as duas rodas de um mesmo eixo.
+	var in_car := Transform3D(Basis(Vector3.UP, 0.6), Vector3(2.0, 0.6, 3.0))
+	var center := Vector3(2.0, 0.32, 3.0)
+	var pivot_xf := Transform3D(Basis(), center)
+	var local := Car.wheel_in_pivot(in_car, center)
+	check((pivot_xf * local).is_equal_approx(in_car),
+		"pivo da roda mantem a roda exatamente onde ela estava")
+	check(local.origin.is_equal_approx(in_car.origin - center),
+		"pivo da roda fica no centro dela, nao na origem do modelo")
+	var top := center + Vector3(0.0, 0.35, 0.0)
+	var rolled := center + Basis(Vector3.RIGHT, -0.2) * (top - center)
+	check(rolled.z < center.z, "rodar para frente leva o topo da roda para -Z")
 
 
 func _test_traffic_pure() -> void:

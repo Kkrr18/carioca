@@ -295,6 +295,20 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   abaixo da barra. A inspecao tambem confirmou, no build publicado, que o
   caminhao da Kenney aparece na areia e que a telemetria informa
   "modelo vehicle-truck-red.glb: 6 malhas, 946 tris, 5.4 m".
+- B-39: RESOLVIDO ESCRITO (falta validar no aparelho). O usuario viu "as rodas
+  bugadas" no carro CC0. Duas causas de geometria, nao de codigo de direcao:
+  (1) eu girava o NO da roda do .glb, mas nesse arquivo (export obj2gltf) o no
+  da roda tem a origem no CENTRO DO MODELO, entao a roda nao girava — ela
+  ORBITAVA o carro; (2) o eixo de giro era adivinhado pela menor dimensao do
+  AABB, e o no "BackWheels" carrega as DUAS rodas de tras: o AABB dele e largo
+  em X, a menor dimensao caia em Y, e as rodas de tras giravam como um prato.
+  Correcao: cada roda ganha um pivo proprio no centro dela (calculado pelo AABB
+  no espaco do carro), o no e reparentado para esse pivo — conferido por teste,
+  o pivo * roda = a transformacao original — e o giro passa a ser no eixo
+  LATERAL do carro (X local), com sinal que leva o topo da roda para -Z. O raio
+  sai do proprio modelo para a velocidade angular bater. Testes novos no CI
+  cobrem o pivo e a direcao de rolagem. Licao: em .glb de terceiro, nem a
+  origem do no nem o "eixo" da peca sao o que o nome sugere.
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 
