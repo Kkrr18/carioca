@@ -21,6 +21,7 @@ const VehicleAudio = preload("res://scripts/audio/vehicle_audio.gd")
 const SectorStreamer = preload("res://scripts/world/sector_streamer.gd")
 const Traffic = preload("res://scripts/world/traffic.gd")
 const DayNight = preload("res://scripts/world/day_night.gd")
+const Pedestrians = preload("res://scripts/world/pedestrians.gd")
 
 var _pass := 0
 var _fail := 0
@@ -63,6 +64,7 @@ func _initialize() -> void:
 	_test_traffic_spacing_and_follow()
 	_test_audio_pure()
 	_test_sky()
+	_test_pedestrians()
 	_test_windows()
 	_test_building_shapes()
 	_test_scripts_compile()
@@ -977,6 +979,72 @@ func _test_sky() -> void:
 		"aim_basis aguenta o sol exatamente no zenite")
 
 
+func _test_pedestrians() -> void:
+	# B-53: pedestres com rotina. Sem GPU da para provar o que importa: a
+	# geometria da calcada, a travessia (13 m, sempre para o canto em frente), a
+	# espera do sinal (a mesma fase dos semaforos do transito), a vida por hora
+	# do dia e a pessoa deterministica (mesma semente, mesma roupa e pressa).
+	var b := Vector2i(3, 2)
+	var c0 := Pedestrians.corner(b, 0)
+	var c1 := Pedestrians.corner(b, 1)
+	check(absf((c1 - c0).length() - 51.0) < 0.01,
+		"lado da volta na calcada = 51 m (%.1f)" % (c1 - c0).length())
+	var o := Pedestrians.block_origin(b)
+	check(absf(c0.x - o.x - 6.5) < 0.01,
+		"pedestre anda no meio da calcada (%.1f m da quadra)" % (c0.x - o.x))
+	var k := 0
+	for i in 4:
+		k = Pedestrians.next_corner(k, true)
+	check(k == 0, "quatro cantos fecham a volta na quadra")
+	check(Pedestrians.next_corner(0, false) == 3, "sentido anti-horario vai ao canto 3")
+	var sides_ok := true
+	var near_ok := true
+	for kk in 4:
+		for along_x in [true, false]:
+			var ct := Pedestrians.cross_target(b, kk, along_x)
+			var from := Pedestrians.corner(b, kk)
+			var to: Vector2 = ct[2]
+			var nb: Vector2i = ct[0]
+			if not Pedestrians.valid_block(nb):
+				sides_ok = false
+			if absf((to - from).length() - 13.0) > 0.01:
+				near_ok = false
+			if to != Pedestrians.corner(nb, int(ct[1])):
+				sides_ok = false
+	check(sides_ok, "travessia sempre para o canto em frente, de quadra valida")
+	check(near_ok, "travessia de 13 m (10 de rua + 2 x 1,5 de calcada)")
+	# Sinal: com a fase norte-sul verde (carros passando), atravessar em X esta
+	# FECHADO para o pedestre.
+	var n := Pedestrians.corner_node(b, 0)
+	var t := 0.0
+	while Traffic.light_states(n, t).x != 2 and t < 60.0:
+		t += 0.5
+	check(t < 60.0, "achou a fase norte-sul verde (t = %.1f s)" % t)
+	check(not Pedestrians.can_cross(b, 0, true, t),
+		"pedestre espera quando os carros da via estao passando")
+	check(Pedestrians.can_cross(b, 0, false, t),
+		"pedestre atravessa a outra via, que esta parada")
+	check(Pedestrians.life_fraction(12.0) > Pedestrians.life_fraction(3.0),
+		"de madrugada sobra menos gente (%.2f < %.2f)" % [
+			Pedestrians.life_fraction(3.0), Pedestrians.life_fraction(12.0)])
+	check(Pedestrians.life_fraction(12.0) >= 1.0, "meio-dia: calcada cheia")
+	var p1 := Pedestrians.spawn_ped(777, 0)
+	var p2 := Pedestrians.spawn_ped(777, 0)
+	check(p1["shirt"] == p2["shirt"] and p1["speed"] == p2["speed"],
+		"mesma semente: mesma pessoa (roupa e pressa)")
+	check(float(p1["speed"]) > 0.9 and float(p1["speed"]) < 3.0,
+		"pressa plausivel (%.2f m/s)" % float(p1["speed"]))
+	var placed := 0
+	for i in 12:
+		var p := Pedestrians.spawn_ped(1000 + i, i)
+		if Pedestrians.place_ped(p, Vector3(1600.0, 1.2, 100.0), 30.0, 120.0):
+			var pos: Vector2 = p["pos"]
+			var d := Vector2(pos.x - 1600.0, pos.y - 100.0).length()
+			if d >= 20.0 and d <= 200.0 and pos.y > 40.0 and pos.y < 260.0:
+				placed += 1
+	check(placed >= 10, "nasce perto do jogador (%d de 12)" % placed)
+
+
 func _test_windows() -> void:
 	# Fachada texturada: os predios saem da cor por vertice e vao para uma
 	# surface com textura (parede + janela), presente nos dois LODs (predio
@@ -1094,6 +1162,7 @@ func _test_scripts_compile() -> void:
 		"res://scripts/world/model_prop.gd",
 		"res://scripts/audio/vehicle_audio.gd",
 		"res://scripts/world/traffic.gd",
+		"res://scripts/world/pedestrians.gd",
 		"res://scripts/world/sector_streamer.gd",
 		"res://scripts/world/day_night.gd",
 		"res://scripts/vehicles/car.gd",

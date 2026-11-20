@@ -468,6 +468,28 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   instancias do MESMO MultiMesh, sem nenhum desenho novo. NAO validado no
   aparelho: o autor precisa dizer se o granulado sumiu, se a cidade ficou menos
   feia e quanto o MSAA 2x custou no MEDIR.
+- B-53: Fase 4 — PEDESTRES COM VIDA. O autor pediu "NPCs agora tendo uma vida e
+  sendo realista". Novo `scripts/world/pedestrians.gd` (28 pessoas):
+  (1) ROTINA, nao enfeite deslizando: anda pela calcada em volta da quadra,
+  canto a canto, no sentido que sorteou; em cada canto decide entre seguir a
+  volta (65%), atravessar a rua (35%) ou PARAR (12%) para olhar o celular;
+  (2) SINAL: para atravessar ele espera a via que vai cruzar ficar vermelha para
+  os carros — usa a MESMA fase dos semaforos do transito (`Traffic.light_states`,
+  semaforo da esquina do canto); se demorar 18 s, desiste e segue;
+  (3) VIDA DE RUA: na praia caminha pela areia e pelo calcadao indo e voltando,
+  as vezes parado olhando o mar; sai da frente do jogador quando ele chega a 1,5
+  m e CORRE (2,3x) se um carro aparece a menos de 9 m durante a travessia;
+  de madrugada sobra 1/3 das pessoas, de dia a calcada enche (`life_fraction`);
+  (4) GENTE DIFERENTE: altura 0,93 a 1,07, seis tons de pele, oito cores de
+  camisa e cinco de calca, tudo por semente propria — mesma pessoa, mesma roupa;
+  12% correm na orla;
+  (5) CUSTO: 3 MultiMesh para todos (corpo, cabeca+bracos e pernas), ou seja 3
+  desenhos por quadro na cidade inteira; cada perna e uma instancia girada no
+  quadril, entao as pernas balancam de verdade sem esqueleto. Corpo e cabeca
+  compartilham a transformacao (mesma origem, pe no chao).
+  A logica (cantos, travessia de 13 m, sinal, vida por hora, semente) e pura e
+  testada no CI. NAO validado no aparelho: falta ver se eles andam no lugar
+  certo da calcada, se param no sinal e quanto custou em FPS.
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 

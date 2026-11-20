@@ -17,6 +17,7 @@ const TouchControls = preload("res://scripts/ui/touch_controls.gd")
 const Hud = preload("res://scripts/ui/hud.gd")
 const ModelProp = preload("res://scripts/world/model_prop.gd")
 const Traffic = preload("res://scripts/world/traffic.gd")
+const Pedestrians = preload("res://scripts/world/pedestrians.gd")
 const VehicleAudio = preload("res://scripts/audio/vehicle_audio.gd")
 const PerfLog = preload("res://scripts/core/perf_log.gd")
 
@@ -34,6 +35,7 @@ var perf_log = null
 var touch = null
 var model_prop = null
 var traffic = null
+var pedestrians = null
 var audio = null
 var _audio_note := ""
 
@@ -150,7 +152,14 @@ func _ready() -> void:
 	add_child(traffic)
 	traffic.setup(world_seed, player.position)
 	car.traffic = traffic
-	hud.set_model_note(model_prop.describe() + "\n" + traffic.describe())
+	# Pedestres (B-53): gente que anda na calcada, espera o sinal, atravessa,
+	# desvia de voce e corre de carro. Tres MultiMesh para todo mundo.
+	pedestrians = Pedestrians.new()
+	pedestrians.name = "Pedestrians"
+	add_child(pedestrians)
+	pedestrians.setup(world_seed, player.position)
+	hud.set_model_note(model_prop.describe() + "\n" + traffic.describe()
+			+ "\n" + pedestrians.describe())
 
 	# Som (Fase 4): motor sintetizado que sobe de tom com o giro + impacto CC0.
 	_boot_step("som")
@@ -314,6 +323,16 @@ func _process(delta: float) -> void:
 			_on_hud_action("car")
 	if traffic != null:
 		traffic.update(delta, focus)
+	if pedestrians != null and player != null:
+		# Posicao/velocidade do carro alimentam o panico dos pedestres na
+		# travessia; a hora do dia decide quanta gente esta na rua.
+		var car_pos := Vector3.ZERO
+		var car_speed := 0.0
+		if car != null:
+			car_pos = car.global_position
+			car_speed = absf(car.speed) if car.occupied else 0.0
+		pedestrians.update(delta, focus, player.position, car_pos, car_speed,
+				day_night.hour if day_night != null else 12.0)
 	# Estado do som na telemetria: e por esta linha que se sabe, no aparelho, se
 	# o Safari liberou o audio (B-42).
 	if audio != null and hud != null:
@@ -325,6 +344,8 @@ func _process(delta: float) -> void:
 				all = model_prop.describe()
 			if traffic != null:
 				all += "\n" + traffic.describe()
+			if pedestrians != null:
+				all += "\n" + pedestrians.describe()
 			hud.set_model_note(all + "\n" + note)
 	perf_log.sample(delta)
 
