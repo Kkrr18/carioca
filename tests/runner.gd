@@ -931,7 +931,7 @@ func _test_building_shapes() -> void:
 	# Chanfro enorme nao pode comer metade do predio.
 	var big := CityGen._plan_rect(0.0, 0.0, 10.0, 10.0, 0, 99.0)
 	check(CityGen.plan_area(big) > 50.0,
-		"chanfro limitado a 42% do lado (%.2f m2 de 100)" % CityGen.plan_area(big))
+		"chanfro limitado a 42%% do lado (%.2f m2 de 100)" % CityGen.plan_area(big))
 	# Prisma: 5 paredes (quad = 6 verts) + teto em leque (5 triangulos de 3).
 	var tb := CityGen.TBuf.new(22.9, 12.0)
 	CityGen._add_prism_tx(tb, cham, 0.0, 12.0, Color.WHITE, Color.WHITE)

@@ -427,7 +427,10 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   cor por setor, que paga a geometria nova com folga; (5) toldo virou lona
   colorida e fica na face voltada para a calcada. Colisor continua sendo o
   retangulo da planta cheia: recuo e chanfro so acontecem acima da rua, entao
-  nao existe parede invisivel na esquina. NAO validado no aparelho: falta ver
+  nao existe parede invisivel na esquina. Numeros do CI (setor 3,0): buffer de
+  cor por setor 17112 -> 10704 vertices (a laje de cada predio saiu da malha),
+  fachada 6120 -> 10485 vertices; no total o setor ficou com MENOS triangulos
+  que antes, com dois volumes por predio. NAO validado no aparelho: falta ver
   se a cidade deixou de parecer um formigueiro de cubos e o FPS (MEDIR).
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
@@ -442,4 +445,8 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
 7. B-21: o piloto (um .glb CC0) ja entrou e e verificado pelo CI. O proximo
    passo e medir no aparelho o custo em FPS e bytes; so entao importar
    Kenney/KayKit/Poly Haven em lote e substituir os props procedurais.
+8. B-50: andar de carro pela cidade no iPhone e dizer se o volume dos predios
+   resolveu o "quadrado" e se o FPS aguentou (MEDIR). Se ainda faltar forma,
+   o proximo passo barato e VARIAR A LARGURA do lote na quadra (hoje 2 x 2
+   lotes identicos de 23 x 23 m) e dar recuos diferentes por quadra.
 
