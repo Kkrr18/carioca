@@ -46,6 +46,9 @@
 
 ## Texturas
 
+- `assets/textures/calcada.jpg` — "Seamless calcada (Portuguese pavement)" de
+  **Demetrius** em https://opengameart.org/content/seamless-calcada-portuguese-pavement.
+  Licenca **CC0** (credito opcional). Usada no calcadao da orla.
 - `assets/textures/asphalt.jpg` (asphalt_02), `pavement.jpg` (dirty_concrete) e
   `sand.jpg` (aerial_beach_01) — texturas do **Poly Haven**
   (https://polyhaven.com/textures), 1024x1024, licenca **CC0 1.0** (sem

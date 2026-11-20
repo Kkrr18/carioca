@@ -385,14 +385,22 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   com marca d'agua. O proximo passo e gerar o padrao de ondas em codigo
   (ImageTexture) no calcadao. NAO validado no aparelho: falta ver o custo em
   FPS das 3 texturas e se o tiling ficou na escala certa.
-- B-47: Fase 4 — CALCADAO DE COPACABANA. O padrao de ondas da calcada
-  portuguesa nao existe em CC0 com URL direta (so pedra de Lisboa ou foto com
-  marca d'agua), entao ele e GERADO em codigo: `SectorStreamer.calcada_value()`
-  devolve a cor de cada ponto (faixas senoidais pretas e brancas, periodicas e
-  portanto tileaveis) e o material monta uma ImageTexture 128x128 com mipmaps.
-  O calcadao (z 112-126) virou a quarta superficie texturada do setor, so nos
-  setores da orla. Testes: o padrao tem as duas cores, repete em U e em V e
-  fica na faixa de tom. NAO validado no aparelho (escala da onda e FPS).
+- B-47: Fase 4 — CALCADAO. Primeira tentativa: padrao de ondas gerado em codigo
+  (faixas senoidais). O autor jogou e disse que ficou ruim — e dava para prever:
+  a textura era 128 px sobre 6 m (21 px/m), sem detalhe nenhum de perto, e
+  listras regulares parecem carpete. CORRIGIDO: o calcadao passou a usar uma
+  textura CC0 de pedra portuguesa de verdade (Demetrius, OpenGameArt, 1K,
+  916 KB, `_0` no fim do nome do arquivo — sem ele da 404). Licao: textura
+  gerada em codigo sem poder ver o resultado e aposta; quando existe textura
+  real CC0, ela ganha.
+- B-48: Fase 4 — FACHADA DOS PREDIOS. Os predios eram caixas de cor chapada com
+  uma "casca de vidro" por fora que acendia a noite. Agora o corpo do predio e
+  uma caixa com UV de fachada (uma janela por andar de 3 m, `FACADE_TILE`), numa
+  surface propria com DUAS texturas geradas em codigo: albedo cinza (tingido
+  pela cor da paleta, por vertice) e mapa de emissao que acende SO as janelas a
+  noite. A casca de vidro saiu, entao o numero de desenhos por setor continua o
+  mesmo (a surface de vidro virou a de fachada). Topo e base usam o canto liso
+  da textura para o telhado nao ganhar janela. NAO validado no aparelho.
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 

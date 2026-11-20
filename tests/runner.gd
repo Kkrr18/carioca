@@ -42,7 +42,7 @@ func _initialize() -> void:
 	_test_vertex_budget()
 	_test_road_markings()
 	_test_ground_textures()
-	_test_calcada()
+	_test_facade()
 	_test_normals()
 	_test_heights()
 	_test_props()
@@ -263,26 +263,20 @@ func _test_ground_textures() -> void:
 	check((sea[0] as PackedVector3Array).size() > 0, "mar com geometria de cor por vertice")
 
 
-func _test_calcada() -> void:
-	# Calcada portuguesa do calcadao, gerada em codigo: tem que alternar pedra
-	# preta e branca, repetir sem emenda (tileavel) e ficar na faixa de tom.
-	var dark := 0
-	var light := 0
+func _test_facade() -> void:
+	# Padrao da fachada dos predios: parede clara, janela escura E acesa (o
+	# mapa de emissao e o que faz a janela brilhar a noite).
+	var wall := SectorStreamer.facade_value(0.05, 0.5)
+	var win := SectorStreamer.facade_value(0.5, 0.5)
+	check(wall.x > 0.8 and wall.y < 0.01, "parede clara e sem brilho (%.2f)" % wall.x)
+	check(win.x < 0.5 and win.y > 0.9, "janela escura e acesa (%.2f)" % win.x)
+	var lit := 0
 	for i in 64:
 		for j in 64:
-			var c := SectorStreamer.calcada_value(float(i) / 64.0, float(j) / 64.0)
-			if c < 0.3:
-				dark += 1
-			elif c > 0.7:
-				light += 1
-	check(dark > 0 and light > 0,
-		"calcada com pedra preta e branca (%d / %d amostras)" % [dark, light])
-	check(absf(SectorStreamer.calcada_value(0.13, 0.29) - SectorStreamer.calcada_value(1.13, 0.29)) < 0.001,
-		"padrao da calcada repete a cada 1 em U (tileavel)")
-	check(absf(SectorStreamer.calcada_value(0.13, 0.29) - SectorStreamer.calcada_value(0.13, 1.29)) < 0.001,
-		"padrao da calcada repete a cada 1 em V (tileavel)")
-	var s := SectorStreamer.calcada_value(0.5, 0.5)
-	check(s >= 0.09 and s <= 0.89, "tom da calcada dentro da faixa (%.2f)" % s)
+			if SectorStreamer.facade_value(float(i) / 64.0, float(j) / 64.0).y > 0.5:
+				lit += 1
+	check(lit > 400 and lit < 1600,
+		"janelas ocupam a faixa esperada do modulo (%d de 4096 pontos)" % lit)
 
 
 func _test_normals() -> void:
@@ -882,17 +876,22 @@ func _test_audio_pure() -> void:
 
 
 func _test_windows() -> void:
-	# Fachadas de vidro: existem no LOD full, nao existem no LOD far nem no mar.
+	# Fachada texturada: os predios saem da cor por vertice e vao para uma
+	# surface com textura (parede + janela), presente nos dois LODs (predio
+	# existe nos dois), com UV e a cor da paleta por vertice.
 	var full := CityGen.generate(3, 0, 20260922, CityGen.LOD_FULL)
 	var far := CityGen.generate(3, 0, 20260922, CityGen.LOD_FAR)
 	var sea := CityGen.generate(3, -1, 20260922, CityGen.LOD_FULL)
-	var wv: PackedVector3Array = full[5]
-	var wf: PackedVector3Array = far[5]
-	var ws: PackedVector3Array = sea[5]
-	print("  info: fachadas de vidro no setor full = %d vertices" % wv.size())
-	check(wv.size() > 0 and wv.size() % 3 == 0, "fachadas de vidro geradas no LOD full (%d)" % wv.size())
-	check(wf.is_empty(), "fachadas de vidro ausentes no LOD far")
-	check(ws.is_empty(), "fachadas de vidro ausentes no setor de mar")
+	var fv: PackedVector3Array = full[20]
+	var fuv: PackedVector2Array = full[22]
+	var fc: PackedColorArray = full[23]
+	print("  info: fachada no setor full = %d vertices" % fv.size())
+	check(fv.size() > 0 and fv.size() % 3 == 0, "fachadas texturadas geradas (%d vertices)" % fv.size())
+	check(fuv.size() == fv.size(), "fachada com 1 UV por vertice")
+	check(fc.size() == fv.size(), "fachada com cor por vertice (paleta)")
+	check((far[20] as PackedVector3Array).size() > 0, "fachada tambem no LOD far")
+	check((sea[20] as PackedVector3Array).is_empty(), "setor de mar sem predios")
+	check((full[5] as PackedVector3Array).is_empty(), "sem surface de vidro separada (virou textura)")
 	var props_ok := true
 	for s in ["poste", "lampadaria", "banco", "lixeira", "carro", "carro_top"]:
 		var sh := PropFactory.shape_for(s, 5.5)

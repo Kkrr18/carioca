@@ -17,6 +17,7 @@ const PropFactory = preload("res://scripts/world/prop_factory.gd")
 const TEX_ROAD := "res://assets/textures/asphalt.jpg"
 const TEX_WALK := "res://assets/textures/pavement.jpg"
 const TEX_SAND := "res://assets/textures/sand.jpg"
+const TEX_CALCADA := "res://assets/textures/calcada.jpg"
 
 var world_seed: int = 20260922
 var full_ring: int = 1
@@ -38,6 +39,7 @@ var _mat_road: StandardMaterial3D
 var _mat_walk: StandardMaterial3D
 var _mat_sand: StandardMaterial3D
 var _mat_calcadao: StandardMaterial3D
+var _mat_facade: StandardMaterial3D
 var _requests_this_frame := 0
 
 var generated_total: int = 0
@@ -63,9 +65,11 @@ func _ready() -> void:
 	_mat_road = _tex_material(TEX_ROAD, Color(0.21, 0.22, 0.24))
 	_mat_walk = _tex_material(TEX_WALK, Color(0.63, 0.62, 0.59))
 	_mat_sand = _tex_material(TEX_SAND, Color(0.86, 0.79, 0.64))
-	# Calcadao de Copacabana: o padrao de ondas e gerado em codigo (nao existe
-	# textura CC0 com URL direta para ele) e mora no proprio material.
-	_mat_calcadao = _calcada_material()
+	# Calcadao: pedra portuguesa de verdade (textura CC0 do OpenGameArt). O
+	# padrao de ondas gerado antes ficou ruim na tela e foi trocado por pedra.
+	_mat_calcadao = _tex_material(TEX_CALCADA, Color(0.72, 0.70, 0.66))
+	# Fachada dos predios: parede + janela e mapa de emissao, gerados em codigo.
+	_mat_facade = _facade_material()
 
 
 ## Material de superficie texturada. Sem a textura, cai na cor de reserva.
@@ -84,39 +88,50 @@ func _tex_material(path: String, fallback: Color) -> StandardMaterial3D:
 	return m
 
 
-## Cor da calcada portuguesa em coordenadas de textura: 0,10 = pedra preta,
-## 0,88 = pedra branca. Faixas que ondulam como as ondas de Copacabana.
-## Puro (sem GPU), para o teste conferir o padrao sem placa de video.
-static func calcada_value(u: float, v: float) -> float:
-	# A onda depende SO de u (comprimento): assim o padrao repete em u e em v,
-	# que e o que torna a textura tileavel. E o desenho certo tambem: as faixas
-	# correm paralelas a praia e ondulam ao longo do calcadao.
-	var wave := sin(u * 2.0 * TAU)
-	var band := fposmod(v * 4.0 + wave * 0.35, 1.0)
-	return 0.10 if band < 0.5 else 0.88
+## Fachada em coordenadas de textura: devolve Vector2(tom da parede, brilho da
+## janela). Parede clara, janela escura e acesa; a junta do andar fica mais
+## escura. Puro (sem GPU), para o teste conferir o padrao sem placa de video.
+static func facade_value(u: float, v: float) -> Vector2:
+	var win := u > 0.20 and u < 0.80 and v > 0.32 and v < 0.84
+	if win:
+		return Vector2(0.30, 1.0)
+	var shade := 0.94
+	if v < 0.06 or v > 0.97:
+		shade = 0.72
+	return Vector2(shade, 0.0)
 
 
-## Material do calcadao: textura 128x128 gerada em codigo (mipmaps para nao
-## tremer ao longe) + o mesmo tratamento das outras superficies do chao.
-func _calcada_material() -> StandardMaterial3D:
+## Material da fachada: textura cinza (tingida pela cor de vertice do predio) e
+## mapa de emissao que acende SO as janelas a noite.
+func _facade_material() -> StandardMaterial3D:
 	var size := 128
-	var img := Image.create(size, size, true, Image.FORMAT_RGB8)
+	var albedo := Image.create(size, size, true, Image.FORMAT_RGB8)
+	var emit := Image.create(size, size, true, Image.FORMAT_RGB8)
 	for y in size:
 		for x in size:
-			var c := calcada_value(float(x) / float(size), float(y) / float(size))
-			img.set_pixel(x, y, Color(c, c, c))
-	img.generate_mipmaps()
+			var f := facade_value(float(x) / float(size), float(y) / float(size))
+			var shade := f.x
+			albedo.set_pixel(x, y, Color(shade, shade, shade))
+			emit.set_pixel(x, y, Color.WHITE if f.y > 0.5 else Color.BLACK)
+	albedo.generate_mipmaps()
+	emit.generate_mipmaps()
 	var m := StandardMaterial3D.new()
-	m.albedo_texture = ImageTexture.create_from_image(img)
-	m.roughness = 0.85
-	m.metallic_specular = 0.1
+	m.vertex_color_use_as_albedo = true
+	m.vertex_color_is_srgb = false
+	m.albedo_texture = ImageTexture.create_from_image(albedo)
+	m.emission_enabled = true
+	m.emission = Color(1.0, 0.85, 0.55)
+	m.emission_texture = ImageTexture.create_from_image(emit)
+	m.emission_energy_multiplier = 0.0
+	m.roughness = 0.9
 	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	return m
 
 
 ## Acrescenta uma surface texturada e devolve o proximo indice livre.
 func _tex_surface(mesh: ArrayMesh, si: int, v: PackedVector3Array, n: PackedVector3Array,
-		uv: PackedVector2Array, mat: Material) -> int:
+		uv: PackedVector2Array, mat: Material,
+		cols: PackedColorArray = PackedColorArray()) -> int:
 	if v.is_empty() or uv.size() != v.size() or n.size() != v.size():
 		return si
 	var arr := []
@@ -124,6 +139,8 @@ func _tex_surface(mesh: ArrayMesh, si: int, v: PackedVector3Array, n: PackedVect
 	arr[Mesh.ARRAY_VERTEX] = v
 	arr[Mesh.ARRAY_NORMAL] = n
 	arr[Mesh.ARRAY_TEX_UV] = uv
+	if cols.size() == v.size():
+		arr[Mesh.ARRAY_COLOR] = cols
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 	mesh.surface_set_material(si, mat)
 	return si + 1
@@ -131,7 +148,12 @@ func _tex_surface(mesh: ArrayMesh, si: int, v: PackedVector3Array, n: PackedVect
 
 ## Intensidade da iluminacao das janelas (0 = dia, 1 = noite).
 func set_window_glow(f: float) -> void:
-	_win_mat.emission_energy_multiplier = clampf(f, 0.0, 1.0) * 1.4
+	var e := clampf(f, 0.0, 1.0) * 1.4
+	if _win_mat != null:
+		_win_mat.emission_energy_multiplier = e
+	# As janelas que acendem agora sao as da textura de fachada.
+	if _mat_facade != null:
+		_mat_facade.emission_energy_multiplier = e
 
 
 func update_stream(focus: Vector3, delta: float) -> void:
@@ -263,6 +285,9 @@ func _install(sec: Vector2i, lod: int, res: Array) -> void:
 		si = _tex_surface(mesh, si, res[14], res[15], res[16], _mat_sand)
 	if res.size() >= 20:
 		si = _tex_surface(mesh, si, res[17], res[18], res[19], _mat_calcadao)
+	# Fachada dos predios (com cor por vertice: a paleta tinge a textura).
+	if res.size() >= 24:
+		si = _tex_surface(mesh, si, res[20], res[21], res[22], _mat_facade, res[23])
 
 	var node := Node3D.new()
 	node.name = "S%d_%d" % [sec.x, sec.y]

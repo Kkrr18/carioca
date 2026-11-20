@@ -46,6 +46,12 @@ const ROAD_TILE := 3.0
 const WALK_TILE := 3.0
 const SAND_TILE := 10.0
 const CALCADAO_TILE := 6.0   # onda da calcada de Copacabana: 1 padrao a cada 6 m
+# Fachada: uma janela por andar. O pe-direito e 3 m, entao a textura de fachada
+# repete a cada 3 m na vertical E na horizontal (uma janela por modulo).
+const FACADE_TILE := 3.0
+## Canto liso da textura de fachada: usado nas faces de topo e base, para o
+## telhado nao ganhar janela.
+const FLAT_UV := Vector2(0.02, 0.02)
 
 const SAND := Color(0.86, 0.79, 0.64)
 const SAND_WET := Color(0.70, 0.65, 0.55)
@@ -90,6 +96,7 @@ static func generate(sx: int, sz: int, world_seed: int, lod: int) -> Array:
 	var walk := TBuf.new(WALK_TILE)
 	var sand := TBuf.new(SAND_TILE)
 	var calcadao := TBuf.new(CALCADAO_TILE)
+	var bld := TBuf.new(FACADE_TILE)
 	var defs: Array = []
 	var colliders: Array = []
 	var ox := float(sx) * Cfg.SECTOR_SIZE
@@ -109,12 +116,13 @@ static func generate(sx: int, sz: int, world_seed: int, lod: int) -> Array:
 		if z_axis < Cfg.CITY_MIN_Z or z_axis > Cfg.CITY_MAX_Z:
 			continue
 		for i in range(i0, i1 + 1):
-			_block(gb, win, walk, road, defs, colliders, float(i) * BLOCK, z_axis,
+			_block(gb, win, walk, road, calcadao, bld, defs, colliders, float(i) * BLOCK, z_axis,
 					world_seed, i, j, lod)
 
 	return [gb.v, gb.n, gb.c, colliders, defs, win.v, win.n, win.c,
 			road.v, road.n, road.uv, walk.v, walk.n, walk.uv, sand.v, sand.n, sand.uv,
-			calcadao.v, calcadao.n, calcadao.uv]
+			calcadao.v, calcadao.n, calcadao.uv,
+			bld.v, bld.n, bld.uv, bld.c]
 
 
 # --- Terreno -----------------------------------------------------------------
@@ -206,7 +214,8 @@ static func _beach(walk: TBuf, road: TBuf, calcadao: TBuf, defs: Array, ox: floa
 
 # --- Quadras -----------------------------------------------------------------
 
-static func _block(gb: GBuf, win: GBuf, walk: TBuf, road: TBuf, defs: Array, colliders: Array,
+static func _block(gb: GBuf, win: GBuf, walk: TBuf, road: TBuf, calcadao: TBuf, bld: TBuf,
+		defs: Array, colliders: Array,
 		ax: float, az: float, world_seed: int, bi: int, bj: int, lod: int) -> void:
 	# Semente propria da quadra: o conteudo nao depende do setor que a desenha.
 	var rng := Rng.new(mix3(world_seed, bi * 4096 + 1, bj * 4096 + 7))
@@ -251,12 +260,12 @@ static func _block(gb: GBuf, win: GBuf, walk: TBuf, road: TBuf, defs: Array, col
 		for b in LOT_ROWS:
 			var lx := x0 + lot_w * 0.5 + float(a) * (lot_w + ALLEY)
 			var lz := z0 + lot_d * 0.5 + float(b) * (lot_d + ALLEY)
-			_lot(gb, win, defs, colliders, rng, lx, lz, lot_w, lot_d, lod)
+			_lot(gb, win, bld, defs, colliders, rng, lx, lz, lot_w, lot_d, lod)
 
 
 ## Um lote. Sorteia SEMPRE todos os valores (mesmo em LOD far), para o layout
 ## nao mudar entre os dois LODs.
-static func _lot(gb: GBuf, win: GBuf, defs: Array, colliders: Array, rng: Rng,
+static func _lot(gb: GBuf, win: GBuf, bld: TBuf, defs: Array, colliders: Array, rng: Rng,
 		lx: float, lz: float, lot_w: float, lot_d: float, lod: int) -> void:
 	var empty := not rng.chance(0.92)
 	var floors := rng.range_i(1, 7)
@@ -281,16 +290,12 @@ static func _lot(gb: GBuf, win: GBuf, defs: Array, colliders: Array, rng: Rng,
 	var total := h + 2.5                       # 2,5 m de embasamento enterrado
 	var base_y := minf(Cfg.height_at(lx - w * 0.5, lz - d * 0.5),
 			Cfg.height_at(lx + w * 0.5, lz + d * 0.5)) - 2.5
-	_add_box(gb, Vector3(lx, base_y + total * 0.5, lz), Vector3(w, total, d), col)
+	# Corpo do predio com TEXTURA de fachada (parede + janela), na surface
+	# propria: a cor da paleta tinge a textura, entao cada predio mantem a sua
+	# cor e ganha janelas. O brilho das janelas a noite vem do mapa de emissao.
+	_add_box_tx(bld, Vector3(lx, base_y + total * 0.5, lz), Vector3(w, total, d), col)
 	if lod == LOD_FULL:
 		_add_box(gb, Vector3(lx, base_y + total + 1.3, lz), Vector3(w * 0.42, 2.6, d * 0.42), ROOF)
-		# Fachada de vidro: envolucro que SALTA 15 cm por fora dos andares
-		# uteis (se ficasse afundado, o prédio opaco o esconderia), desenhado
-		# na surface propria (acende à noite via material com emissao).
-		var win_h := h - 2.2
-		if win_h > 1.0:
-			var win_y := base_y + total - h + 1.2 + win_h * 0.5
-			_add_box(win, Vector3(lx, win_y, lz), Vector3(w + 0.3, win_h, d + 0.3), GLASS)
 		if awning and h < 40.0:
 			_add_box(gb, Vector3(lx, ground_y + 3.4, lz + d * 0.5 + 1.1), Vector3(w * 0.85, 0.25, 2.2), ROOF)
 	colliders.append(Rect2(lx - w * 0.5, lz - d * 0.5, w, d))
@@ -442,6 +447,31 @@ static func _add_box(gb: GBuf, center: Vector3, size: Vector3, col: Color) -> vo
 		_add_quad(gb, c - yv - zv, c + yv - zv, c + yv + zv, c - yv + zv, col)
 
 
+## Caixa com UV de FACHADA: cada face repete a textura a cada `tb.tile` metros,
+## isto e, uma janela por andar de 3 m. Topo e base usam o canto liso, para o
+## telhado nao ganhar janela. A cor vai por vertice e tinge a textura.
+static func _add_box_tx(tb: TBuf, center: Vector3, size: Vector3, color: Color) -> void:
+	var h := size * 0.5
+	for f in CUBE_FACES:
+		var fc: Vector3 = f[0]
+		var ya: Vector3 = f[1]
+		var za: Vector3 = f[2]
+		var c := center + Vector3(fc.x * h.x, fc.y * h.y, fc.z * h.z)
+		var yv := Vector3(ya.x * h.x, ya.y * h.y, ya.z * h.z)
+		var zv := Vector3(za.x * h.x, za.y * h.y, za.z * h.z)
+		var p0 := c - yv - zv
+		var p1 := c + yv - zv
+		var p2 := c + yv + zv
+		var p3 := c - yv + zv
+		if absf(fc.y) > 0.5:
+			tb.quad_uv(p0, p1, p2, p3, fc, FLAT_UV, FLAT_UV, FLAT_UV, FLAT_UV, color)
+		else:
+			var uu := (yv * 2.0).length() / tb.tile
+			var vv := (zv * 2.0).length() / tb.tile
+			tb.quad_uv(p0, p1, p2, p3, fc,
+					Vector2(0.0, 0.0), Vector2(uu, 0.0), Vector2(uu, vv), Vector2(0.0, vv), color)
+
+
 # --- Utilitarios -------------------------------------------------------------
 
 ## Mistura deterministica de tres inteiros em 31 bits (sempre positivo).
@@ -490,6 +520,9 @@ class TBuf:
 	var v := PackedVector3Array()
 	var n := PackedVector3Array()
 	var uv := PackedVector2Array()
+	## Cor por vertice: so a fachada usa (a textura dela e cinza, tingida pela
+	## paleta). Chao e asfalto ficam sem cor propria e usam a cor da textura.
+	var col := PackedColorArray()
 	var tile := 3.0
 
 	func _init(tile_m: float) -> void:
@@ -500,6 +533,17 @@ class TBuf:
 			v.append(p)
 			n.append(normal)
 			uv.append(Vector2(p.x, p.z) / tile)
+
+	## Quad com UV explicito (usado pelas faces da fachada).
+	func quad_uv(a: Vector3, b: Vector3, c: Vector3, d: Vector3, normal: Vector3,
+			ua: Vector2, ub: Vector2, uc: Vector2, ud: Vector2, color: Color) -> void:
+		var pts := [a, b, c, a, c, d]
+		var uvs := [ua, ub, uc, ua, uc, ud]
+		for i in 6:
+			v.append(pts[i])
+			n.append(normal)
+			uv.append(uvs[i])
+			col.append(color)
 
 
 ## PRNG xorshift32: deterministico e independente da versao do motor.
