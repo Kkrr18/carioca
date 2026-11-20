@@ -35,6 +35,7 @@ var touch = null
 var model_prop = null
 var traffic = null
 var audio = null
+var _audio_note := ""
 
 var _sun: DirectionalLight3D
 var _moon: DirectionalLight3D
@@ -308,6 +309,18 @@ func _process(delta: float) -> void:
 			_on_hud_action("car")
 	if traffic != null:
 		traffic.update(delta, focus)
+	# Estado do som na telemetria: e por esta linha que se sabe, no aparelho, se
+	# o Safari liberou o audio (B-42).
+	if audio != null and hud != null:
+		var note: String = audio.describe()
+		if note != _audio_note:
+			_audio_note = note
+			var all := ""
+			if model_prop != null:
+				all = model_prop.describe()
+			if traffic != null:
+				all += "\n" + traffic.describe()
+			hud.set_model_note(all + "\n" + note)
 	perf_log.sample(delta)
 
 

@@ -32,6 +32,9 @@ var _table := PackedFloat32Array()
 var _phase := 0.0
 var _noise := 0.0
 var _rng := RandomNumberGenerator.new()
+var _started := false
+var _tries := 0
+var _retry := 0.0
 
 
 func _ready() -> void:
@@ -52,7 +55,10 @@ func _ready() -> void:
 	add_child(_impact)
 	if _impact.stream == null:
 		push_warning("VehicleAudio: %s nao carregou" % IMPACT_PATH)
-	start()
+	# NAO chamar play() aqui: no build web o AudioContext ainda esta suspenso (o
+	# Safari exige um toque), e o Godot imprime "is trying to play a sample from
+	# a stream that cannot be sampled" e o motor fica mudo (B-42). O som comeca
+	# no primeiro toque, em _input.
 
 
 # --- Nucleo puro (testado em tests/runner.gd) --------------------------------
@@ -101,8 +107,41 @@ static func load_impact() -> AudioStream:
 # --- Cena --------------------------------------------------------------------
 
 func start() -> void:
-	if _stream == null or _stream.playing:
+	_start_stream()
+
+
+## Estado do som para a telemetria: sem isso, "nao tem som" e um mistério.
+func describe() -> String:
+	if _playback != null:
+		return "som: motor sintetizado ligado"
+	if _started:
+		return "som: sem audio neste navegador (%d tentativas)" % _tries
+	return "som: toque na tela para ligar"
+
+
+## O Safari so libera audio depois de um gesto. Cada toque/tecla tenta ligar o
+## motor de novo, ate conseguir (ou ate desistir, para nao gastar quadro).
+func _input(event: InputEvent) -> void:
+	if _playback != null:
 		return
+	var press := false
+	if event is InputEventScreenTouch:
+		press = (event as InputEventScreenTouch).pressed
+	elif event is InputEventMouseButton:
+		press = (event as InputEventMouseButton).pressed
+	elif event is InputEventKey:
+		press = (event as InputEventKey).pressed
+	if press:
+		_start_stream()
+
+
+func _start_stream() -> void:
+	if _stream == null or _tries >= 8:
+		return
+	_started = true
+	_tries += 1
+	if _stream.playing:
+		_stream.stop()
 	_stream.play()
 	_playback = _stream.get_stream_playback() as AudioStreamGeneratorPlayback
 
@@ -120,9 +159,12 @@ func _process(_delta: float) -> void:
 	if not enabled:
 		return
 	if _playback == null:
-		# No Safari o audio so existe depois do primeiro toque: tenta de novo.
-		if _stream != null and _stream.playing:
-			_playback = _stream.get_stream_playback() as AudioStreamGeneratorPlayback
+		# Sem toque ainda, ou o navegador recusou: tenta de novo a cada 0,5 s,
+		# algumas vezes, em vez de insistir a cada quadro.
+		_retry -= _delta
+		if _started and _tries < 8 and _retry <= 0.0:
+			_retry = 0.5
+			_start_stream()
 		return
 	var frames := _playback.get_frames_available()
 	if frames <= 0:

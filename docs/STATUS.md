@@ -332,6 +332,16 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   (ModelProp.wheel_centers), usado tanto pela deteccao de frente quanto pelo
   teste, mais uma checagem de que os eixos dianteiro e traseiro estao
   separados por mais de 1 m — que teria pego o caso dos zeros.
+- B-42: RESOLVIDO ESCRITO. O som nao ligava e o painel de console do build
+  mostrava, a cada sessao: "WARNING: /root/Main/VehicleAudio/Engine is trying
+  to play a sample from a stream that cannot be sampled" (achado na inspecao do
+  Pages). Causa: o AudioStreamGenerator era tocado no _ready, antes de o Safari
+  liberar o AudioContext (que exige um gesto), entao o play() falhava e o motor
+  ficava mudo para sempre. Agora o stream so e iniciado no primeiro toque/tecla
+  (_input), com ate 8 tentativas espacadas e sem insistir a cada quadro; a
+  telemetria ganhou a linha "som: ..." para dizer no aparelho se o audio ligou.
+  Na mesma rodada: o som de batida tinha cooldown zero e metralhava enquanto o
+  carro ficava encostado — agora ha 0,35 s entre batidas.
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 

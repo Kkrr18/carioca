@@ -51,6 +51,7 @@ var player = null              # main conecta; usado para entrar/sair
 var streamer = null
 var traffic = null             # main conecta; colisao com os carros de transito
 var hit_flash := 0.0           # tempo desde a ultima batida (HUD/som)
+var _crash_cool := 0.0         # evita som/tremor repetido enquanto encostado
 
 ## Modelo CC0 do carro (sedan). Vazio = so a caixa de codigo.
 var model_path := ""
@@ -328,6 +329,7 @@ func _update_marker() -> void:
 
 func _physics_process(delta: float) -> void:
 	hit_flash = maxf(0.0, hit_flash - delta)
+	_crash_cool = maxf(0.0, _crash_cool - delta)
 	if occupied:
 		_drive(delta)
 		_inclinar(delta)
@@ -406,8 +408,12 @@ func _drive(delta: float) -> void:
 			next.z = pushed.z
 			var impact := clampf(absf(speed) / MAX_SPEED, 0.2, 1.0)
 			speed = -1.6 if speed > 0.0 else 0.0
-			hit_flash = 0.8
-			crashed.emit(impact)
+			# Encostado no outro carro, isto roda a cada quadro: o som e o
+			# tremor so valem a cada 0,35 s, senao vira metralhadora.
+			if _crash_cool <= 0.0:
+				hit_flash = 0.8
+				_crash_cool = 0.35
+				crashed.emit(impact)
 	position = next
 	position.y = Cfg.height_at(next.x, next.z)
 

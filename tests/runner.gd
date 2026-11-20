@@ -682,6 +682,14 @@ func _test_audio_pure() -> void:
 	check(VehicleAudio.impact_pitch(0.0) > VehicleAudio.impact_pitch(1.0),
 		"batida forte soa mais grave")
 	check(VehicleAudio.load_impact() != null, "som de batida CC0 carregou")
+	# B-42: o som nao pode comecar antes de um toque (o Safari recusa e o motor
+	# fica mudo). Antes do primeiro toque, o estado tem que dizer isso.
+	var av := VehicleAudio.new()
+	root.add_child(av)
+	if av._stream == null:
+		av._ready()
+	check(av.describe().contains("toque"), "som espera o primeiro toque: %s" % av.describe())
+	av.free()
 
 
 func _test_windows() -> void:
