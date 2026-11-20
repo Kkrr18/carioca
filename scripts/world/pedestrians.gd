@@ -504,7 +504,10 @@ func _write_instances() -> void:
 	_mm_body.multimesh.visible_instance_count = n
 	_mm_skin.multimesh.visible_instance_count = n
 	_mm_legs.multimesh.visible_instance_count = n * 2
-	for i in n:
+	# Escreve TODOS (inclusive os que estao fora de cena hoje): assim a caixa de
+	# visibilidade do MultiMesh fica do tamanho certo e nao sobra instancia
+	# parada na origem do mundo.
+	for i in peds.size():
 		var p: Dictionary = peds[i]
 		var pos: Vector2 = p["pos"]
 		var y := Cfg.surface_at(pos.x, pos.y)
