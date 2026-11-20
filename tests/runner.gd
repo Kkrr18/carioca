@@ -66,8 +66,12 @@ func _initialize() -> void:
 	_test_save_rejects()
 	_test_sectors()
 	print("")
+	# Log curto de proposito: imprimir so o que deu errado (e os desvios
+	# conhecidos). O log do CI chega truncado pelo fim, e com centenas de linhas
+	# de "ok" o erro de runtime do Godot ficava fora da parte visivel.
 	for m in _msgs:
-		print(m)
+		if m.begins_with("  FALHA") or m.begins_with("  DESVIO"):
+			print(m)
 	print("")
 	# O log de um job que falha chega truncado no fim: repetir as falhas aqui e
 	# o que garante que elas apareçam sem precisar abrir o log inteiro.
