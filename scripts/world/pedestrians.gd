@@ -101,6 +101,7 @@ var _anims: Array = []          # AnimationPlayer de cada pedestre
 var _anim_name := ""
 var _idle_seek := 0.0
 var _mat: StandardMaterial3D
+var _mm_shadow: MultiMeshInstance3D
 var _mm_body: MultiMeshInstance3D
 var _mm_skin: MultiMeshInstance3D
 var _mm_legs: MultiMeshInstance3D
@@ -363,10 +364,34 @@ func setup(base_seed: int, focus: Vector3 = Vector3.ZERO) -> void:
 		_build_models(scene)
 	else:
 		_build_boxes()
+	_build_shadows()
 	for i in peds.size():
 		place_ped(peds[i], focus, RESPAWN_NEAR, RESPAWN_FAR)
 
 	update(0.0, focus, focus, Vector3.ZERO, 0.0, 12.0)
+
+
+## Sombra de contato: UM MultiMesh de quad escuro para todas as pessoas (1
+## desenho). Sem ela o pedestre le como adesivo colado no chao — na areia
+## branca a sombra do sol, com o sol alto, fica pequena demais para ancorar.
+func _build_shadows() -> void:
+	var quad := QuadMesh.new()
+	quad.size = Vector2(1.15, 1.15)
+	quad.orientation = PlaneMesh.FACE_Y
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.albedo_color = Color(0.0, 0.0, 0.0, 0.32)
+	quad.material = m
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = quad
+	mm.instance_count = peds_total
+	_mm_shadow = MultiMeshInstance3D.new()
+	_mm_shadow.name = "PedShadows"
+	_mm_shadow.multimesh = mm
+	_mm_shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_mm_shadow)
 
 
 ## Carrega o .glb do pedestre; null se o arquivo nao existe ou nao importou.
@@ -399,14 +424,16 @@ func _build_models(scene: PackedScene) -> void:
 			var centre := box.get_center()
 			inst.scale = Vector3.ONE * (MODEL_HEIGHT / h)
 			inst.position = Vector3(-centre.x, -box.position.y, -centre.z) * (MODEL_HEIGHT / h)
-			# Tinta de roupa: 0,62 para a cor da camisa (com 0,35 o modelo saia
-			# lavado no sol da praia e todo mundo era o mesmo homem palido), e
-			# 20% mais escuro para ganhar contraste com a areia branca.
+			# NAO pintar o corpo: o modelo ja tem roupa e pele na textura, e
+			# tingir tudo de verde/azul transformava as pessoas em manequins
+			# listrados (era o "bugado" que o autor viu). So um tom leve, para
+			# as roupas variarem sem a pele virar outra cor.
 			var base := mi.get_active_material(0) as StandardMaterial3D
 			if base != null:
 				var tint := base.duplicate() as StandardMaterial3D
 				if tint != null:
-					tint.albedo_color = Color(0.80, 0.80, 0.80).lerp(p["shirt"], 0.62)
+					var tone := 0.88 + 0.16 * float(i % 5) / 4.0
+					tint.albedo_color = Color(tone, tone, tone).lerp(p["shirt"], 0.18)
 					mi.material_override = tint
 			mi.visibility_range_end = VIS_RANGE
 			mi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
@@ -502,6 +529,7 @@ func update(delta: float, focus: Vector3 = Vector3.ZERO, player_pos: Vector3 = V
 		_write_models()
 	else:
 		_write_boxes()
+	_write_shadows()
 
 
 ## Quem ficou longe demais volta para perto (a cidade nao pode ficar vazia
@@ -624,6 +652,19 @@ func _next_target(p: Dictionary) -> void:
 	var k := next_corner(int(p["corner"]), bool(p["clockwise"]))
 	p["corner"] = k
 	p["target"] = corner(p["block"], k)
+
+
+## Poe a sombra de contato sob os pes de quem esta em cena (1 desenho para todos).
+func _write_shadows() -> void:
+	if _mm_shadow == null:
+		return
+	var n := mini(_visible, peds.size())
+	_mm_shadow.multimesh.visible_instance_count = n
+	for i in n:
+		var pos: Vector2 = peds[i]["pos"]
+		var y := Cfg.surface_at(pos.x, pos.y)
+		_mm_shadow.multimesh.set_instance_transform(i,
+				Transform3D(Basis.IDENTITY, Vector3(pos.x, y + 0.06, pos.y)))
 
 
 ## Modelo animado: posiciona o no de cada pessoa, aponta para onde ela anda e

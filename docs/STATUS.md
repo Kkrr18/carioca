@@ -508,6 +508,30 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   gente. NAO validado no aparelho: falta ver se ele anda PARA A FRENTE (o glTF
   olha para +Z; se estiver de costas, trocar `MODEL_YAW` de PI para 0) e quanto
   o esqueleto custou em FPS.
+- B-55: Fase 4 — JOGO INSPECIONADO E PEDESTRE CONSERTADO. O autor disse "ta bem
+  bugado os modelos, joga e ve". Pela PRIMEIRA vez o jogo foi olhado rodando (o
+  inspetor de web abriu o build do Pages e leu a tela): os pedestres apareciam,
+  andavam, ficavam no chao e no tamanho certo (o modelo tem 4.672 triangulos,
+  AABB de 1,14 x 1,51 x 0,31 m), a animacao tocava e o console do Godot so
+  mostrava as 2 linhas de boot — nenhum erro. O que estava feio era outra coisa,
+  e so dava para ver olhando:
+  (1) eu tinha DESLIGADO a sombra dos pedestres para economizar FPS e eles
+  viravam adesivo colado na areia branca (o inspetor descreveu assim);
+  (2) a tinta de 35% da cor da camisa tingia o CORPO INTEIRO (pele e calca) e
+  cada pessoa virava um manequim verde/azul listrado;
+  (3) a pose congelava com pause/play e o `play()` recomecava o ciclo, entao a
+  pessoa dava um salto de pose ao voltar a andar;
+  (4) o apoio no chao usava `mi.transform`, que num glTF importado e a transform
+  LOCAL dentro do esqueleto — agora usa `ModelProp.rel_xf`;
+  (5) eles nunca apareciam a menos de 32 m do jogador.
+  CORRIGIDO: sombra do sol de volta (12 pessoas em vez de 14 para pagar),
+  sombra de contato num MultiMesh (1 desenho para todas: ancora no chao mesmo
+  com sol a pino), tinta caiu para 18% + variacao de brilho (a textura original
+  volta a aparecer), congelamento por velocidade 0 (sem reiniciar o ciclo),
+  rel_xf para escala/apoio e nascimento a partir de 12 m. Numeros medidos no
+  aparelho: 30 FPS parado (p95 34-38 ms), 15-20 FPS durante o streaming de
+  setor, 153-166 desenhos, ~101-114 mil primitivas. O proximo corte de custo
+  (se precisar) e o anel distante: 8 setores x 3 superficies texturadas.
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 
