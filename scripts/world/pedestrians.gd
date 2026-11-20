@@ -24,6 +24,7 @@ extends Node3D
 
 const Cfg = preload("res://scripts/core/cfg.gd")
 const CityGen = preload("res://scripts/world/city_gen.gd")
+const ModelProp = preload("res://scripts/world/model_prop.gd")
 const Traffic = preload("res://scripts/world/traffic.gd")
 
 const BLOCK := Cfg.BLOCK_SIZE
@@ -50,8 +51,8 @@ const WALK_MAX := 1.55
 const JOG_SPEED := 2.70         # quem esta correndo na orla
 const JOG_CHANCE := 0.12
 const RUN_PANIC := 2.30         # multiplicador ao ver carro em cima
-const RESPAWN_NEAR := 32.0      # ao voltar para perto do jogador: de 32 a...
-const RESPAWN_FAR := 125.0      # ...125 m (fora do susto, dentro do mundo)
+const RESPAWN_NEAR := 12.0      # ao voltar para perto do jogador: de 12 a...
+const RESPAWN_FAR := 110.0      # ...110 m (fora do susto, dentro do mundo)
 const CROSS_CHANCE := 0.35
 const IDLE_CHANCE := 0.12
 const GIVE_UP := 18.0           # s esperando o sinal antes de desistir
@@ -64,11 +65,11 @@ const CAR_PANIC := 9.0          # carro a menos disso durante a travessia: corre
 ## caminhada. Um modelo por pedestre custa um desenho por pessoa, por isso a
 ## turma cai para MODEL_PEDS; sem o arquivo, o jogo volta sozinho para as caixas.
 const MODEL_PATH := "res://assets/models/pedestrian.glb"
-const MODEL_PEDS := 18          # quantas pessoas quando o modelo carrega
+const MODEL_PEDS := 14          # quantas pessoas quando o modelo carrega
 const MODEL_HEIGHT := 1.72      # altura final em metros (normalizada pelo AABB)
 ## O glTF olha para +Z; o pedestre anda com o -Z do no virado para a frente.
 const MODEL_YAW := PI
-const VIS_RANGE := 110.0        # m: alem disso o pedestre nem e desenhado
+const VIS_RANGE := 95.0         # m: alem disso o pedestre nem e desenhado
 
 # Paleta das pessoas. Pele e roupa variam, como na rua de verdade.
 const SKINS := [
@@ -390,7 +391,10 @@ func _build_models(scene: PackedScene) -> void:
 		root.add_child(inst)
 		var mi := _find_mesh(inst)
 		if mi != null and mi.mesh != null:
-			var box: AABB = mi.transform * mi.mesh.get_aabb()
+			# Transform RELATIVA a raiz da cena: no glTF importado a malha pode
+			# estar fundo dentro do esqueleto, e ai `mi.transform` sozinho nao
+			# diz onde ela esta (era o que jogava o modelo para o lado/afundado).
+			var box: AABB = ModelProp.rel_xf(mi, inst) * mi.mesh.get_aabb()
 			var h := maxf(0.5, box.size.y)
 			var centre := box.get_center()
 			inst.scale = Vector3.ONE * (MODEL_HEIGHT / h)
@@ -405,6 +409,9 @@ func _build_models(scene: PackedScene) -> void:
 					mi.material_override = tint
 			mi.visibility_range_end = VIS_RANGE
 			mi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
+			# Sem sombra propria: 14 esqueletos no mapa de sombra custam tanto
+			# quanto eles proprios e a 20 m a sombra de uma pessoa nao aparece.
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		var ap := _find_anim(inst)
 		if ap != null:
 			var names := ap.get_animation_list()
@@ -640,10 +647,11 @@ func _write_models() -> void:
 		if moving:
 			# O ciclo do modelo cobre ~1,4 m/s; anda mais rapido, anda mais rapido.
 			ap.speed_scale = clampf(float(p["speed"]) / 1.40, 0.60, 2.20)
-			if not ap.is_playing():
-				ap.play(_anim_name)
-		elif ap.is_playing():
-			ap.pause()
+		elif ap.speed_scale != 0.0:
+			# Parado: congela a animacao (velocidade 0) no quadro do passo junto.
+			# Nao usa pause/play: o play() recomeca o ciclo do zero e a pessoa dava
+			# um salto de pose toda vez que voltava a andar.
+			ap.speed_scale = 0.0
 			ap.seek(_idle_seek, true)
 
 

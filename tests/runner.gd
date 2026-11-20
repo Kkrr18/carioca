@@ -1062,6 +1062,8 @@ func _test_pedestrian_model() -> void:
 	check(mi != null and mi.mesh != null, "modelo do pedestre tem malha")
 	var tris := ModelProp.count_tris(inst)
 	var box := ModelProp.mesh_aabb(inst)
+	print("  info: pedestre: %d tris, %.2f larg x %.2f alt x %.2f prof m" % [
+		tris, box.size.x, box.size.y, box.size.z])
 	check(tris > 200 and tris < 20000, "modelo do pedestre: %d triangulos" % tris)
 	check(box.size.y > 1.0 and box.size.y < 3.0,
 		"altura do modelo plausivel (%.2f m)" % box.size.y)
