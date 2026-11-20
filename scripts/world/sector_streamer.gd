@@ -12,6 +12,12 @@ const Cfg = preload("res://scripts/core/cfg.gd")
 const CityGen = preload("res://scripts/world/city_gen.gd")
 const PropFactory = preload("res://scripts/world/prop_factory.gd")
 
+# Texturas CC0 (Poly Haven, 1K) das superficies do chao. Se faltar o arquivo, a
+# superficie sai com a cor de reserva — o jogo nao quebra por causa de textura.
+const TEX_ROAD := "res://assets/textures/asphalt.jpg"
+const TEX_WALK := "res://assets/textures/pavement.jpg"
+const TEX_SAND := "res://assets/textures/sand.jpg"
+
 var world_seed: int = 20260922
 var full_ring: int = 1
 var far_ring: int = 2
@@ -28,6 +34,9 @@ var _mutex := Mutex.new()
 var _focus := Vector2i(-999, -999)
 var _material: StandardMaterial3D
 var _win_mat: StandardMaterial3D
+var _mat_road: StandardMaterial3D
+var _mat_walk: StandardMaterial3D
+var _mat_sand: StandardMaterial3D
 var _requests_this_frame := 0
 
 var generated_total: int = 0
@@ -48,6 +57,42 @@ func _ready() -> void:
 	_win_mat.emission_enabled = true
 	_win_mat.emission = Color(1.0, 0.85, 0.55)
 	_win_mat.emission_energy_multiplier = 0.0
+	# Superficies texturadas do chao (asfalto, calcada, areia). UV em escala de
+	# mundo ja vem pronto do city_gen; aqui so entra a textura e o material.
+	_mat_road = _tex_material(TEX_ROAD, Color(0.21, 0.22, 0.24))
+	_mat_walk = _tex_material(TEX_WALK, Color(0.63, 0.62, 0.59))
+	_mat_sand = _tex_material(TEX_SAND, Color(0.86, 0.79, 0.64))
+
+
+## Material de superficie texturada. Sem a textura, cai na cor de reserva.
+func _tex_material(path: String, fallback: Color) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = fallback
+	m.roughness = 0.95
+	m.metallic_specular = 0.05
+	if ResourceLoader.exists(path):
+		var res: Resource = load(path)
+		if res is Texture2D:
+			m.albedo_texture = res as Texture2D
+			# A textura ja traz a cor: albedo branco nao tinge.
+			m.albedo_color = Color.WHITE
+			m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	return m
+
+
+## Acrescenta uma surface texturada e devolve o proximo indice livre.
+func _tex_surface(mesh: ArrayMesh, si: int, v: PackedVector3Array, n: PackedVector3Array,
+		uv: PackedVector2Array, mat: Material) -> int:
+	if v.is_empty() or uv.size() != v.size() or n.size() != v.size():
+		return si
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = v
+	arr[Mesh.ARRAY_NORMAL] = n
+	arr[Mesh.ARRAY_TEX_UV] = uv
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	mesh.surface_set_material(si, mat)
+	return si + 1
 
 
 ## Intensidade da iluminacao das janelas (0 = dia, 1 = noite).
@@ -148,8 +193,11 @@ func _install(sec: Vector2i, lod: int, res: Array) -> void:
 	var cols: PackedColorArray = res[2]
 	var colliders: Array = res[3]
 	var defs: Array = res[4]
-	if res.size() > 8:
-		last_generate_ms = float(res[8])
+	# O tempo de geracao vem como ULTIMO elemento (a worker anexa depois das
+	# superficies): le pelo tipo, nao por indice fixo.
+	var last: Variant = res[res.size() - 1]
+	if last is float:
+		last_generate_ms = float(last)
 	if verts.is_empty():
 		return
 
@@ -161,6 +209,7 @@ func _install(sec: Vector2i, lod: int, res: Array) -> void:
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	mesh.surface_set_material(0, _material)
+	var si := 1
 	# Fachadas de vidro em surface propria, com emissao controlada por
 	# set_window_glow() conforme o ciclo dia/noite.
 	var win_v: PackedVector3Array = res[5]
@@ -171,7 +220,13 @@ func _install(sec: Vector2i, lod: int, res: Array) -> void:
 		warrays[Mesh.ARRAY_NORMAL] = res[6]
 		warrays[Mesh.ARRAY_COLOR] = res[7]
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, warrays)
-		mesh.surface_set_material(1, _win_mat)
+		mesh.surface_set_material(si, _win_mat)
+		si += 1
+	# Superficies texturadas: asfalto, calcada e areia (3 desenhos por setor).
+	if res.size() >= 17:
+		si = _tex_surface(mesh, si, res[8], res[9], res[10], _mat_road)
+		si = _tex_surface(mesh, si, res[11], res[12], res[13], _mat_walk)
+		si = _tex_surface(mesh, si, res[14], res[15], res[16], _mat_sand)
 
 	var node := Node3D.new()
 	node.name = "S%d_%d" % [sec.x, sec.y]

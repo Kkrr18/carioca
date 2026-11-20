@@ -253,7 +253,7 @@ func _physics_process(delta: float) -> void:
 		next.z = pushed.y
 	next.y = position.y
 
-	var ground_y := Cfg.height_at(next.x, next.z)
+	var ground_y := Cfg.surface_at(next.x, next.z)
 	if contact_shadow != null:
 		contact_shadow.global_position = Vector3(next.x, ground_y + 0.07, next.z)
 	var y := position.y + _vy * delta
@@ -313,7 +313,7 @@ func _update_camera(delta: float) -> void:
 
 
 func teleport(pos: Vector3) -> void:
-	position = Vector3(pos.x, Cfg.height_at(pos.x, pos.z) + 0.05, pos.z)
+	position = Vector3(pos.x, Cfg.surface_at(pos.x, pos.z) + 0.05, pos.z)
 	_vy = 0.0
 	_grounded = true
 	velocity = Vector3.ZERO

@@ -4,11 +4,17 @@ extends RefCounted
 ## Sem estado global e sem aleatoriedade do motor: o mesmo (seed, setor, LOD)
 ## gera sempre os mesmos vertices. Roda em WorkerThreadPool (so arrays, sem nos).
 ##
-## Retorno de generate(): [vertices, normais, cores, colisores, defs]
-##   vertices/normais/cores: PackedVector3Array / PackedVector3Array / PackedColorArray,
-##     3 vertices por triangulo, sem indices.
-##   colisores: Array de Rect2 (XZ) dos predios.
-##   defs: Array de Dictionary com props (palmeira, arvore, quiosque, guarda-sol).
+## Retorno de generate(): 17 arrays, nesta ordem:
+##   0..2  vertices/normais/cores da cidade (predios, props, pintura) — cor por vertice
+##   3     colisores (Array de Rect2)
+##   4     defs (Array de Dictionary com props)
+##   5..7  fachadas de vidro (vertices/normais/cores) — surface com emissao
+##   8..10 asfalto texturado (vertices/normais/UV)
+##   11..13 calcada texturada (vertices/normais/UV)
+##   14..16 areia texturada (vertices/normais/UV)
+## As tres ultimas superficies existem porque textura e material sao por
+## superficie: a rua, a calcada e a areia tem textura CC0 propria (Fase 4,
+## premissa de realismo), o resto da cidade continua com cor por vertice.
 ## Convencao de frente: triangulo horario visto de fora (Godot). A normal de
 ## frente e -(b-a)x(d-a), que coincide com a normal salva.
 
@@ -24,10 +30,21 @@ const ALLEY := 2.0                   # vao entre lotes
 const LOT_COLS := 2
 const LOT_ROWS := 2
 const FLAT_LIFT := 0.04              # superficies planas 4 cm acima do terreno
-const PLAZA_LIFT := 0.08
+const PLAZA_LIFT := Cfg.CURB_HEIGHT + 0.02
 const MARK_LIFT := 0.06              # pintura da rua: acima do asfalto
 const MARK_WHITE := Color(0.88, 0.88, 0.85)
 const MARK_YELLOW := Color(0.86, 0.72, 0.22)
+# Calcada levantada no meio-fio: a superficie fica CURB_LIFT acima do terreno e
+# uma face vertical fecha a diferenca no encontro com a rua.
+const CURB_LIFT := Cfg.CURB_HEIGHT
+const CURB_COL := Color(0.73, 0.72, 0.69)
+
+# Repeticao das texturas (1 unidade de UV = `tile` metros). O asfalto do Poly
+# Haven cobre 3 m; a areia aerea cobre 30 m, entao 10 m deixa o grao visivel
+# sem repetir demais na tela.
+const ROAD_TILE := 3.0
+const WALK_TILE := 3.0
+const SAND_TILE := 10.0
 
 const SAND := Color(0.86, 0.79, 0.64)
 const SAND_WET := Color(0.70, 0.65, 0.55)
@@ -67,15 +84,19 @@ const CUBE_FACES := [
 static func generate(sx: int, sz: int, world_seed: int, lod: int) -> Array:
 	var gb := GBuf.new()
 	var win := GBuf.new()
+	# Superficies texturadas (asfalto, calcada, areia).
+	var road := TBuf.new(ROAD_TILE)
+	var walk := TBuf.new(WALK_TILE)
+	var sand := TBuf.new(SAND_TILE)
 	var defs: Array = []
 	var colliders: Array = []
 	var ox := float(sx) * Cfg.SECTOR_SIZE
 	var oz := float(sz) * Cfg.SECTOR_SIZE
 	var s := Cfg.SECTOR_SIZE
 
-	_ground(gb, ox, oz)
+	_ground(gb, sand, ox, oz)
 	if sz == 0:
-		_beach(gb, defs, ox, lod)
+		_beach(walk, road, defs, ox, lod)
 
 	var i0 := int(ceil(maxf(ox, 0.0) / BLOCK))
 	var i1 := int(ceil((ox + s) / BLOCK)) - 1
@@ -86,9 +107,11 @@ static func generate(sx: int, sz: int, world_seed: int, lod: int) -> Array:
 		if z_axis < Cfg.CITY_MIN_Z or z_axis > Cfg.CITY_MAX_Z:
 			continue
 		for i in range(i0, i1 + 1):
-			_block(gb, win, defs, colliders, float(i) * BLOCK, z_axis, world_seed, i, j, lod)
+			_block(gb, win, walk, road, defs, colliders, float(i) * BLOCK, z_axis,
+					world_seed, i, j, lod)
 
-	return [gb.v, gb.n, gb.c, colliders, defs, win.v, win.n, win.c]
+	return [gb.v, gb.n, gb.c, colliders, defs, win.v, win.n, win.c,
+			road.v, road.n, road.uv, walk.v, walk.n, walk.uv, sand.v, sand.n, sand.uv]
 
 
 # --- Terreno -----------------------------------------------------------------
@@ -104,7 +127,7 @@ static func ground_color(x: float, z: float) -> Color:
 	return WALK_COL
 
 
-static func _ground(gb: GBuf, ox: float, oz: float) -> void:
+static func _ground(gb: GBuf, sand: TBuf, ox: float, oz: float) -> void:
 	var cells := int(Cfg.SECTOR_SIZE / Cfg.CELL_SIZE)
 	for cx in cells:
 		for cz in cells:
@@ -117,18 +140,24 @@ static func _ground(gb: GBuf, ox: float, oz: float) -> void:
 			var c := Vector3(x1, Cfg.height_at(x1, z1), z1)
 			var d := Vector3(x0, Cfg.height_at(x0, z1), z1)
 			gb.normal(Vector3.UP)
-			_add_quad(gb, a, b, c, d, ground_color(x0 + 16.0, z0 + 16.0))
+			var zmid := z0 + Cfg.CELL_SIZE * 0.5
+			if zmid >= 0.0 and zmid < Cfg.BEACH_EDGE_Z:
+				# Praia: textura de areia (e o chao que o jogador ve de perto).
+				sand.quad(a, b, c, d, Vector3.UP)
+			else:
+				# Mar, cidade e morros: cor por vertice (SEABED, GRASS, FOREST).
+				_add_quad(gb, a, b, c, d, ground_color(x0 + 16.0, z0 + 16.0))
 
 
 # --- Orla --------------------------------------------------------------------
 
-static func _beach(gb: GBuf, defs: Array, ox: float, lod: int) -> void:
+static func _beach(walk: TBuf, road: TBuf, defs: Array, ox: float, lod: int) -> void:
 	# Calcadao da Av. Atlantica: faixa clara entre z = 112 e z = 126.
 	var z0 := 112.0
 	var z1 := 126.0
 	var end := ox + Cfg.SECTOR_SIZE
 	# Piso de asfalto da avenida, entre a areia e o calçadão.
-	_add_flat(gb, ox, 97.0, end, 110.0, ASPHALT)
+	_add_flat_tx(road, ox, 97.0, end, 110.0)
 	var x := ox
 	while x < end - 0.01:
 		var x1 := minf(x + 64.0, end)
@@ -136,8 +165,7 @@ static func _beach(gb: GBuf, defs: Array, ox: float, lod: int) -> void:
 		var b := Vector3(x1, Cfg.height_at(x1, z0) + FLAT_LIFT, z0)
 		var c := Vector3(x1, Cfg.height_at(x1, z1) + FLAT_LIFT, z1)
 		var d := Vector3(x, Cfg.height_at(x, z1) + FLAT_LIFT, z1)
-		gb.normal(Vector3.UP)
-		_add_quad(gb, a, b, c, d, WALK_COL)
+		walk.quad(a, b, c, d, Vector3.UP)
 		x = x1
 	if lod == LOD_FAR:
 		return
@@ -173,15 +201,19 @@ static func _beach(gb: GBuf, defs: Array, ox: float, lod: int) -> void:
 
 # --- Quadras -----------------------------------------------------------------
 
-static func _block(gb: GBuf, win: GBuf, defs: Array, colliders: Array, ax: float, az: float,
-		world_seed: int, bi: int, bj: int, lod: int) -> void:
+static func _block(gb: GBuf, win: GBuf, walk: TBuf, road: TBuf, defs: Array, colliders: Array,
+		ax: float, az: float, world_seed: int, bi: int, bj: int, lod: int) -> void:
 	# Semente propria da quadra: o conteudo nao depende do setor que a desenha.
 	var rng := Rng.new(mix3(world_seed, bi * 4096 + 1, bj * 4096 + 7))
 	var edge := ROAD * 0.5
 	# Ruas: a quadra desenha a meia-rua de sua borda oeste e sul.
-	_add_roads(gb, ax, az, lod)
-	# Calcada: miolo da quadra, entre as meias-ruas (sem sobreposicao com a rua).
-	_add_flat(gb, ax + edge, az + edge, ax + BLOCK - edge, az + BLOCK - edge, WALK_COL)
+	_add_roads(gb, road, ax, az, lod)
+	# Calcada: miolo da quadra, LEVANTADA no meio-fio que a separa da rua.
+	# O chao de quem anda tambem sobe (Cfg.surface_at), senao o personagem
+	# afundaria 15 cm ao subir na calcada.
+	_add_flat_tx(walk, ax + edge, az + edge, ax + BLOCK - edge, az + BLOCK - edge, CURB_LIFT)
+	if lod == LOD_FULL:
+		_add_curbs(gb, ax, az, edge)
 
 	# Postes com luminaria nos cantos da calçada (em qualquer tipo de quadra).
 	if lod == LOD_FULL:
@@ -191,7 +223,8 @@ static func _block(gb: GBuf, win: GBuf, defs: Array, colliders: Array, ax: float
 			Vector2(ax + 6.0, az + BLOCK - 6.0),
 			Vector2(ax + BLOCK - 6.0, az + BLOCK - 6.0),
 		]:
-			var py := Cfg.height_at(p2.x, p2.y)
+			# O poste fica EM PE na calcada, nao enterrado nela.
+			var py := Cfg.surface_at(p2.x, p2.y)
 			defs.append({"c": Vector3(p2.x, py, p2.y), "kind": "poste", "h": 5.5})
 			defs.append({"c": Vector3(p2.x, py, p2.y), "kind": "lampadaria", "h": 5.5})
 
@@ -200,7 +233,7 @@ static func _block(gb: GBuf, win: GBuf, defs: Array, colliders: Array, ax: float
 		if lod == LOD_FULL:
 			var tx := ax + BLOCK * 0.42
 			var tz := az + BLOCK * 0.55
-			defs.append({"c": Vector3(tx, Cfg.height_at(tx, tz), tz), "kind": "tree", "h": rng.range_f(7.0, 11.0)})
+			defs.append({"c": Vector3(tx, Cfg.surface_at(tx, tz), tz), "kind": "tree", "h": rng.range_f(7.0, 11.0)})
 		return
 
 	# Area de lotes: miolo da calcada, menos a faixa de calcada.
@@ -230,7 +263,9 @@ static func _lot(gb: GBuf, win: GBuf, defs: Array, colliders: Array, rng: Rng,
 	var awning := rng.chance(0.35)
 	var shrub := rng.chance(0.55)
 	var shrub_h := rng.range_f(2.5, 4.0)
-	var ground_y := Cfg.height_at(lx, lz)
+	# Nivel do passeio (calcada levantada): o toldo, o arbusto e a arvore ficam
+	# nesta altura, nao enterrados no meio-fio.
+	var ground_y := Cfg.surface_at(lx, lz)
 
 	if empty:
 		if lod == LOD_FULL and shrub:
@@ -262,10 +297,10 @@ static func _lot(gb: GBuf, win: GBuf, defs: Array, colliders: Array, rng: Rng,
 ## esquina e, no MESMO nivel, o asfalto piscava (z-fighting) em todo cruzamento.
 ## A pintura (eixo amarelo, faixa de pedestres, linha de retencao) e so do LOD
 ## full: e detalhe de perto e custa vertices que o anel distante nao precisa.
-static func _add_roads(gb: GBuf, ax: float, az: float, lod: int) -> void:
+static func _add_roads(gb: GBuf, road: TBuf, ax: float, az: float, lod: int) -> void:
 	var h := ROAD * 0.5
-	_add_flat(gb, ax, az - h, ax + BLOCK, az + h, ASPHALT)
-	_add_flat(gb, ax - h, az, ax + h, az + BLOCK, ASPHALT, FLAT_LIFT + 0.005)
+	_add_flat_tx(road, ax, az - h, ax + BLOCK, az + h)
+	_add_flat_tx(road, ax - h, az, ax + h, az + BLOCK, FLAT_LIFT + 0.005)
 	if lod != LOD_FULL:
 		return
 	# Eixo amarelo tracejado nas duas ruas (4 m de tinta, 8 m de vazio).
@@ -313,6 +348,49 @@ static func _add_crosswalk_z(gb: GBuf, z0: float, z1: float, x0: float, x1: floa
 		x += 1.5
 
 
+## As quatro faces verticais do meio-fio em volta da calçada da quadra.
+static func _add_curbs(gb: GBuf, ax: float, az: float, edge: float) -> void:
+	var x0 := ax + edge
+	var x1 := ax + BLOCK - edge
+	var z0 := az + edge
+	var z1 := az + BLOCK - edge
+	_add_curb_x(gb, x0, z0, z1, -1.0)
+	_add_curb_x(gb, x1, z0, z1, 1.0)
+	_add_curb_z(gb, z0, x0, x1, -1.0)
+	_add_curb_z(gb, z1, x0, x1, 1.0)
+
+
+## Face do meio-fio correndo em Z (normal em X, `face` = +1 ou -1). O sentido
+## dos vertices segue a regra do arquivo: horario visto de fora.
+static func _add_curb_x(gb: GBuf, x: float, z0: float, z1: float, face: float) -> void:
+	var hb0 := Cfg.height_at(x, z0) + FLAT_LIFT
+	var hb1 := Cfg.height_at(x, z1) + FLAT_LIFT
+	var b0 := Vector3(x, hb0, z0)
+	var b1 := Vector3(x, hb1, z1)
+	var t0 := Vector3(x, hb0 + CURB_LIFT - FLAT_LIFT, z0)
+	var t1 := Vector3(x, hb1 + CURB_LIFT - FLAT_LIFT, z1)
+	gb.normal(Vector3(face, 0.0, 0.0))
+	if face > 0.0:
+		_add_quad(gb, b0, b1, t1, t0, CURB_COL)
+	else:
+		_add_quad(gb, b1, b0, t0, t1, CURB_COL)
+
+
+## Face do meio-fio correndo em X (normal em Z, `face` = +1 ou -1).
+static func _add_curb_z(gb: GBuf, z: float, x0: float, x1: float, face: float) -> void:
+	var hb0 := Cfg.height_at(x0, z) + FLAT_LIFT
+	var hb1 := Cfg.height_at(x1, z) + FLAT_LIFT
+	var b0 := Vector3(x0, hb0, z)
+	var b1 := Vector3(x1, hb1, z)
+	var t0 := Vector3(x0, hb0 + CURB_LIFT - FLAT_LIFT, z)
+	var t1 := Vector3(x1, hb1 + CURB_LIFT - FLAT_LIFT, z)
+	gb.normal(Vector3(0.0, 0.0, face))
+	if face > 0.0:
+		_add_quad(gb, b1, b0, t0, t1, CURB_COL)
+	else:
+		_add_quad(gb, b0, b1, t1, t0, CURB_COL)
+
+
 ## Superficie plana entre (x0, z0) e (x1, z1), acompanhando o terreno nos cantos.
 static func _add_flat(gb: GBuf, x0: float, z0: float, x1: float, z1: float, col: Color,
 		lift: float = FLAT_LIFT) -> void:
@@ -322,6 +400,17 @@ static func _add_flat(gb: GBuf, x0: float, z0: float, x1: float, z1: float, col:
 	var d := Vector3(x0, Cfg.height_at(x0, z1) + lift, z1)
 	gb.normal(Vector3.UP)
 	_add_quad(gb, a, b, c, d, col)
+
+
+## Superficie plana TEXTURADA: mesma geometria de _add_flat, mas com UV em
+## escala de mundo (a textura repete a cada `tb.tile` metros).
+static func _add_flat_tx(tb: TBuf, x0: float, z0: float, x1: float, z1: float,
+		lift: float = FLAT_LIFT) -> void:
+	var a := Vector3(x0, Cfg.height_at(x0, z0) + lift, z0)
+	var b := Vector3(x1, Cfg.height_at(x1, z0) + lift, z0)
+	var c := Vector3(x1, Cfg.height_at(x1, z1) + lift, z1)
+	var d := Vector3(x0, Cfg.height_at(x0, z1) + lift, z1)
+	tb.quad(a, b, c, d, Vector3.UP)
 
 
 # --- Geometria ---------------------------------------------------------------
@@ -388,6 +477,24 @@ class GBuf:
 
 	func normal(v3: Vector3) -> void:
 		normal_vec = v3
+
+
+## Buffer de superficie TEXTURADA: vertices, normais e UV em escala de mundo
+## (1 unidade de UV = `tile` metros), para a textura repetir sem esticar.
+class TBuf:
+	var v := PackedVector3Array()
+	var n := PackedVector3Array()
+	var uv := PackedVector2Array()
+	var tile := 3.0
+
+	func _init(tile_m: float) -> void:
+		tile = maxf(0.5, tile_m)
+
+	func quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, normal: Vector3) -> void:
+		for p in [a, b, c, a, c, d]:
+			v.append(p)
+			n.append(normal)
+			uv.append(Vector2(p.x, p.z) / tile)
 
 
 ## PRNG xorshift32: deterministico e independente da versao do motor.

@@ -42,6 +42,30 @@ const HILL_START_Z := 2000.0
 const SEA_LEVEL := 0.0
 const MIN_WADE_DEPTH := -0.6           # terreno mais fundo que isso: intransponivel
 
+# --- Calcada -----------------------------------------------------------------
+# O miolo da quadra (calcada + lotes) fica CURB_HEIGHT acima do terreno: e o
+# meio-fio. A rua, a praia e o resto da cidade ficam no nivel do terreno.
+const CURB_HEIGHT := 0.15
+
+
+## Altura extra da calcada em (x, z): CURB_HEIGHT no miolo da quadra, 0 na rua,
+## na praia e fora da cidade. A grade e a mesma do city_gen (BLOCK_SIZE).
+static func curb_at(x: float, z: float) -> float:
+	if z < CITY_MIN_Z or z > CITY_MAX_Z or x < 0.0:
+		return 0.0
+	var edge := ROAD_WIDTH * 0.5
+	var bx := fposmod(x, BLOCK_SIZE)
+	var bz := fposmod(z - CITY_MIN_Z, BLOCK_SIZE)
+	if bx > edge and bx < BLOCK_SIZE - edge and bz > edge and bz < BLOCK_SIZE - edge:
+		return CURB_HEIGHT
+	return 0.0
+
+
+## Chao em que o personagem e os veiculos andam: terreno + calcada.
+static func surface_at(x: float, z: float) -> float:
+	return height_at(x, z) + curb_at(x, z)
+
+
 
 ## Altura do terreno (m) em (x, z). Analitica e deterministica.
 ## Fase 2 troca por DEM real (Copernicus GLO-30 / SRTM) amostrado em disco.

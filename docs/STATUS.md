@@ -350,6 +350,42 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   Na mesma rodada: o som de batida tinha cooldown zero e metralhava enquanto o
   carro ficava encostado — agora ha 0,35 s entre batidas.
 
+- B-43: Fase 4 — CALCADA COM MEIO-FIO. O miolo da quadra passou a ser desenhado
+  `Cfg.CURB_HEIGHT` (0,15 m) acima do terreno, com face vertical fechando a
+  diferenca no encontro com a rua. O chao de quem anda acompanha
+  (`Cfg.surface_at` = terreno + meio-fio): sem isso o personagem e o carro
+  afundariam 15 cm ao subir na calcada — o chao analitico e a malha tem que
+  concordar. Postes de luz, toldos, arvores e o transito passaram a usar
+  surface_at. As faces do meio-fio existem so no LOD full. NAO validado no
+  aparelho.
+- B-44: Fase 4 — SEMAFOROS. Quatro postes por cruzamento dentro de 190 m do
+  jogador, desenhados em DOIS MultiMesh (poste+carcaca e lentes, a cor da lente
+  vindo da cor de instancia), entao todos os semaforos em cena custam 2
+  chamadas de desenho. Ciclo de 26 s (verde 10 / amarelo 2 / tudo vermelho 1,
+  depois o mesmo para a via cruzada), com fase defasada por cruzamento para o
+  transito nao parar todo junto. O carro para na linha de retencao (5 m antes
+  do centro) no vermelho e atravessa no verde; quem ja entrou termina de
+  passar. NAO validado no aparelho: falta ver a lente de dia, se a fase casa
+  com o carro parando e quanto custou em FPS.
+- B-45: A premissa de realismo maximo ficou registrada no ESTILO.md como
+  "geografia, sinalizacao e comportamento reais dentro do orcamento do
+  iPhone", com a forma ainda low-poly. Texturas fotograficas em tudo, PBR
+  pesado e reflexo em tempo real continuam fora: o renderer Compatibility do
+  iPhone 12 nao sustenta.
+
+- B-46: Fase 4 — TEXTURAS NO CHAO. Asfalto, calcada e areia ganharam textura
+  CC0 1K do Poly Haven (asphalt_02, dirty_concrete, aerial_beach_01), cada uma
+  numa surface propria com UV em escala de mundo (repete a cada 3 m; a areia a
+  cada 10 m). O city_gen passou a devolver 17 arrays (as 3 superficies
+  texturadas no fim) e o streamer monta 3 materiais — custo: +3 desenhos por
+  setor. O mar continua com cor por vertice (SEABED), nao com textura de areia.
+  Se o arquivo faltar, a superficie cai na cor de reserva e o jogo segue.
+  Calçada portuguesa com o padrao de ondas do Rio NAO existe em CC0 com URL
+  direta (pesquisa): o que existe e pedra de Lisboa (OpenGameArt, CC0) ou foto
+  com marca d'agua. O proximo passo e gerar o padrao de ondas em codigo
+  (ImageTexture) no calcadao. NAO validado no aparelho: falta ver o custo em
+  FPS das 3 texturas e se o tiling ficou na escala certa.
+
 ## Proximas tarefas (Fase 1 -> Fase 2)
 
 1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).

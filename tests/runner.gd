@@ -39,6 +39,7 @@ func _initialize() -> void:
 	_test_determinism()
 	_test_vertex_budget()
 	_test_road_markings()
+	_test_ground_textures()
 	_test_normals()
 	_test_heights()
 	_test_props()
@@ -49,7 +50,9 @@ func _initialize() -> void:
 	_test_model_asset()
 	_test_car_models()
 	_test_facing_and_roll()
+	_test_curb()
 	_test_traffic_pure()
+	_test_traffic_lights()
 	_test_traffic_models()
 	_test_traffic_collision()
 	_test_traffic_spacing_and_follow()
@@ -219,6 +222,32 @@ func _test_road_markings() -> void:
 		if c.is_equal_approx(CityGen.MARK_YELLOW) or c.is_equal_approx(CityGen.MARK_WHITE):
 			far_marks += 1
 	check(far_marks == 0, "sinalizacao so no LOD full (far: %d vertices)" % far_marks)
+
+
+func _test_ground_textures() -> void:
+	# Superficies texturadas (Fase 4, premissa de realismo): asfalto, calcada e
+	# areia vem em buffers proprios, com UV em escala de mundo (a textura repete
+	# por metro, sem esticar).
+	var full := CityGen.generate(3, 0, 20260922, CityGen.LOD_FULL)
+	check(full.size() >= 17, "setor traz as superficies texturadas (%d arrays)" % full.size())
+	if full.size() < 17:
+		return
+	var road_v: PackedVector3Array = full[8]
+	var road_uv: PackedVector2Array = full[10]
+	check(road_v.size() > 0, "asfalto texturado: %d vertices" % road_v.size())
+	check(road_uv.size() == road_v.size(), "asfalto com 1 UV por vertice")
+	check((full[11] as PackedVector3Array).size() > 0,
+		"calcada texturada: %d vertices" % (full[11] as PackedVector3Array).size())
+	check((full[14] as PackedVector3Array).size() > 0,
+		"areia texturada: %d vertices" % (full[14] as PackedVector3Array).size())
+	var span := 0.0
+	for uv in road_uv:
+		span = maxf(span, maxf(absf(uv.x), absf(uv.y)))
+	check(span > 2.0, "UV do asfalto em escala de mundo (max %.1f)" % span)
+	# O mar continua com cor por vertice: nao recebe textura de areia.
+	var sea := CityGen.generate(3, -1, 20260922, CityGen.LOD_FULL)
+	check((sea[14] as PackedVector3Array).is_empty(), "mar sem textura de areia")
+	check((sea[0] as PackedVector3Array).size() > 0, "mar com geometria de cor por vertice")
 
 
 func _test_normals() -> void:
@@ -564,7 +593,7 @@ func _test_traffic_pure() -> void:
 		sim.append(Traffic.spawn_car(1000 + k * 7919, k, 0))
 	for step in 6000:
 		for c in sim:
-			Traffic.advance(c, 1.0 / 30.0)
+			Traffic.advance(c, 1.0 / 30.0, float(step) / 30.0)
 	var sim_ok := true
 	for c in sim:
 		if not Traffic.valid(c["node"]):
@@ -577,7 +606,7 @@ func _test_traffic_pure() -> void:
 	var prev := Traffic.pose(one).origin
 	var worst := 0.0
 	for i in 3000:
-		Traffic.advance(one, 1.0 / 30.0)
+		Traffic.advance(one, 1.0 / 30.0, float(i) / 30.0)
 		var cur := Traffic.pose(one).origin
 		worst = maxf(worst, Vector2(cur.x - prev.x, cur.z - prev.z).length())
 		prev = cur
@@ -591,6 +620,104 @@ func _test_traffic_pure() -> void:
 		var fwd: Vector3 = -Traffic.pose(c).basis.z
 		check(absf(fwd.x - float(h.x)) < 0.001 and absf(fwd.z - float(h.y)) < 0.001,
 			"modelo aponta para o sentido %s" % str(h))
+
+
+func _test_curb() -> void:
+	# Calcada com meio-fio: a superficie do miolo da quadra sobe CURB_HEIGHT e o
+	# chao de quem anda acompanha (Cfg.surface_at). Se nao acompanhasse, o
+	# personagem afundaria 15 cm ao subir na calcada.
+	check(absf(Cfg.curb_at(0.0, 200.0)) < 0.001, "rua sem meio-fio")
+	check(absf(Cfg.curb_at(6.5, 200.0) - Cfg.CURB_HEIGHT) < 0.001,
+		"calcada levantada %.2f m" % Cfg.curb_at(6.5, 200.0))
+	check(absf(Cfg.curb_at(6.5, 131.0)) < 0.001, "avenida (z = 131) sem meio-fio")
+	check(absf(Cfg.curb_at(6.5, 40.0)) < 0.001, "praia sem meio-fio")
+	check(absf(Cfg.curb_at(6.5, 2400.0)) < 0.001, "fora da cidade sem meio-fio")
+	check(absf(Cfg.curb_at(-6.5, 200.0)) < 0.001, "x negativo sem meio-fio")
+	check(absf(Cfg.surface_at(6.5, 200.0) - Cfg.height_at(6.5, 200.0) - Cfg.CURB_HEIGHT) < 0.001,
+		"surface_at soma o meio-fio na calcada")
+	check(absf(Cfg.surface_at(0.0, 200.0) - Cfg.height_at(0.0, 200.0)) < 0.001,
+		"surface_at = terreno na rua")
+	var full := CityGen.generate(3, 0, 20260922, CityGen.LOD_FULL)
+	var far := CityGen.generate(3, 0, 20260922, CityGen.LOD_FAR)
+	print("  info: setor com meio-fio = %d vertices (LOD far %d)" % [
+		(_verts(full) as PackedVector3Array).size(), (_verts(far) as PackedVector3Array).size()])
+	check((_verts(full) as PackedVector3Array).size() < 40000, "setor com meio-fio ainda abaixo de 40k vertices")
+
+
+func _test_traffic_lights() -> void:
+	# Semaforos: ciclo puro, parada na linha de retencao e travessia no verde.
+	var ns_green := false
+	var ns_yellow := false
+	var ew_green := false
+	var ew_yellow := false
+	var both_green := false
+	var t := 0.0
+	while t < Traffic.LIGHT_CYCLE:
+		var st := Traffic.light_states(Vector2i(0, 0), t)
+		ns_green = ns_green or st.x == 2
+		ns_yellow = ns_yellow or st.x == 1
+		ew_green = ew_green or st.y == 2
+		ew_yellow = ew_yellow or st.y == 1
+		if st.x == 2 and st.y == 2:
+			both_green = true
+		t += 0.25
+	check(ns_green and ns_yellow and ew_green and ew_yellow,
+		"ciclo do semaforo tem verde e amarelo nas duas vias")
+	check(not both_green, "as duas vias nunca ficam verdes ao mesmo tempo")
+	check(Traffic.light_offset(Vector2i(0, 0)) != Traffic.light_offset(Vector2i(1, 0)),
+		"cruzamentos vizinhos com fases diferentes")
+	check(Traffic.lens_color(2) == Traffic.LENS_GREEN and Traffic.lens_color(0) == Traffic.LENS_RED,
+		"cor da lente segue o estado")
+
+	# Um instante de vermelho e um de verde para a via leste-oeste.
+	var node := Vector2i(0, 0)
+	var ahead := node + Vector2i(1, 0)
+	var t_red := -1.0
+	var t_green := -1.0
+	var k := 0.0
+	while k < Traffic.LIGHT_CYCLE:
+		var st := Traffic.light_states(ahead, k)
+		if st.y != 2 and t_red < 0.0:
+			t_red = k
+		if st.y == 2 and t_green < 0.0:
+			t_green = k
+		k += 0.25
+	check(t_red >= 0.0 and t_green >= 0.0, "existe instante de vermelho e de verde")
+	check(Traffic.must_stop(node, Vector2i(1, 0), 10.0, t_red), "carro a 10 m para no vermelho")
+	check(not Traffic.must_stop(node, Vector2i(1, 0), 10.0, t_green), "carro a 10 m passa no verde")
+	check(not Traffic.must_stop(node, Vector2i(1, 0), Traffic.BLOCK - 1.0, t_red),
+		"carro ja dentro do cruzamento termina de passar")
+
+	# No vermelho o carro para na linha e nao atravessa.
+	var red_car := Traffic.spawn_car(11, 0, 0)
+	red_car["node"] = node
+	red_car["h"] = Vector2i(1, 0)
+	red_car["s"] = 0.0
+	for i in 300:
+		Traffic.advance(red_car, 1.0 / 30.0, t_red)
+	check(red_car["node"] == node, "no vermelho o carro nao atravessa o cruzamento")
+	var limite := Traffic.BLOCK - Traffic.STOP_BEFORE
+	check(absf(float(red_car["s"]) - limite) < 0.2,
+		"no vermelho o carro para na linha (s = %.2f m, limite %.2f)" % [float(red_car["s"]), limite])
+
+	# No verde ele atravessa.
+	var green_car := Traffic.spawn_car(12, 0, 0)
+	green_car["node"] = node
+	green_car["h"] = Vector2i(1, 0)
+	green_car["s"] = 0.0
+	for i in 300:
+		Traffic.advance(green_car, 1.0 / 30.0, t_green)
+	check(green_car["node"] != node, "no verde o carro atravessa o cruzamento")
+
+	# Geometria: poste + carcaca (2 caixas) e a lente.
+	var body := Traffic.light_body_mesh()
+	var bv: PackedVector3Array = body.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	check(body.get_surface_count() == 1 and bv.size() == 72,
+		"malha do semaforo com 2 caixas (%d vertices)" % bv.size())
+	var lens := Traffic.lens_mesh()
+	var lv: PackedVector3Array = lens.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	check(lens.get_surface_count() == 1 and lv.size() == 36,
+		"malha da lente pronta (%d vertices)" % lv.size())
 
 
 func _test_traffic_models() -> void:

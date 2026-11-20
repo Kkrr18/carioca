@@ -44,6 +44,15 @@
   [assets/models/README.md](../assets/models/README.md). Nada de conteudo com
   copyright de jogo comercial.
 
+## Texturas
+
+- `assets/textures/asphalt.jpg` (asphalt_02), `pavement.jpg` (dirty_concrete) e
+  `sand.jpg` (aerial_beach_01) — texturas do **Poly Haven**
+  (https://polyhaven.com/textures), 1024x1024, licenca **CC0 1.0** (sem
+  atribuicao obrigatoria). Autor: Rob Tuytel. Baixadas dos mapas difusos 1K do
+  CDN oficial (dl.polyhaven.org). Regra do projeto: 1K–2K tileavel entra, 4K/8K
+  nao (ver docs/ESTILO.md).
+
 ## Sons
 
 - `assets/sounds/impact.wav` — "Metal Impact Sounds" (`thud2.wav`), de

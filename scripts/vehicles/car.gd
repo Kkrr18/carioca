@@ -103,7 +103,7 @@ static func yaw_rate(speed: float, steer: float) -> float:
 func _ready() -> void:
 	# O main posiciona o carro antes do add_child; aqui ele encosta no chao
 	# analitico para nao nascer flutuando nem enterrado.
-	position.y = Cfg.height_at(position.x, position.z)
+	position.y = Cfg.surface_at(position.x, position.z)
 	# Modelo CC0 quando carrega; a caixa de codigo e a reserva se nao carregar.
 	if not model_path.is_empty():
 		_build_model()
@@ -415,7 +415,7 @@ func _drive(delta: float) -> void:
 				_crash_cool = 0.35
 				crashed.emit(impact)
 	position = next
-	position.y = Cfg.height_at(next.x, next.z)
+	position.y = Cfg.surface_at(next.x, next.z)
 
 
 ## Carroceria acompanha o relevo: pitch (nariz sobe na subida) e roll (lado
@@ -424,10 +424,10 @@ func _inclinar(delta: float) -> void:
 	var f := Vector3(-sin(rotation.y), 0.0, -cos(rotation.y))
 	var r := Vector3(cos(rotation.y), 0.0, -sin(rotation.y))
 	var s := 1.6
-	var hf := Cfg.height_at(position.x + f.x * s, position.z + f.z * s)
-	var hb := Cfg.height_at(position.x - f.x * s, position.z - f.z * s)
-	var hr := Cfg.height_at(position.x + r.x * s, position.z + r.z * s)
-	var hl := Cfg.height_at(position.x - r.x * s, position.z - r.z * s)
+	var hf := Cfg.surface_at(position.x + f.x * s, position.z + f.z * s)
+	var hb := Cfg.surface_at(position.x - f.x * s, position.z - f.z * s)
+	var hr := Cfg.surface_at(position.x + r.x * s, position.z + r.z * s)
+	var hl := Cfg.surface_at(position.x - r.x * s, position.z - r.z * s)
 	var pitch := atan2(hf - hb, 2.0 * s)
 	var roll := atan2(hr - hl, 2.0 * s)
 	var k := clampf(6.0 * delta, 0.0, 1.0)
