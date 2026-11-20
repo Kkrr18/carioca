@@ -42,6 +42,7 @@ func _initialize() -> void:
 	_test_determinism()
 	_test_vertex_budget()
 	_test_road_markings()
+	_test_road_no_overlap()
 	_test_ground_textures()
 	_test_facade()
 	_test_normals()
@@ -242,6 +243,36 @@ func _test_road_markings() -> void:
 	check(far_marks == 0, "sinalizacao so no LOD full (far: %d vertices)" % far_marks)
 
 
+func _test_road_no_overlap() -> void:
+	# B-52: duas superficies de asfalto na MESMA altura brigam por profundidade e
+	# piscam a partir de ~150 m — na tela isso parece granulado na rua. O certo e
+	# elas encostarem pela borda. Este teste garante que nenhum par de quads de
+	# asfalto do setor tem AREA em comum.
+	var full := CityGen.generate(3, 0, 20260922, CityGen.LOD_FULL)
+	var v: PackedVector3Array = full[8]
+	var quads: Array = []
+	var i := 0
+	while i + 5 < v.size():
+		var a := v[i]
+		var c := v[i + 2]
+		quads.append(Rect2(minf(a.x, c.x), minf(a.z, c.z),
+				absf(c.x - a.x), absf(c.z - a.z)))
+		i += 6
+	check(quads.size() > 30, "asfalto em %d quads por setor" % quads.size())
+	var bad := 0
+	for p in quads.size():
+		var r: Rect2 = quads[p]
+		for q in range(p + 1, quads.size()):
+			var s: Rect2 = quads[q]
+			var w: float = minf(r.position.x + r.size.x, s.position.x + s.size.x)
+			w -= maxf(r.position.x, s.position.x)
+			var dd: float = minf(r.position.y + r.size.y, s.position.y + s.size.y)
+			dd -= maxf(r.position.y, s.position.y)
+			if w > 0.01 and dd > 0.01:
+				bad += 1
+	check(bad == 0, "nenhum par de ruas sobreposto (%d pares)" % bad)
+
+
 func _test_ground_textures() -> void:
 	# Superficies texturadas (Fase 4, premissa de realismo): asfalto, calcada e
 	# areia vem em buffers proprios, com UV em escala de mundo (a textura repete
@@ -323,7 +354,7 @@ func _test_heights() -> void:
 
 func _test_props() -> void:
 	var ok := true
-	for s in ["palm", "tree", "bush", "kiosk", "umbrella", "caixa_dagua", "casa_maquinas", "antena"]:
+	for s in ["palm", "tree", "bush", "kiosk", "umbrella", "caixa_dagua", "casa_maquinas", "antena", "palm_crown", "tree_crown"]:
 		var sh := PropFactory.shape_for(s, 6.0)
 		if sh.size() != 2:
 			ok = false
@@ -331,7 +362,17 @@ func _test_props() -> void:
 		var size: Vector3 = sh[1]
 		if size.length() < 0.4 or size.length() > 20.0:
 			ok = false
-	check(ok, "props com forma plausivel (8 tipos)")
+	check(ok, "props com forma plausivel (10 tipos)")
+	# B-52: vegetacao virou tronco + copa. A coluna verde unica era a coisa mais
+	# feia da cidade; agora o tronco e marrom e a copa e verde, no alto.
+	var trunk := PropFactory.color_for("palm", 0.5)
+	var crown := PropFactory.color_for("palm_crown", 0.5)
+	check(trunk.r > trunk.g and crown.g > crown.r,
+		"palmeira: tronco marrom e copa verde (r %.2f / g %.2f)" % [trunk.r, crown.g])
+	check(float(PropFactory.shape_for("palm_crown", 7.0)[0]) >= 7.0,
+		"copa da palmeira fica no alto do tronco")
+	check(float(PropFactory.shape_for("tree_crown", 9.0)[0]) > 5.0,
+		"copa da arvore fica acima do meio do tronco")
 
 
 func _test_car_physics() -> void:
@@ -1021,6 +1062,9 @@ func _test_building_shapes() -> void:
 		if kinds.has(k):
 			roof_kinds += 1
 	check(roof_kinds >= 2, "cobertura com %d tipos de detalhe" % roof_kinds)
+	# B-52: vegetacao do setor tem copa separada do tronco.
+	check(kinds.has("palm_crown") or kinds.has("tree_crown"),
+		"vegetacao com copa em instancia propria (tronco + copa)")
 	var tops := {}
 	for p in (full[20] as PackedVector3Array):
 		tops[snappedf(p.y, 0.5)] = true

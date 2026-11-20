@@ -193,11 +193,15 @@ static func look(h: float, sky_weather: String) -> Dictionary:
 		"sun_color": SUN_GOLD.lerp(SUN_DAY, smoothstep(0.04, 0.45, sin_e)),
 		"sun_energy": SUN_ENERGY * smoothstep(-0.03, 0.18, sin_e) * dim,
 		"moon_energy": lerpf(0.22, 0.0, daylight),
-		"exposure": lerpf(1.30, 1.02, daylight),
-		"glow": lerpf(0.70, 0.34, daylight),
-		"bloom": lerpf(0.20, 0.04, daylight),
+		# Glow/bloom baixos de proposito (B-52): o buffer de glow e de meia
+		# resolucao e, alto, vira granulado em volta de tudo que e claro.
+		"exposure": lerpf(1.16, 1.02, daylight),
+		"glow": lerpf(0.38, 0.18, daylight),
+		"bloom": lerpf(0.08, 0.0, daylight),
 		"sky_curve": sky_curve,
-		"sun_angle": lerpf(20.0, 13.0, daylight),
+		# Disco do sol: 4,5 a 7 graus. Antes eram 13 a 20 graus, o que fazia um
+		# BOLO branco no ceu em vez de sol.
+		"sun_angle": lerpf(7.0, 4.5, daylight),
 		"daylight": daylight,
 		"gold": gold,
 		"blue": blue,
@@ -228,11 +232,14 @@ static func aim_light(light: DirectionalLight3D, to_dir: Vector3) -> void:
 func _aim_lights(l: Dictionary) -> void:
 	if sun != null:
 		var to_sun: Vector3 = l["to_sun"]
-		sun.visible = to_sun.y > -0.06
-		if sun.visible:
-			aim_light(sun, to_sun)
-			_write(sun, "light_color", l["sun_color"])
-			_write(sun, "light_energy", l["sun_energy"])
+		# O sol NUNCA e escondido: com energia 0 ele nao ilumina nada, mas a
+		# direcao dele continua sendo a luz que o ceu usa para desenhar o disco.
+		# Escondendo o no, quem virava a luz do ceu era a LUA, e o disco dela
+		# (do mesmo tamanho do sol) aparecia como um bolo branco no ceu (B-52).
+		sun.visible = true
+		aim_light(sun, to_sun)
+		_write(sun, "light_color", l["sun_color"])
+		_write(sun, "light_energy", l["sun_energy"])
 		# Sombra sempre que o sol ilumina de verdade: a sombra comprida da hora
 		# dourada e metade da beleza do por do sol. Na chuva, fora (custo).
 		sun.shadow_enabled = float(l["daylight"]) > 0.12 and weather != "chuva"
@@ -257,7 +264,7 @@ func _apply_sky(l: Dictionary) -> void:
 	_write(sky_mat, "sky_curve", l["sky_curve"])
 	_write(sky_mat, "ground_curve", 0.02)
 	_write(sky_mat, "sun_angle_max", l["sun_angle"])
-	_write(sky_mat, "sun_curve", 0.11)
+	_write(sky_mat, "sun_curve", 0.08)
 	_write(sky_mat, "energy_multiplier", 1.0)
 	_write(sky_mat, "sky_energy_multiplier", 1.0)
 

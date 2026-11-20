@@ -159,7 +159,10 @@ func _tex_surface(mesh: ArrayMesh, si: int, v: PackedVector3Array, n: PackedVect
 
 ## Intensidade da iluminacao das janelas (0 = dia, 1 = noite).
 func set_window_glow(f: float) -> void:
-	var e := clampf(f, 0.0, 1.0) * 1.4
+	# 0,55 e nao 1,4 (B-52): o mapa de emissao da fachada e a FOTO inteira, entao
+	# energia alta fazia a PAREDE acender junto com a janela, e a cidade de noite
+	# virava um borrao brilhante.
+	var e := clampf(f, 0.0, 1.0) * 0.55
 	if _win_mat != null:
 		_win_mat.emission_energy_multiplier = e
 	# As janelas que acendem agora sao as da textura de fachada.
@@ -344,6 +347,11 @@ func _prop_multimesh(defs: Array) -> MultiMeshInstance3D:
 		var h := float(d.get("h", 6.0))
 		var shape := PropFactory.shape_for(kind, h)
 		var basis := Basis.from_scale(shape[1])
+		# Giro em Y (B-52): copa de arvore e arbusto girados leem como volume,
+		# nao como caixa alinhada a grade da cidade.
+		var rot := float(d.get("rot", 0.0))
+		if rot != 0.0:
+			basis = Basis(Vector3.UP, rot) * basis
 		mm.set_instance_transform(i, Transform3D(basis, c + Vector3(0.0, float(shape[0]), 0.0)))
 		mm.set_instance_color(i, PropFactory.color_for(kind, hue))
 	var mmi := MultiMeshInstance3D.new()

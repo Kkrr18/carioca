@@ -93,9 +93,23 @@ fora do espectre definido:
 - **Sem ShaderMaterial custom no caminho critico**: o shader do mar congelou o
   WebGL no Safari (B-25). Efeitos novos usam StandardMaterial3D (emissao,
   roughness, UV offset) ate um shader ser reavaliado com cuidado.
-- Pos-processamento permitido: tonemap ACES (exposure ~1.05), glow com
-  threshold ~1.1, nevoia. Fora: SSAO, SSR, bloom pesado, screen-space de tela
-  cheia que o Compatibility nao sustenta.
+- Pos-processamento permitido: tonemap ACES (exposure ~1.0), glow, nevoa. Fora:
+  SSAO, SSR, bloom pesado, screen-space de tela cheia que o Compatibility nao
+  sustenta.
+- **Anti-aliasing LIGADO (MSAA 2x).** Com ele desligado toda diagonal da cidade
+  pisca em movimento, e isso o autor le como "granulado" (B-52). E a unica
+  coisa da lista que se paga sem discussao.
+- **Glow e o inimigo do "granulado".** O buffer de glow e de MEIA resolucao:
+  intensidade alta e bloom jogam um granulado grosso em volta de tudo que e
+  claro. Threshold em 1,35 e intensidade <= 0,38; bloom quase zero.
+- **Nada de superficie coplanar.** Duas superficies no mesmo nivel (rua x rua,
+  pintura x asfalto, calcada x terreno) brigam por profundidade e piscam a
+  partir de ~100 m; a tela parece granulada. Separe por BORDA (geometria que
+  encosta, sem area em comum) ou por 5 cm ou mais. A pintura da rua fica 6 cm
+  acima do asfalto e as duas ruas da esquina encostam pela borda (B-52).
+- **Brilho especular e faisca:** mar com roughness 0,30 (0,12 vira brilho de sol
+  ponto a ponto em 60 km de plano, ou seja ruido piscando). O disco do sol no
+  ceu tem 4,5-7 graus; 20 graus vira bolo branco.
 - Orcamentos atuais: setor full < 40k vertices; props somem a 700 m; malha de
   setor some a 1500 m (full) / 2400 m (LOD far). O fade suave (dither) so
   existe no Forward+, nao no Compatibility: no alvo o corte e seco (B-29).

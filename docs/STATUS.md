@@ -448,6 +448,26 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   o Godot refazer o mapa de radiancia (economia para o iPhone). Teste novo de
   20 checagens no CI, sem GPU. NAO validado no aparelho: falta ver o por do sol
   na praia e se a noite ficou legivel (e o custo em FPS).
+- B-52: Fase 4 — GRANULADO E "COISAS FEIAS". O autor viu "muito granulado" e
+  coisas "meio bugadas e feinhas". Sete causas, todas medidas no codigo:
+  (1) `msaa_3d=0` — o jogo rodava SEM anti-aliasing nenhum, e toda diagonal da
+  cidade piscava em movimento (agora MSAA 2x); (2) brilho do sol no mar com
+  roughness 0,12 em 60 km de plano virava faisca pixel a pixel (0,30);
+  (3) glow com threshold 1,1 e bloom 0,20: halo em tudo que era claro e, como o
+  buffer de glow e de meia resolucao, granulado grosso (agora threshold 1,35,
+  intensidade <=0,38, bloom ~0); (4) disco do sol com 13-20 graus de raio, um
+  bolo branco no ceu — e de noite, com o no do sol escondido, quem virava a luz
+  do ceu era a LUA, com o mesmo disco gigante (agora 4,5-7 graus, e o sol nunca
+  e escondido: energia 0 a noite); (5) as duas ruas de cada esquina ficavam no
+  mesmo plano com 5 mm de diferenca e o cruzamento piscava de longe (a vertical
+  agora sai em dois pedacos que encostam pela BORDA, sem area em comum; a
+  pintura subiu para 6 cm acima do asfalto); (6) a fachada usava a FOTO inteira
+  como emissao a 1,4 de energia, entao a PAREDE acendia junto com a janela
+  (0,55); (7) palmeira e arvore eram uma coluna VERDE de 7 a 11 m, a coisa mais
+  feia da cidade — agora sao tronco (marrom) + copa (verde) girada, duas
+  instancias do MESMO MultiMesh, sem nenhum desenho novo. NAO validado no
+  aparelho: o autor precisa dizer se o granulado sumiu, se a cidade ficou menos
+  feia e quanto o MSAA 2x custou no MEDIR.
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 

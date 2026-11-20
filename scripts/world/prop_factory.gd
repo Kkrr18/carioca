@@ -15,9 +15,13 @@ const UMBRELLA_B := Color(0.30, 0.55, 0.85)
 
 static func color_for(kind: String, hue: float) -> Color:
 	match kind:
-		"palm":
+		# Vegetacao (B-52): o TRONCO nao e verde. Antes palmeira e arvore eram
+		# uma coluna verde de 7 a 11 m, o que e a coisa mais feia da cidade.
+		"palm", "tree":
+			return TRUNK.darkened(0.08)
+		"palm_crown":
 			return LEAF.darkened(0.05)
-		"tree", "bush":
+		"tree_crown", "bush":
 			return BUSH.lerp(LEAF, hue)
 		"kiosk":
 			return KIOSK_A.lerp(KIOSK_B, hue)
@@ -55,10 +59,16 @@ static func color_for(kind: String, hue: float) -> Color:
 ## Retorna [offset_y, tamanho] para a instancia.
 static func shape_for(kind: String, h: float) -> Array:
 	match kind:
+		# Tronco fino; a copa vem em OUTRA instancia do mesmo MultiMesh, com
+		# `h` igual a altura do tronco (custo: nenhuma chamada de desenho nova).
 		"palm":
-			return [h * 0.5, Vector3(0.5, h, 0.5)]
+			return [h * 0.5, Vector3(0.42, h, 0.42)]
+		"palm_crown":
+			return [h + 0.45, Vector3(4.4, 1.2, 4.4)]
 		"tree":
-			return [h * 0.5, Vector3(h * 0.55, h, h * 0.55)]
+			return [h * 0.5, Vector3(0.55, h, 0.55)]
+		"tree_crown":
+			return [h * 0.78, Vector3(h * 0.62, h * 0.5, h * 0.62)]
 		"bush":
 			return [h * 0.5, Vector3(h, h, h)]
 		"kiosk":

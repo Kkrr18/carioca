@@ -210,12 +210,15 @@ func _build_environment() -> void:
 	# tonemap ACES + glow dao o "haze" de cidade litoranea.
 	# O enum do Godot 4 e Environment.ToneMapper com o prefixo TONE_MAPPER_:
 	# "TONEMAPPER_ACES" nao existe e quebrava a compilacao deste arquivo (B-28).
+	# Glow (B-52): o buffer de glow e meia resolucao, entao glow alto e bloom
+	# jogam um granulado grosso em volta de TUDO que e claro. Threshold 1,35
+	# deixa so o que realmente brilha (sol, lampada, janela) pegar halo.
 	environment.tonemap_mode = Environment.TONE_MAPPER_ACES
-	environment.tonemap_exposure = 1.05
+	environment.tonemap_exposure = 1.02
 	environment.glow_enabled = true
-	environment.glow_intensity = 0.35
-	environment.glow_bloom = 0.05
-	environment.glow_hdr_threshold = 1.1
+	environment.glow_intensity = 0.18
+	environment.glow_bloom = 0.0
+	environment.glow_hdr_threshold = 1.35
 
 	var we := WorldEnvironment.new()
 	we.environment = environment
@@ -260,12 +263,14 @@ func _build_sea() -> void:
 	sea.mesh = plane
 	# Material PBR padrao (sem shader custom): um ShaderMaterial sobre este
 	# plano congelou o render no Safari/WebGL (B-25), entao o brilho do mar
-	# vem de roughness baixa + specular com o sol do dia/noite.
+	# vem de roughness + specular com o sol do dia/noite.
+	# Roughness MUITO baixa (0,12) em 60 km de plano virava brilho de sol ponto a
+	# ponto, que na tela parece granulado piscando: 0,30 espalha o brilho (B-52).
 	var m := StandardMaterial3D.new()
 	m.albedo_color = Color(0.10, 0.26, 0.38)
-	m.roughness = 0.12
+	m.roughness = 0.30
 	m.metallic = 0.0
-	m.metallic_specular = 0.7
+	m.metallic_specular = 0.45
 	m.disable_receive_shadows = true
 	sea.material_override = m
 	sea.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF

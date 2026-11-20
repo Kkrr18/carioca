@@ -33,7 +33,7 @@ const LOT_COLS := 2
 const LOT_ROWS := 2
 const FLAT_LIFT := 0.04              # superficies planas 4 cm acima do terreno
 const PLAZA_LIFT := Cfg.CURB_HEIGHT + 0.02
-const MARK_LIFT := 0.06              # pintura da rua: acima do asfalto
+const MARK_LIFT := 0.10              # pintura da rua: 6 cm acima do asfalto
 const MARK_WHITE := Color(0.88, 0.88, 0.85)
 const MARK_YELLOW := Color(0.86, 0.72, 0.22)
 # Calcada levantada no meio-fio: a superficie fica CURB_LIFT acima do terreno e
@@ -198,7 +198,11 @@ static func _beach(walk: TBuf, road: TBuf, calcadao: TBuf, defs: Array, ox: floa
 	var rng := Rng.new(mix3(101, int(ox), 0))
 	var px := ox + 8.0
 	while px < end - 4.0:
-		defs.append({"c": Vector3(px, Cfg.height_at(px, 88.0), 88.0), "kind": "palm", "h": 7.0})
+		var py := Cfg.height_at(px, 88.0)
+		# Palmeira = TRONCO + COPA, duas instancias do MESMO MultiMesh (B-52):
+		# uma coluna verde de 7 m nao lia como palmeira, lia como poste verde.
+		defs.append({"c": Vector3(px, py, 88.0), "kind": "palm", "h": 7.0})
+		defs.append({"c": Vector3(px, py, 88.0), "kind": "palm_crown", "h": 7.0, "rot": 0.42})
 		px += 32.0
 	# Mobiliario do calçadão: bancos e lixeiras a cada 32 m.
 	var bx := ox + 16.0
@@ -260,7 +264,12 @@ static func _block(gb: GBuf, win: GBuf, walk: TBuf, road: TBuf, calcadao: TBuf, 
 		if lod == LOD_FULL:
 			var tx := ax + BLOCK * 0.42
 			var tz := az + BLOCK * 0.55
-			defs.append({"c": Vector3(tx, Cfg.surface_at(tx, tz), tz), "kind": "tree", "h": rng.range_f(7.0, 11.0)})
+			var th := rng.range_f(7.0, 11.0)
+			var ty := Cfg.surface_at(tx, tz)
+			# Arvore = tronco + copa, duas instancias do mesmo MultiMesh (B-52).
+			defs.append({"c": Vector3(tx, ty, tz), "kind": "tree", "h": th})
+			defs.append({"c": Vector3(tx, ty, tz), "kind": "tree_crown", "h": th,
+					"hue": rng.unit(), "rot": rng.range_f(0.0, PI)})
 		return
 
 	# Area de lotes: miolo da calcada, menos a faixa de calcada.
@@ -331,7 +340,7 @@ static func _lot(gb: GBuf, win: GBuf, bld: TBuf, defs: Array, colliders: Array, 
 
 	if empty:
 		if lod == LOD_FULL and shrub:
-			defs.append({"c": Vector3(lx, ground_y, lz), "kind": "bush", "h": shrub_h})
+			defs.append({"c": Vector3(lx, ground_y, lz), "kind": "bush", "h": shrub_h, "rot": 0.6})
 		return
 
 	var bx := lx + off_x
@@ -431,14 +440,20 @@ static func _add_awning(gb: GBuf, lx: float, lz: float, bx: float, bz: float,
 
 ## Ruas da quadra (borda oeste e sul) com a sinalizacao pintada.
 ##
-## A rua vertical sobe 5 mm em relacao a horizontal: as duas se cruzam na
-## esquina e, no MESMO nivel, o asfalto piscava (z-fighting) em todo cruzamento.
+## As duas ruas NAO se sobrepoem mais (B-52). Antes a vertical era desenhada
+## inteira e a horizontal subia 5 mm para ganhar a disputa no cruzamento — mas
+## 5 mm nao resolvem nada a partir de ~150 m: o cruzamento piscava (z-fighting)
+## e na tela isso parece granulado na rua. Agora a vertical e desenhada so no
+## trecho que nenhuma horizontal cobre (de az + h a az + BLOCK - h): as duas
+## faixas de 10 m dos cruzamentos ficam por conta das horizontais, que ja
+## passam ali. A horizontal so cobre x >= ax, entao a faixa a oeste continua
+## vindo da horizontal da quadra vizinha, como antes.
 ## A pintura (eixo amarelo, faixa de pedestres, linha de retencao) e so do LOD
 ## full: e detalhe de perto e custa vertices que o anel distante nao precisa.
 static func _add_roads(gb: GBuf, road: TBuf, ax: float, az: float, lod: int) -> void:
 	var h := ROAD * 0.5
 	_add_flat_tx(road, ax, az - h, ax + BLOCK, az + h)
-	_add_flat_tx(road, ax - h, az, ax + h, az + BLOCK, FLAT_LIFT + 0.005)
+	_add_flat_tx(road, ax - h, az + h, ax + h, az + BLOCK - h)
 	if lod != LOD_FULL:
 		return
 	# Eixo amarelo tracejado nas duas ruas (4 m de tinta, 8 m de vazio).
