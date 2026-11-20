@@ -401,6 +401,17 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   noite. A casca de vidro saiu, entao o numero de desenhos por setor continua o
   mesmo (a surface de vidro virou a de fachada). Topo e base usam o canto liso
   da textura para o telhado nao ganhar janela. NAO validado no aparelho.
+- B-49: Fase 4 — FACHADA FOTOGRAFADA. A fachada gerada em codigo (um retangulo
+  de janela por modulo) foi trocada por uma textura fotografada de verdade:
+  "Buildings - Batch of 21 Seamless Textures" de Keith333 (OpenGameArt,
+  CC-BY 3.0, arquivo por arquivo, sem zip). Modulo escolhido:
+  `ApartmentWindows_S.jpg`, 8 janelas x 4 andares cobrindo 22,9 x 12 m. O UV do
+  predio passou a usar DUAS medidas (`FACADE_W`/`FACADE_H`) em vez de um tile
+  unico, senao a janela esticava. A foto tambem serve de mapa de emissao a
+  noite, com energia baixa (a fachada pega luz de cidade em vez de ficar preta).
+  O padrao gerado continua como reserva. Poly Haven NAO tem categoria de
+  fachada; ambientCG tem (CC0) mas so em .zip. NAO validado no aparelho: falta
+  ver a escala da janela na tela e a noite.
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 

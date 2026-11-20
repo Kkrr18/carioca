@@ -18,6 +18,7 @@ const TEX_ROAD := "res://assets/textures/asphalt.jpg"
 const TEX_WALK := "res://assets/textures/pavement.jpg"
 const TEX_SAND := "res://assets/textures/sand.jpg"
 const TEX_CALCADA := "res://assets/textures/calcada.jpg"
+const TEX_FACADE := "res://assets/textures/facade.jpg"
 
 var world_seed: int = 20260922
 var full_ring: int = 1
@@ -101,9 +102,26 @@ static func facade_value(u: float, v: float) -> Vector2:
 	return Vector2(shade, 0.0)
 
 
-## Material da fachada: textura cinza (tingida pela cor de vertice do predio) e
-## mapa de emissao que acende SO as janelas a noite.
+## Material da fachada dos predios. Com a textura fotografada (Keith333, CC-BY
+## 3.0) usa a foto; sem ela, cai no padrao gerado (parede + janela), que tambem
+## tem mapa de emissao alinhado. A cor de vertice do predio tinge a textura.
 func _facade_material() -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.vertex_color_use_as_albedo = true
+	m.vertex_color_is_srgb = false
+	m.roughness = 0.9
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	m.emission_enabled = true
+	m.emission_energy_multiplier = 0.0
+	if ResourceLoader.exists(TEX_FACADE):
+		var res: Resource = load(TEX_FACADE)
+		if res is Texture2D:
+			m.albedo_texture = res as Texture2D
+			# A noite a propria foto vira mapa de emissao, com energia baixa: a
+			# fachada ganha luz de cidade em vez de virar um bloco preto.
+			m.emission_texture = res as Texture2D
+			m.emission = Color(0.60, 0.52, 0.40)
+			return m
 	var size := 128
 	var albedo := Image.create(size, size, true, Image.FORMAT_RGB8)
 	var emit := Image.create(size, size, true, Image.FORMAT_RGB8)
@@ -115,16 +133,9 @@ func _facade_material() -> StandardMaterial3D:
 			emit.set_pixel(x, y, Color.WHITE if f.y > 0.5 else Color.BLACK)
 	albedo.generate_mipmaps()
 	emit.generate_mipmaps()
-	var m := StandardMaterial3D.new()
-	m.vertex_color_use_as_albedo = true
-	m.vertex_color_is_srgb = false
 	m.albedo_texture = ImageTexture.create_from_image(albedo)
-	m.emission_enabled = true
-	m.emission = Color(1.0, 0.85, 0.55)
 	m.emission_texture = ImageTexture.create_from_image(emit)
-	m.emission_energy_multiplier = 0.0
-	m.roughness = 0.9
-	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	m.emission = Color(1.0, 0.85, 0.55)
 	return m
 
 

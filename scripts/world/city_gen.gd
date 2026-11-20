@@ -46,9 +46,11 @@ const ROAD_TILE := 3.0
 const WALK_TILE := 3.0
 const SAND_TILE := 10.0
 const CALCADAO_TILE := 6.0   # onda da calcada de Copacabana: 1 padrao a cada 6 m
-# Fachada: uma janela por andar. O pe-direito e 3 m, entao a textura de fachada
-# repete a cada 3 m na vertical E na horizontal (uma janela por modulo).
-const FACADE_TILE := 3.0
+# Fachada: a textura fotografada (Keith333, CC-BY 3.0) cobre 22,9 m de largura
+# com 8 janelas e 12 m de altura com 4 andares. O UV usa essas duas medidas, e
+# nao um "tile" unico, senao a janela estica.
+const FACADE_W := 22.9
+const FACADE_H := 12.0
 ## Canto liso da textura de fachada: usado nas faces de topo e base, para o
 ## telhado nao ganhar janela.
 const FLAT_UV := Vector2(0.02, 0.02)
@@ -96,7 +98,7 @@ static func generate(sx: int, sz: int, world_seed: int, lod: int) -> Array:
 	var walk := TBuf.new(WALK_TILE)
 	var sand := TBuf.new(SAND_TILE)
 	var calcadao := TBuf.new(CALCADAO_TILE)
-	var bld := TBuf.new(FACADE_TILE)
+	var bld := TBuf.new(FACADE_W, FACADE_H)
 	var defs: Array = []
 	var colliders: Array = []
 	var ox := float(sx) * Cfg.SECTOR_SIZE
@@ -467,7 +469,7 @@ static func _add_box_tx(tb: TBuf, center: Vector3, size: Vector3, color: Color) 
 			tb.quad_uv(p0, p1, p2, p3, fc, FLAT_UV, FLAT_UV, FLAT_UV, FLAT_UV, color)
 		else:
 			var uu := (yv * 2.0).length() / tb.tile
-			var vv := (zv * 2.0).length() / tb.tile
+			var vv := (zv * 2.0).length() / tb.tile_v
 			tb.quad_uv(p0, p1, p2, p3, fc,
 					Vector2(0.0, 0.0), Vector2(uu, 0.0), Vector2(uu, vv), Vector2(0.0, vv), color)
 
@@ -524,9 +526,12 @@ class TBuf:
 	## paleta). Chao e asfalto ficam sem cor propria e usam a cor da textura.
 	var col := PackedColorArray()
 	var tile := 3.0
+	## Repeticao vertical (quando difere da horizontal, como na fachada).
+	var tile_v := 3.0
 
-	func _init(tile_m: float) -> void:
+	func _init(tile_m: float, tile_v_m: float = -1.0) -> void:
 		tile = maxf(0.5, tile_m)
+		tile_v = tile if tile_v_m < 0.0 else maxf(0.5, tile_v_m)
 
 	func quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, normal: Vector3) -> void:
 		for p in [a, b, c, a, c, d]:

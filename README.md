@@ -43,9 +43,9 @@ Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
   quem anda acompanha (personagem e carro sobem no meio-fio).
 - Texturas no chão: asfalto, calçada, areia e o calçadão de pedra portuguesa
   (CC0), em escala de mundo (repetem por metro).
-- Fachada de prédio texturada: parede com janelas e mapa de emissão próprio,
-  que acende só as janelas à noite (textura gerada em código, tingida pela
-  paleta de cada prédio).
+- Fachada de prédio: textura fotografada de janelas (Keith333, CC-BY 3.0,
+  8 janelas × 4 andares num módulo de 22,9 × 12 m), tingida pela paleta de cada
+  prédio e com a própria foto como mapa de emissão à noite.
 - Som: motor sintetizado em código que sobe de tom com o giro, ruído de cidade
   ao fundo e impacto CC0 nas batidas (o Safari só libera áudio depois do
   primeiro toque na tela).

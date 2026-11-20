@@ -46,6 +46,12 @@
 
 ## Texturas
 
+- `assets/textures/facade.jpg` — "Buildings - Batch of 21 Seamless Textures
+  with normalmaps" (`ApartmentWindows_S.jpg`) de **Keith333** em
+  https://opengameart.org/content/buildings-batch-of-21-seamless-textures-with-normalmaps.
+  Licenca **CC-BY 3.0**: atribuicao obrigatoria —
+  "Buildings - Batch of 21 Seamless Textures" por Keith333, CC-BY 3.0.
+  Cobre 22,9 m de largura (8 janelas) por 12 m de altura (4 andares).
 - `assets/textures/calcada.jpg` — "Seamless calcada (Portuguese pavement)" de
   **Demetrius** em https://opengameart.org/content/seamless-calcada-portuguese-pavement.
   Licenca **CC0** (credito opcional). Usada no calcadao da orla.
