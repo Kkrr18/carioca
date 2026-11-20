@@ -231,6 +231,9 @@ func _build_model() -> void:
 		add_child(pivot)
 		var parent := node.get_parent()
 		if parent != null:
+			# Sem soltar o owner, o Godot avisa "owner ... inconsistent" a cada
+			# roda movida, e esse aviso aparece no painel de console do iPhone.
+			node.owner = null
 			parent.remove_child(node)
 		pivot.add_child(node)
 		node.transform = wheel_in_pivot(in_car, center)
