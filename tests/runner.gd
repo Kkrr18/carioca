@@ -1047,37 +1047,41 @@ func _test_pedestrians() -> void:
 
 
 func _test_pedestrian_model() -> void:
-	# B-54: o pedestre externo (CesiumMan, CC-BY 4.0). O CI tem que importar o
-	# .glb e provar o que o jogo usa: malha com triangulos, esqueleto com UMA
-	# animacao de caminhada e altura plausivel para normalizar a escala.
-	check(ResourceLoader.exists(Pedestrians.MODEL_PATH),
-		"modelo do pedestre no projeto (%s)" % Pedestrians.MODEL_PATH)
-	var scene := Pedestrians.load_model()
-	check(scene != null, "modelo do pedestre carrega como cena")
-	if scene == null:
+	# B-57: corpos VESTIDOS da Quaternius (CC0) + animacoes retargetadas do
+	# "Animated Human" (CC0). O CI tem que provar o que o jogo usa: os corpos
+	# importam, tem esqueleto, e o clipe de caminhada casa com os ossos deles
+	# (se nao casar, o pedestre fica em T-pose parado no ar e o jogo cai para
+	# as caixas).
+	var clips := Pedestrians.load_clips(Pedestrians.ANIM_PATH)
+	var walk := Pedestrians.pick_clip(clips, "walk")
+	check(not clips.is_empty(), "animacoes do pedestre carregam (%d clipes)" % clips.size())
+	check(walk != "", "clipe de caminhada encontrado (%s)" % walk)
+	check(Pedestrians.pick_clip(clips, "idle") != "", "clipe de parado encontrado")
+	if walk == "":
 		return
-	var inst: Node3D = scene.instantiate()
-	var mi := Pedestrians._find_mesh(inst)
-	var ap := Pedestrians._find_anim(inst)
-	check(mi != null and mi.mesh != null, "modelo do pedestre tem malha")
-	var tris := ModelProp.count_tris(inst)
-	var box := ModelProp.mesh_aabb(inst)
-	print("  info: pedestre: %d tris, %.2f larg x %.2f alt x %.2f prof m" % [
-		tris, box.size.x, box.size.y, box.size.z])
-	check(tris > 200 and tris < 20000, "modelo do pedestre: %d triangulos" % tris)
-	check(box.size.y > 1.0 and box.size.y < 3.0,
-		"altura do modelo plausivel (%.2f m)" % box.size.y)
-	check(ap != null, "modelo do pedestre tem AnimationPlayer")
-	if ap != null and ap.get_animation_list().size() > 0:
-		var an := String(ap.get_animation_list()[0])
-		var anim := ap.get_animation(an)
-		var length := anim.length if anim != null else 0.0
-		var tracks := anim.get_track_count() if anim != null else 0
-		check(length > 0.3 and tracks > 5,
-			"ciclo de caminhada de %.2f s, %d trilhas (%s)" % [length, tracks, an])
-	else:
-		check(false, "modelo do pedestre sem animacao (o passo nao andaria)")
-	inst.free()
+	var anim: Animation = clips[walk]
+	check(anim.get_track_count() > 10 and anim.length > 0.3,
+		"caminhada com %d trilhas e %.2f s" % [anim.get_track_count(), anim.length])
+	var ok_bodies := 0
+	for path in Pedestrians.BODY_PATHS:
+		var sc := Pedestrians.load_scene(path)
+		if sc == null:
+			check(false, "corpo do pedestre importou (%s)" % String(path).get_file())
+			continue
+		var inst: Node3D = sc.instantiate()
+		var sk := Pedestrians._find_skel(inst)
+		var box := ModelProp.mesh_aabb(inst)
+		var tris := ModelProp.count_tris(inst)
+		var can := Pedestrians.can_retarget(inst, anim)
+		print("  info: corpo %s: %d tris, %.2f m de altura, rig %s, caminhada %s" % [
+			String(path).get_file(), tris, box.size.y,
+			"sim" if sk != null else "NAO", "sim" if can else "NAO"])
+		if sk != null and can and tris > 200:
+			ok_bodies += 1
+		inst.free()
+	check(ok_bodies == Pedestrians.BODY_PATHS.size(),
+		"os %d corpos tem esqueleto e aceitam a caminhada (%d ok)" % [
+			Pedestrians.BODY_PATHS.size(), ok_bodies])
 
 
 func _test_windows() -> void:

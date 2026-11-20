@@ -43,13 +43,21 @@
 - Regra do projeto: so CC0 ou CC-BY, com origem e licenca anotadas aqui e em
   [assets/models/README.md](../assets/models/README.md). Nada de conteudo com
   copyright de jogo comercial.
-- `assets/models/pedestrian.glb` — **"Cesium Man"**, personagem animado e com
-  esqueleto do **Khronos glTF Sample Assets**
-  (https://github.com/KhronosGroup/glTF-Sample-Assets, `Models/CesiumMan`).
-  (c) 2017 **Cesium**, licenca **CC-BY 4.0**
-  (https://creativecommons.org/licenses/by/4.0/): atribuicao obrigatoria —
-  "Cesium Man, (c) 2017 Cesium, CC-BY 4.0". Um ciclo de caminhada embutido,
-  ~1,5 mil triangulos. Usado nos pedestres (B-54).
+- `assets/models/ped-casual.glb`, `ped-worker.glb`, `ped-beach.glb` — corpos de
+  pessoa **vestidos** (adultos, com esqueleto) do pack **"Ultimate Modular
+  Characters"** de **Quaternius** (https://quaternius.com). Licenca **CC0 1.0**
+  (nenhuma atribuicao exigida; fica registrada por respeito ao autor). Obtidos
+  do espelho no GitHub **trebeljahr/quaternius-showcase**
+  (https://github.com/trebeljahr/quaternius-showcase, pasta
+  `public/glb/modular_men/`), porque o download do site oficial e .zip e o
+  iPhone nao descompacta. Os arquivos NAO trazem animacao nenhuma.
+- `assets/models/ped-walk.glb` — animacoes (**idle, walk, run**) do pack
+  **"Animated Human Low Poly"** de **Quaternius**
+  (https://opengameart.org/content/animated-human-low-poly, 2017), licenca
+  **CC0 1.0**. Copia em .glb do espelho **pengqianhan/campus-world-model**
+  (https://github.com/pengqianhan/campus-world-model, `public/models/walker.glb`).
+  So os clipes sao usados: sao RETARGETADOS para o esqueleto dos corpos acima
+  (mesmo rig da Quaternius) por `scripts/world/pedestrians.gd`.
 
 ## Texturas
 

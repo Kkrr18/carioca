@@ -532,6 +532,24 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   aparelho: 30 FPS parado (p95 34-38 ms), 15-20 FPS durante o streaming de
   setor, 153-166 desenhos, ~101-114 mil primitivas. O proximo corte de custo
   (se precisar) e o anel distante: 8 setores x 3 superficies texturadas.
+- B-57: Fase 4 — PERSONAGEM DE VERDADE. O autor: "pega modelos bons, os
+  personagens estao parecendo bonecos coloridos de 1,10 de altura". O problema
+  era o CesiumMan (B-54): um homem so, repetido em todo mundo, sem roupa de rua,
+  e a altura saia menor que a pedida porque a escala era medida no BIND POSE
+  (o AABB da malha parada), enquanto a pessoa e desenhada na pose da animacao.
+  SOLUCAO: tres corpos **adultos e vestidos** da Quaternius ("Ultimate Modular
+  Characters": `ped-casual`, `ped-worker`, `ped-beach`, CC0, 767/658/814 KB) e
+  as animacoes (idle/walk/run) do "Animated Human" da Quaternius (CC0,
+  `ped-walk.glb`, 543 KB), **retargetadas** em tempo de execucao: as trilhas do
+  clipe sao recopiadas apontando para o esqueleto de cada corpo, os dois vem do
+  mesmo rig. O CesiumMan saiu do projeto. Escala agora vem da ALTURA POSADA do
+  esqueleto (pe a cabeca), nao do bind pose; cada pessoa recebe um dos tres
+  corpos em rodizio (variedade de graca) e o clipe de parado toca quando ela
+  para. Sem os arquivos, volta para as caixas. O CI prova o que importa: os tres
+  corpos importam, tem esqueleto e o clipe de caminhada casa com os ossos deles
+  (se nao casasse, o pedestre ficaria em T-pose e o teste falharia). Custo:
+  4 arquivos, ~2,7 MB; cada pessoa continua 1 desenho. NAO validado no aparelho
+  ainda.
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 

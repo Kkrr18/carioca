@@ -41,12 +41,12 @@ Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
   que giram e esterçam. As ruas têm sinalização pintada: eixo amarelo, faixa de
   pedestres e linha de retenção.
 - Pedestres com rotina: pessoas andando na calçada em volta das quadras e na
-  praia, com modelo animado de verdade (CesiumMan, CC-BY 4.0: esqueleto e ciclo
-  de caminhada). Cada uma tem destino, pressa e roupa próprios, para no canto,
-  espera o sinal abrir para atravessar (a mesma fase dos semáforos dos carros),
-  desiste e segue se demorar, sai da sua frente quando você chega perto e corre
-  se um carro aparece em cima dela na travessia. À noite a rua esvazia. O passo
-  congela quando a pessoa espera. Sem o modelo, o jogo volta sozinho para
+  praia, com modelo de verdade — três adultos vestidos da Quaternius (CC0) e as
+  animações de andar/parar/correr retargetadas para eles. Cada um tem destino,
+  pressa e tom próprios, para no canto, espera o sinal abrir para atravessar (a
+  mesma fase dos semáforos dos carros), desiste e segue se demorar, sai da sua
+  frente quando você chega perto e corre se um carro aparece em cima dele na
+  travessia. À noite a rua esvazia. Sem os modelos, o jogo volta sozinho para
   bonecos de caixa (3 desenhos para todos).
 - Semáforos: quatro postes por cruzamento com ciclo verde/amarelo/vermelho
   defasado; os carros param na linha de retenção e atravessam no verde. A

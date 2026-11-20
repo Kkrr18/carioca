@@ -17,7 +17,8 @@ copyright de jogo comercial.
 | quaternius-suv.glb | Quaternius ([poly.pizza/m/xsMtZhBkxL](https://poly.pizza/m/xsMtZhBkxL)) | CC0 1.0 | 177 KB | tráfego |
 | quaternius-sports-car.glb | Quaternius (pack "Cars") | CC0 1.0 | 171 KB | tráfego (carro raro/mais rápido) |
 | quaternius-taxi.glb | Quaternius (pack "Cars") | CC0 1.0 | 177 KB | tráfego (taxi carioca) |
-| pedestrian.glb | [Khronos glTF Sample Assets — CesiumMan](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/CesiumMan) | **CC-BY 4.0**, (c) 2017 Cesium (atribuição obrigatória) | 428 KB | pedestres (B-54): personagem com esqueleto e ciclo de caminhada |
+| ped-casual.glb, ped-worker.glb, ped-beach.glb | Quaternius, "Ultimate Modular Characters" ([espelho no GitHub](https://github.com/trebeljahr/quaternius-showcase/tree/main/public/glb/modular_men)) | CC0 1.0 | 767 / 658 / 814 KB | pedestres (B-57): adultos vestidos com esqueleto, **sem animação** |
+| ped-walk.glb | Quaternius, "Animated Human Low Poly" ([OpenGameArt](https://opengameart.org/content/animated-human-low-poly), [espelho](https://github.com/pengqianhan/campus-world-model)) | CC0 1.0 | 543 KB | só as animações (idle/walk/run), retargetadas para os corpos acima |
 
 **Os carros da Quaternius nao tem textura**: as cores vem de material por peça
 (carroceria, vidros, farois, lanternas, pneus). Isso e otimo aqui: como a cor e

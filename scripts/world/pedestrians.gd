@@ -59,16 +59,22 @@ const GIVE_UP := 18.0           # s esperando o sinal antes de desistir
 const DODGE_RADIUS := 1.5       # m do jogador: sai da frente
 const CAR_PANIC := 9.0          # carro a menos disso durante a travessia: corre
 
-# --- Modelo externo (B-54) ---------------------------------------------------
-## Pessoa animada de verdade no lugar das caixas: CesiumMan (Khronos glTF Sample
-## Assets, CC-BY 4.0, (c) 2017 Cesium), 1,5 mil triangulos e um ciclo de
-## caminhada. Um modelo por pedestre custa um desenho por pessoa, por isso a
-## turma cai para MODEL_PEDS; sem o arquivo, o jogo volta sozinho para as caixas.
-const MODEL_PATH := "res://assets/models/pedestrian.glb"
+# --- Modelos externos (B-57) -------------------------------------------------
+## Corpos: adultos VESTIDOS da Quaternius ("Ultimate Modular Characters", CC0).
+## Tem esqueleto e roupa de gente normal, mas nenhuma animacao propria.
+const BODY_PATHS := [
+	"res://assets/models/ped-casual.glb",
+	"res://assets/models/ped-worker.glb",
+	"res://assets/models/ped-beach.glb",
+]
+## Fonte das animacoes: Quaternius "Animated Human" (CC0, OpenGameArt). So os
+## clipes sao usados; eles sao RETARGETADOS para o esqueleto dos corpos acima.
+const ANIM_PATH := "res://assets/models/ped-walk.glb"
+## Altura final de cada pessoa, em metros (medida na pose, nao no bind pose).
+const MODEL_HEIGHT := 1.78
+## Os ossos vao do pe ate a cabeca (nao ate o topo do cranio): ~88% da altura.
+const BONE_EXTENT := 0.88
 const MODEL_PEDS := 12          # quantas pessoas quando o modelo carrega
-const MODEL_HEIGHT := 1.72      # altura final em metros (normalizada pelo AABB)
-## O glTF olha para +Z; o pedestre anda com o -Z do no virado para a frente.
-const MODEL_YAW := PI
 const VIS_RANGE := 95.0         # m: alem disso o pedestre nem e desenhado
 
 # Paleta das pessoas. Pele e roupa variam, como na rua de verdade.
@@ -96,10 +102,12 @@ var _clock := 0.0
 var _follow_t := 0.0
 var _visible := 0
 var _use_model := false
+var _body_scenes: Array = []    # PackedScene dos corpos (Casual/Worker/Beach)
+var _clips: Dictionary = {}     # nome do clipe -> Animation (de ped-walk.glb)
+var _walk_anim := ""
+var _idle_anim := ""
 var _holders: Array = []        # Node3D de cada pedestre (modelo animado)
 var _anims: Array = []          # AnimationPlayer de cada pedestre
-var _anim_name := ""
-var _idle_seek := 0.0
 var _mat: StandardMaterial3D
 var _mm_shadow: MultiMeshInstance3D
 var _mm_body: MultiMeshInstance3D
@@ -344,15 +352,21 @@ func setup(base_seed: int, focus: Vector3 = Vector3.ZERO) -> void:
 	_mat.roughness = 0.92
 	_mat.metallic_specular = 0.1
 
-	# Modelo animado (B-54). Sem ele (arquivo faltando ou import quebrado) o
+	# Corpos + animacoes (B-57). Sem os arquivos (ou se o import quebrar) o
 	# sistema continua com as caixas coloridas: o jogo nunca fica sem gente.
-	var scene := load_model()
-	var can_model := false
-	if scene != null:
-		var probe: Node = scene.instantiate()
-		can_model = _find_mesh(probe) != null
+	_clips = load_clips(ANIM_PATH)
+	_walk_anim = pick_clip(_clips, "walk")
+	_idle_anim = pick_clip(_clips, "idle")
+	_body_scenes.clear()
+	for path in BODY_PATHS:
+		var sc := load_scene(path)
+		if sc != null:
+			_body_scenes.append(sc)
+	_use_model = false
+	if not _body_scenes.is_empty() and _walk_anim != "":
+		var probe: Node3D = _body_scenes[0].instantiate()
+		_use_model = can_retarget(probe, _clips[_walk_anim])
 		probe.free()
-	_use_model = can_model
 	if _use_model:
 		peds_total = mini(peds_total, MODEL_PEDS)
 
@@ -361,7 +375,7 @@ func setup(base_seed: int, focus: Vector3 = Vector3.ZERO) -> void:
 		peds.append(spawn_ped(base_seed + k * 6151, k))
 
 	if _use_model:
-		_build_models(scene)
+		_build_models()
 	else:
 		_build_boxes()
 	_build_shadows()
@@ -394,75 +408,160 @@ func _build_shadows() -> void:
 	add_child(_mm_shadow)
 
 
-## Carrega o .glb do pedestre; null se o arquivo nao existe ou nao importou.
-static func load_model() -> PackedScene:
-	if not ResourceLoader.exists(MODEL_PATH):
+## Carrega um .glb; null se o arquivo nao existe ou nao importou.
+static func load_scene(path: String) -> PackedScene:
+	if not ResourceLoader.exists(path):
 		return null
-	var res: Resource = load(MODEL_PATH)
+	var res: Resource = load(path)
 	return res as PackedScene
 
 
-## Um modelo animado por pedestre: escala e apoio no chao pelo AABB (nao se
-## confia no export), tinta suave por pessoa e o ciclo de caminhada tocando
-## defasado, senao a rua inteira anda no mesmo compasso.
-func _build_models(scene: PackedScene) -> void:
+## Todos os clipes de animacao de um .glb, por nome (o de caminhada vem de
+## ped-walk.glb: os corpos da Quaternius nao trazem animacao nenhuma).
+static func load_clips(path: String) -> Dictionary:
+	var out := {}
+	var scene := load_scene(path)
+	if scene == null:
+		return out
+	var inst: Node = scene.instantiate()
+	var ap := _find_anim(inst)
+	if ap != null:
+		for name in ap.get_animation_list():
+			var a := ap.get_animation(String(name))
+			if a != null:
+				out[String(name)] = a
+	inst.free()
+	return out
+
+
+## Nome do primeiro clipe que contenha `want` (walk, idle, run...).
+static func pick_clip(clips: Dictionary, want: String) -> String:
+	for name in clips.keys():
+		if String(name).to_lower().contains(want):
+			return String(name)
+	return ""
+
+
+## O corpo consegue receber essa animacao? Basta UMA trilha apontar para um osso
+## que existe nele (o rig da Quaternius e o mesmo nos corpos e no walker).
+static func can_retarget(body: Node3D, anim: Animation) -> bool:
+	var sk := _find_skel(body)
+	if sk == null or anim == null:
+		return false
+	var bones := _bone_names(sk)
+	for ti in anim.get_track_count():
+		if bones.has(_track_bone(anim, ti)):
+			return true
+	return false
+
+
+## Copia a animacao trocando o caminho das trilhas pelo caminho do esqueleto
+## DESTE corpo: os dois arquivos vem do mesmo rig, mas a hierarquia de nos pode
+## ter outro nome. Trilhas que nao casam com um osso do corpo sao descartadas.
+static func retarget(anim: Animation, skel_path: String, bones: Dictionary) -> Animation:
+	var out := Animation.new()
+	out.length = anim.length
+	out.loop_mode = Animation.LOOP_LINEAR
+	for ti in anim.get_track_count():
+		var bone := _track_bone(anim, ti)
+		if not bones.has(bone):
+			continue
+		var t := out.add_track(anim.track_get_type(ti))
+		out.track_set_path(t, NodePath(skel_path + ":" + bone))
+		out.track_set_interpolation_type(t, anim.track_get_interpolation_type(ti))
+		var keys := anim.track_get_key_count(ti)
+		for k in keys:
+			out.track_insert_key(t, anim.track_get_key_time(ti, k), anim.track_get_key_value(ti, k))
+	return out
+
+
+static func _track_bone(anim: Animation, ti: int) -> String:
+	return String(anim.track_get_path(ti).get_concatenated_subnames())
+
+
+static func _bone_names(sk: Skeleton3D) -> Dictionary:
+	var out := {}
+	for b in sk.get_bone_count():
+		out[String(sk.get_bone_name(b))] = true
+	return out
+
+
+## Altura do esqueleto POSADO (pe ate a cabeca), no mundo. E a medida certa para
+## escalar: o AABB da malha e o do bind pose e mente quando a animacao encolhe.
+static func posed_height(sk: Skeleton3D) -> float:
+	if sk == null or sk.get_bone_count() == 0:
+		return 0.0
+	var lo := INF
+	var hi := -INF
+	for b in sk.get_bone_count():
+		var y: float = sk.get_bone_global_pose(b).origin.y
+		lo = minf(lo, y)
+		hi = maxf(hi, y)
+	var sc := sk.global_transform.basis.get_scale().y if sk.is_inside_tree() else 1.0
+	return maxf(0.0, (hi - lo) * sc)
+
+
+## Um pedestre de verdade: corpo vestido (Casual/Worker/Beach) + as animacoes
+## retargetadas de ped-walk.glb. Escala pela altura POSADA, apoio no chao pelo
+## AABB e um tom leve por pessoa (sem tingir a pele).
+func _build_models() -> void:
 	_holders.clear()
 	_anims.clear()
 	for i in peds.size():
 		var p: Dictionary = peds[i]
+		var scene: PackedScene = _body_scenes[i % _body_scenes.size()]
 		var root := Node3D.new()
 		root.name = "Ped%d" % i
+		# Na arvore ANTES de montar os caminhos de osso (precisa de pai).
+		add_child(root)
 		var inst: Node3D = scene.instantiate()
 		root.add_child(inst)
-		var mi := _find_mesh(inst)
-		if mi != null and mi.mesh != null:
-			# Transform RELATIVA a raiz da cena: no glTF importado a malha pode
-			# estar fundo dentro do esqueleto, e ai `mi.transform` sozinho nao
-			# diz onde ela esta (era o que jogava o modelo para o lado/afundado).
-			var box: AABB = ModelProp.rel_xf(mi, inst) * mi.mesh.get_aabb()
-			var h := maxf(0.5, box.size.y)
-			var centre := box.get_center()
-			inst.scale = Vector3.ONE * (MODEL_HEIGHT / h)
-			inst.position = Vector3(-centre.x, -box.position.y, -centre.z) * (MODEL_HEIGHT / h)
-			# NAO pintar o corpo: o modelo ja tem roupa e pele na textura, e
-			# tingir tudo de verde/azul transformava as pessoas em manequins
-			# listrados (era o "bugado" que o autor viu). So um tom leve, para
-			# as roupas variarem sem a pele virar outra cor.
-			var base := mi.get_active_material(0) as StandardMaterial3D
+		var sk := _find_skel(inst)
+		# O corpo da Quaternius e feito de VARIAS malhas (tronco, cabeca, bracos,
+		# pernas): todo ajuste tem que valer para todas, senao sobra pedaco
+		# flutuando a distancia (a visibilidade e por malha).
+		var box: AABB = ModelProp.mesh_aabb(inst)
+		var tone := 0.90 + 0.12 * float(i % 5) / 4.0
+		for node in ModelProp.collect_meshes(inst):
+			var mi := node as MeshInstance3D
+			if mi == null:
+				continue
+			var base := mi.get_active_material(0) as BaseMaterial3D
 			if base != null:
-				var tint := base.duplicate() as StandardMaterial3D
+				var tint := base.duplicate() as BaseMaterial3D
 				if tint != null:
-					var tone := 0.88 + 0.16 * float(i % 5) / 4.0
-					tint.albedo_color = Color(tone, tone, tone).lerp(p["shirt"], 0.18)
+					tint.albedo_color = Color(tone, tone, tone).lerp(p["shirt"], 0.16)
 					mi.material_override = tint
 			mi.visibility_range_end = VIS_RANGE
 			mi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
-			# Sombra no chao SIM: sem ela o pedestre le como adesivo colado na
-			# areia (o inspetor descreveu exatamente isso). Foram 12 pessoas, e
-			# nao 14, para pagar essa sombra.
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-		var ap := _find_anim(inst)
-		if ap != null:
-			var names := ap.get_animation_list()
-			if names.size() > 0:
-				_anim_name = String(names[0])
-				var anim := ap.get_animation(_anim_name)
-				# O import do glTF pode deixar a animacao em LOOP_NONE, e ai o
-				# passo roda UMA vez e a pessoa congela andando. Loop garantido.
-				var length := 1.0
-				if anim != null:
-					anim.loop_mode = Animation.LOOP_LINEAR
-					length = maxf(0.2, anim.length)
-					# Quadro do "passo junto": e a pose de quem esta parado.
-					_idle_seek = length * 0.25
-				ap.play(_anim_name)
-				# Defasa o passo: senao a rua inteira anda no mesmo compasso.
-				ap.seek(fposmod(float(i) * 0.11, length), true)
-				ap.speed_scale = 1.0
-			else:
-				ap = null
-		_anims.append(ap)
-		add_child(root)
+		# Animacao: copia os clipes para um AnimationPlayer deste corpo.
+		var ap := AnimationPlayer.new()
+		ap.name = "PedAnim"
+		inst.add_child(ap)
+		if sk != null:
+			var skel_path := String(inst.get_path_to(sk))
+			var bones := _bone_names(sk)
+			for cname in _clips.keys():
+				var a := retarget(_clips[cname], skel_path, bones)
+				if a.get_track_count() > 0:
+					ap.add_animation(StringName(cname), a)
+		var k := 1.0
+		if not box.has_volume():
+			box = AABB(Vector3(-0.3, 0.0, -0.3), Vector3(0.6, 1.8, 0.6))
+		# Escala: 1) posa a caminhada, 2) mede o esqueleto posado, 3) aplica.
+		var length := maxf(0.2, ap.get_animation(_walk_anim).length if ap.has_animation(_walk_anim) else 1.0)
+		if ap.has_animation(_walk_anim):
+			ap.play(_walk_anim)
+			ap.seek(fposmod(float(i) * 0.13, length), true)
+			ap.speed_scale = 1.0
+		var posed := posed_height(sk)
+		var h := posed / BONE_EXTENT if posed > 0.3 else maxf(0.5, box.size.y)
+		k = MODEL_HEIGHT / maxf(0.5, h)
+		inst.scale = Vector3.ONE * k
+		# Apoio no chao: o ponto mais baixo da malha vai para y = 0.
+		inst.position = Vector3(-box.get_center().x, -box.position.y, -box.get_center().z) * k
+		_anims.append(ap if ap.has_animation(_walk_anim) else null)
 		_holders.append(root)
 
 
@@ -471,6 +570,16 @@ static func _find_mesh(n: Node) -> MeshInstance3D:
 		return n as MeshInstance3D
 	for c in n.get_children():
 		var f := _find_mesh(c)
+		if f != null:
+			return f
+	return null
+
+
+static func _find_skel(n: Node) -> Skeleton3D:
+	if n is Skeleton3D:
+		return n as Skeleton3D
+	for c in n.get_children():
+		var f := _find_skel(c)
 		if f != null:
 			return f
 	return null
@@ -688,14 +797,18 @@ func _write_models() -> void:
 		var kind: int = p["kind"]
 		var moving := kind == KIND_WALK or kind == KIND_CROSS
 		if moving:
+			if ap.current_animation != StringName(_walk_anim):
+				ap.play(_walk_anim)
 			# O ciclo do modelo cobre ~1,4 m/s; anda mais rapido, anda mais rapido.
 			ap.speed_scale = clampf(float(p["speed"]) / 1.40, 0.60, 2.20)
+		elif _idle_anim != "":
+			if ap.current_animation != StringName(_idle_anim):
+				ap.speed_scale = 1.0
+				ap.play(_idle_anim)
 		elif ap.speed_scale != 0.0:
-			# Parado: congela a animacao (velocidade 0) no quadro do passo junto.
-			# Nao usa pause/play: o play() recomeca o ciclo do zero e a pessoa dava
-			# um salto de pose toda vez que voltava a andar.
+			# Sem clipe de parado: congela a caminhada (velocidade 0). Nao usa
+			# pause/play: o play() recomeca o ciclo e a pessoa da um salto de pose.
 			ap.speed_scale = 0.0
-			ap.seek(_idle_seek, true)
 
 
 ## Escreve as instancias das caixas: corpo e cabeca usam a MESMA transformacao
@@ -737,5 +850,5 @@ func _write_boxes() -> void:
 
 func describe() -> String:
 	if _use_model:
-		return "pedestres: %d pessoas com modelo animado CC-BY (Cesium), 1 desenho cada" % _visible
+		return "pedestres: %d pessoas com modelo CC0 Quaternius (3 corpos vestidos), 1 desenho cada" % _visible
 	return "pedestres: %d pessoas em caixas (3 desenhos por quadro) - modelo nao carregou" % _visible
