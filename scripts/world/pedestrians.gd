@@ -76,6 +76,8 @@ const MODEL_HEIGHT := 1.78
 const BONE_EXTENT := 0.88
 const MODEL_PEDS := 12          # quantas pessoas quando o modelo carrega
 const VIS_RANGE := 95.0         # m: alem disso o pedestre nem e desenhado
+## O glTF da Quaternius olha para +Z; o pedestre anda com o -Z do no na frente.
+const MODEL_YAW := PI
 
 # Paleta das pessoas. Pele e roupa variam, como na rua de verdade.
 const SKINS := [
