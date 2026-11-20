@@ -4,16 +4,18 @@ extends RefCounted
 ## Sem estado global e sem aleatoriedade do motor: o mesmo (seed, setor, LOD)
 ## gera sempre os mesmos vertices. Roda em WorkerThreadPool (so arrays, sem nos).
 ##
-## Retorno de generate(): 17 arrays, nesta ordem:
-##   0..2  vertices/normais/cores da cidade (predios, props, pintura) — cor por vertice
+## Retorno de generate(): 24 arrays, nesta ordem:
+##   0..2  vertices/normais/cores da cidade (chao, pintura, meio-fio, toldos)
 ##   3     colisores (Array de Rect2)
 ##   4     defs (Array de Dictionary com props)
-##   5..7  fachadas de vidro (vertices/normais/cores) — surface com emissao
+##   5..7  fachadas de vidro (sempre vazias desde a B-48)
 ##   8..10 asfalto texturado (vertices/normais/UV)
 ##   11..13 calcada texturada (vertices/normais/UV)
 ##   14..16 areia texturada (vertices/normais/UV)
-## As tres ultimas superficies existem porque textura e material sao por
-## superficie: a rua, a calcada e a areia tem textura CC0 propria (Fase 4,
+##   17..19 calcadao texturado (vertices/normais/UV)
+##   20..23 fachada dos predios (vertices/normais/UV/cores) — surface com emissao
+## As superficies texturadas existem porque textura e material sao por
+## superficie: rua, calcada, areia e calcadao tem textura CC0 propria (Fase 4,
 ## premissa de realismo), o resto da cidade continua com cor por vertice.
 ## Convencao de frente: triangulo horario visto de fora (Godot). A normal de
 ## frente e -(b-a)x(d-a), que coincide com a normal salva.
@@ -61,7 +63,9 @@ const SEABED := Color(0.20, 0.31, 0.30)
 const ASPHALT := Color(0.21, 0.22, 0.24)
 const WALK_COL := Color(0.63, 0.62, 0.59)
 const PLAZA := Color(0.42, 0.52, 0.36)
-const ROOF := Color(0.36, 0.34, 0.32)
+## Telhado/laje: e a cor por vertice do teto do prisma, que multiplica o canto
+## liso da textura de fachada (FLAT_UV). Cinza de laje, nao preto.
+const ROOF := Color(0.50, 0.49, 0.45)
 const TRUNK := Color(0.34, 0.27, 0.18)
 const LEAF := Color(0.22, 0.42, 0.24)
 const GRASS := Color(0.33, 0.45, 0.27)
@@ -72,6 +76,13 @@ const PALETTE := [
 	Color(0.90, 0.88, 0.82), Color(0.82, 0.80, 0.74), Color(0.94, 0.92, 0.86),
 	Color(0.86, 0.80, 0.66), Color(0.72, 0.78, 0.76), Color(0.80, 0.70, 0.62),
 	Color(0.68, 0.72, 0.78),
+]
+
+## Lonas de toldo: o comercio de rua tem toldo COLORIDO. Antes o toldo saia na
+## cor de telhado (cinza) e parecia uma laje solta na fachada.
+const AWNINGS := [
+	Color(0.72, 0.16, 0.14), Color(0.16, 0.42, 0.60), Color(0.90, 0.86, 0.74),
+	Color(0.20, 0.46, 0.30), Color(0.86, 0.62, 0.16),
 ]
 
 # Faces do cubo: [normal para fora, tangente ya, tangente za], com za x ya = normal.
@@ -262,23 +273,58 @@ static func _block(gb: GBuf, win: GBuf, walk: TBuf, road: TBuf, calcadao: TBuf, 
 		for b in LOT_ROWS:
 			var lx := x0 + lot_w * 0.5 + float(a) * (lot_w + ALLEY)
 			var lz := z0 + lot_d * 0.5 + float(b) * (lot_d + ALLEY)
-			_lot(gb, win, bld, defs, colliders, rng, lx, lz, lot_w, lot_d, lod)
+			_lot(gb, win, bld, defs, colliders, rng, lx, lz, lot_w, lot_d, lod, ax, az)
 
 
 ## Um lote. Sorteia SEMPRE todos os valores (mesmo em LOD far), para o layout
 ## nao mudar entre os dois LODs.
+##
+## O volume do predio NAO e sempre a mesma caixa (B-50). Cada lote sorteia:
+##   - planta com largura e profundidade INDEPENDENTES (de esbelta a larga),
+##   - posicao dentro do lote (o predio nao encosta na divisa),
+##   - e um de tres volumes: caixa reta, caixa com topo recuado (setback) ou
+##     embasamento de dois/tres andares com torre recuada (as vezes chanfrada).
+## O embasamento e a caixa reta ficam com a planta INTEIRA, entao o colisor
+## retangular continua exato: todo recuo e chanfro acontece acima da rua.
 static func _lot(gb: GBuf, win: GBuf, bld: TBuf, defs: Array, colliders: Array, rng: Rng,
-		lx: float, lz: float, lot_w: float, lot_d: float, lod: int) -> void:
+		lx: float, lz: float, lot_w: float, lot_d: float, lod: int, ax: float, az: float) -> void:
 	var empty := not rng.chance(0.92)
 	var floors := rng.range_i(1, 7)
 	if rng.chance(0.18):
 		floors = rng.range_i(9, 20)
-	var w := lot_w - rng.range_f(1.0, 3.0)
-	var d := lot_d - rng.range_f(1.0, 3.0)
+	# Planta: as duas medidas sao independentes. Antes eram "lote menos 1 a 3 m"
+	# nas DUAS (~20 x 20 m em todo lote) — era essa uniformidade que fazia a
+	# cidade parecer feita de cubos iguais.
+	var fit_w := lot_w - 1.2
+	var fit_d := lot_d - 1.2
+	var w := fit_w * rng.range_f(0.50, 1.0)
+	var d := fit_d * rng.range_f(0.50, 1.0)
+	var off_x := rng.range_f(-1.0, 1.0) * (fit_w - w) * 0.5
+	var off_z := rng.range_f(-1.0, 1.0) * (fit_d - d) * 0.5
 	var col: Color = PALETTE[rng.range_i(0, PALETTE.size() - 1)]
+	# Embasamento mais escuro (pedra/concreto): separa a loja do corpo do predio.
+	var base_col := col.darkened(0.32)
 	var awning := rng.chance(0.35)
+	var awning_col: Color = AWNINGS[rng.range_i(0, AWNINGS.size() - 1)]
 	var shrub := rng.chance(0.55)
 	var shrub_h := rng.range_f(2.5, 4.0)
+	# Volume: 0 = caixa, 1 = topo recuado, 2 = embasamento + torre recuada.
+	var style := 0
+	if floors >= 3:
+		style = 1 if rng.chance(0.4) else 2
+	var tower_f := rng.range_f(0.58, 0.80)
+	var tower_f2 := rng.range_f(0.58, 0.80)
+	var tower_sx := rng.range_f(-1.0, 1.0)
+	var tower_sz := rng.range_f(-1.0, 1.0)
+	var step_floors := float(rng.range_i(1, 2))
+	var chamfered := rng.chance(0.45)
+	var chamfer_corner := rng.range_i(0, 3)
+	var chamfer_cut := rng.range_f(2.2, 3.8)
+	# Detalhe de cobertura (casa de maquinas / caixa d'agua / antena).
+	var roof_kind := rng.range_i(0, 2)
+	var roof_hue := rng.unit()
+	var roof_ox := rng.range_f(-1.0, 1.0)
+	var roof_oz := rng.range_f(-1.0, 1.0)
 	# Nivel do passeio (calcada levantada): o toldo, o arbusto e a arvore ficam
 	# nesta altura, nao enterrados no meio-fio.
 	var ground_y := Cfg.surface_at(lx, lz)
@@ -288,19 +334,99 @@ static func _lot(gb: GBuf, win: GBuf, bld: TBuf, defs: Array, colliders: Array, 
 			defs.append({"c": Vector3(lx, ground_y, lz), "kind": "bush", "h": shrub_h})
 		return
 
-	var h := float(floors) * 3.0
-	var total := h + 2.5                       # 2,5 m de embasamento enterrado
-	var base_y := minf(Cfg.height_at(lx - w * 0.5, lz - d * 0.5),
-			Cfg.height_at(lx + w * 0.5, lz + d * 0.5)) - 2.5
-	# Corpo do predio com TEXTURA de fachada (parede + janela), na surface
-	# propria: a cor da paleta tinge a textura, entao cada predio mantem a sua
-	# cor e ganha janelas. O brilho das janelas a noite vem do mapa de emissao.
-	_add_box_tx(bld, Vector3(lx, base_y + total * 0.5, lz), Vector3(w, total, d), col)
+	var bx := lx + off_x
+	var bz := lz + off_z
+	var roof_y := ground_y + float(floors) * 3.0
+	# Fundo enterrado: o predio atravessa o relevo (a cidade e suave aqui).
+	var base_y := minf(Cfg.height_at(bx - w * 0.5, bz - d * 0.5),
+			Cfg.height_at(bx + w * 0.5, bz + d * 0.5)) - 2.5
+	# Planta retangular cheia: a do nivel da rua e a do colisor.
+	var full := _plan_rect(bx, bz, w, d, -1, 0.0)
+	var roof_cx := bx
+	var roof_cz := bz
+	var roof_w := w
+	var roof_d := d
+
+	if style == 2 and floors >= 4:
+		# Embasamento de dois/tres andares (loja, garagem) com a planta inteira e
+		# a torre recuada por cima: a silhueta deixa de ser um bloco so.
+		var pod_top := ground_y + (6.3 if floors >= 8 else 4.2)
+		_add_prism_tx(bld, full, base_y, pod_top, base_col, ROOF)
+		roof_w = maxf(6.5, w * tower_f)
+		roof_d = maxf(6.5, d * tower_f2)
+		roof_cx = bx + tower_sx * (w - roof_w) * 0.5
+		roof_cz = bz + tower_sz * (d - roof_d) * 0.5
+		var tplan := _plan_rect(roof_cx, roof_cz, roof_w, roof_d,
+				chamfer_corner if chamfered else -1, chamfer_cut)
+		_add_prism_tx(bld, tplan, pod_top, roof_y, col, ROOF)
+	elif style == 1 and floors >= 3:
+		# Topo recuado (setback): o ultimo andar (ou dois) entra para dentro.
+		var low_top := maxf(ground_y + 3.0, roof_y - step_floors * 3.0)
+		_add_prism_tx(bld, full, base_y, low_top, col, ROOF)
+		roof_w = maxf(6.0, w * tower_f)
+		roof_d = maxf(6.0, d * tower_f2)
+		roof_cx = bx + tower_sx * (w - roof_w) * 0.5
+		roof_cz = bz + tower_sz * (d - roof_d) * 0.5
+		_add_prism_tx(bld, _plan_rect(roof_cx, roof_cz, roof_w, roof_d, -1, 0.0), low_top, roof_y,
+				col, ROOF)
+	else:
+		_add_prism_tx(bld, full, base_y, roof_y, col, ROOF)
+
 	if lod == LOD_FULL:
-		_add_box(gb, Vector3(lx, base_y + total + 1.3, lz), Vector3(w * 0.42, 2.6, d * 0.42), ROOF)
-		if awning and h < 40.0:
-			_add_box(gb, Vector3(lx, ground_y + 3.4, lz + d * 0.5 + 1.1), Vector3(w * 0.85, 0.25, 2.2), ROOF)
-	colliders.append(Rect2(lx - w * 0.5, lz - d * 0.5, w, d))
+		# Cobertura: casa de maquinas, caixa d'agua ou antena. Vai para o
+		# MultiMesh dos props (custo zero de desenho e da silhueta la em cima),
+		# nao para um caixote maior que a propria laje, como antes.
+		_roof_props(defs, roof_kind, roof_hue, roof_cx, roof_cz, roof_w, roof_d, roof_y,
+				roof_ox, roof_oz)
+		if awning and floors <= 8:
+			_add_awning(gb, lx, lz, bx, bz, w, d, ground_y, ax, az, awning_col)
+	colliders.append(Rect2(bx - w * 0.5, bz - d * 0.5, w, d))
+
+
+## Detalhe de cobertura na laje (caixa d'agua, casa de maquinas ou antena).
+static func _roof_props(defs: Array, kind: int, hue: float, cx: float, cz: float,
+		w: float, d: float, y: float, ox: float, oz: float) -> void:
+	var k := "caixa_dagua"
+	if kind == 1:
+		k = "casa_maquinas"
+	elif kind == 2:
+		k = "antena"
+	# O prop fica DENTRO da laje: o deslocamento e limitado pela sobra de area
+	# (1,8 m cobre o maior deles, a casa de maquinas de 3,2 m de lado).
+	var px := cx + ox * maxf(0.0, w * 0.5 - 1.8)
+	var pz := cz + oz * maxf(0.0, d * 0.5 - 1.8)
+	defs.append({"c": Vector3(px, y, pz), "kind": k, "h": 3.0, "hue": hue})
+
+
+## Toldo do comercio, na face do predio voltada para a rua — isto e, a borda
+## mais proxima da quadra (a calcada). Antes saia sempre virado para o sul.
+static func _add_awning(gb: GBuf, lx: float, lz: float, bx: float, bz: float,
+		w: float, d: float, ground_y: float, ax: float, az: float, col: Color) -> void:
+	# Qual face do lote esta mais perto da calcada.
+	var south := lz - az
+	var north := az + BLOCK - lz
+	var west := lx - ax
+	var east := ax + BLOCK - lx
+	var side := 0
+	var best := west
+	if east < best:
+		side = 1
+		best = east
+	if south < best:
+		side = 2
+		best = south
+	if north < best:
+		side = 3
+	var y := ground_y + 3.4
+	var reach := 2.2
+	if side == 0:
+		_add_box(gb, Vector3(bx - w * 0.5 - reach * 0.5, y, bz), Vector3(reach, 0.25, d * 0.8), col)
+	elif side == 1:
+		_add_box(gb, Vector3(bx + w * 0.5 + reach * 0.5, y, bz), Vector3(reach, 0.25, d * 0.8), col)
+	elif side == 2:
+		_add_box(gb, Vector3(bx, y, bz - d * 0.5 - reach * 0.5), Vector3(w * 0.8, 0.25, reach), col)
+	else:
+		_add_box(gb, Vector3(bx, y, bz + d * 0.5 + reach * 0.5), Vector3(w * 0.8, 0.25, reach), col)
 
 
 ## Ruas da quadra (borda oeste e sul) com a sinalizacao pintada.
@@ -449,29 +575,103 @@ static func _add_box(gb: GBuf, center: Vector3, size: Vector3, col: Color) -> vo
 		_add_quad(gb, c - yv - zv, c + yv - zv, c + yv + zv, c - yv + zv, col)
 
 
-## Caixa com UV de FACHADA: cada face repete a textura a cada `tb.tile` metros,
-## isto e, uma janela por andar de 3 m. Topo e base usam o canto liso, para o
-## telhado nao ganhar janela. A cor vai por vertice e tinge a textura.
-static func _add_box_tx(tb: TBuf, center: Vector3, size: Vector3, color: Color) -> void:
-	var h := size * 0.5
-	for f in CUBE_FACES:
-		var fc: Vector3 = f[0]
-		var ya: Vector3 = f[1]
-		var za: Vector3 = f[2]
-		var c := center + Vector3(fc.x * h.x, fc.y * h.y, fc.z * h.z)
-		var yv := Vector3(ya.x * h.x, ya.y * h.y, ya.z * h.z)
-		var zv := Vector3(za.x * h.x, za.y * h.y, za.z * h.z)
-		var p0 := c - yv - zv
-		var p1 := c + yv - zv
-		var p2 := c + yv + zv
-		var p3 := c - yv + zv
-		if absf(fc.y) > 0.5:
-			tb.quad_uv(p0, p1, p2, p3, fc, FLAT_UV, FLAT_UV, FLAT_UV, FLAT_UV, color)
-		else:
-			var uu := (yv * 2.0).length() / tb.tile
-			var vv := (zv * 2.0).length() / tb.tile_v
-			tb.quad_uv(p0, p1, p2, p3, fc,
-					Vector2(0.0, 0.0), Vector2(uu, 0.0), Vector2(uu, vv), Vector2(0.0, vv), color)
+## Planta retangular no plano XZ com UM canto chanfrado opcional, em ordem
+## ANTI-HORARIA (a que `_add_prism_tx` espera). `corner`: 0 = (+x, +z),
+## 1 = (-x, +z), 2 = (-x, -z), 3 = (+x, -z). `corner` negativo ou `cut` ~0
+## devolve o retangulo reto (4 pontos).
+static func _plan_rect(cx: float, cz: float, w: float, d: float, corner: int,
+		cut: float) -> PackedVector2Array:
+	var x0 := cx - w * 0.5
+	var x1 := cx + w * 0.5
+	var z0 := cz - d * 0.5
+	var z1 := cz + d * 0.5
+	# O chanfro nunca come metade do lado, senao o canto desaparece.
+	var c := clampf(cut, 0.0, minf(w, d) * 0.42)
+	var pts := PackedVector2Array()
+	# Canto (-x, -z): vem de -z, sai para +x.
+	if corner == 2 and c > 0.01:
+		pts.append(Vector2(x0, z0 + c))
+		pts.append(Vector2(x0 + c, z0))
+	else:
+		pts.append(Vector2(x0, z0))
+	# Canto (+x, -z): vem de +x, sai para +z.
+	if corner == 3 and c > 0.01:
+		pts.append(Vector2(x1 - c, z0))
+		pts.append(Vector2(x1, z0 + c))
+	else:
+		pts.append(Vector2(x1, z0))
+	# Canto (+x, +z): vem de +z, sai para -x.
+	if corner == 0 and c > 0.01:
+		pts.append(Vector2(x1, z1 - c))
+		pts.append(Vector2(x1 - c, z1))
+	else:
+		pts.append(Vector2(x1, z1))
+	# Canto (-x, +z): vem de -x, sai para -z.
+	if corner == 1 and c > 0.01:
+		pts.append(Vector2(x0 + c, z1))
+		pts.append(Vector2(x0, z1 - c))
+	else:
+		pts.append(Vector2(x0, z1))
+	return pts
+
+
+## Area (m2) de uma planta convexa no plano XZ.
+static func plan_area(pts: PackedVector2Array) -> float:
+	var sum := 0.0
+	var n := pts.size()
+	for i in n:
+		var a := pts[i]
+		var b := pts[(i + 1) % n]
+		sum += a.x * b.y - b.x * a.y
+	return absf(sum) * 0.5
+
+
+## Prisma de FACHADA a partir de uma planta convexa em XZ (anti-horaria).
+##
+## Paredes com UV de modulo de fachada (repete a cada `tb.tile` x `tb.tile_v`
+## metros) e teto em leque com o canto liso da textura, na cor de telhado. A
+## face de baixo nao existe (o predio esta enterrado) — e o que faz este prisma
+## custar menos vertices que a caixa de 6 faces de antes.
+static func _add_prism_tx(tb: TBuf, plan: PackedVector2Array, y0: float, y1: float,
+		wall_col: Color, roof_col: Color) -> void:
+	var n := plan.size()
+	if n < 3 or y1 - y0 < 0.05:
+		return
+	var vv := (y1 - y0) / tb.tile_v
+	for i in n:
+		var a := plan[i]
+		var b := plan[(i + 1) % n]
+		var dx := b.x - a.x
+		var dz := b.y - a.y
+		var seg := sqrt(dx * dx + dz * dz)
+		if seg < 0.05:
+			continue
+		# Normal para fora: o sentido de percurso anti-horario em (x, z) deixa o
+		# exterior a direita, isto e (dz, -dx).
+		var nrm := Vector3(dz / seg, 0.0, -dx / seg)
+		var uu := seg / tb.tile
+		var a0 := Vector3(a.x, y0, a.y)
+		var b0 := Vector3(b.x, y0, b.y)
+		var b1 := Vector3(b.x, y1, b.y)
+		var a1 := Vector3(a.x, y1, a.y)
+		# Ordem (a0, b0, b1, a1): -(b-a) x (d-a) = normal, a convencao do arquivo.
+		tb.quad_uv(a0, b0, b1, a1, nrm,
+				Vector2(0.0, 0.0), Vector2(uu, 0.0), Vector2(uu, vv), Vector2(0.0, vv), wall_col)
+	# Teto: leque a partir do centroide (a planta e convexa).
+	var c := Vector2.ZERO
+	for p in plan:
+		c += p
+	c /= float(n)
+	var cc := Vector3(c.x, y1, c.y)
+	for k in n:
+		var pa := plan[k]
+		var pb := plan[(k + 1) % n]
+		var qx := pb.x - pa.x
+		var qz := pb.y - pa.y
+		if qx * qx + qz * qz < 0.0025:
+			continue
+		tb.tri_uv(cc, Vector3(pa.x, y1, pa.y), Vector3(pb.x, y1, pb.y), Vector3.UP,
+				FLAT_UV, FLAT_UV, FLAT_UV, roof_col)
 
 
 # --- Utilitarios -------------------------------------------------------------
@@ -549,6 +749,23 @@ class TBuf:
 			n.append(normal)
 			uv.append(uvs[i])
 			col.append(color)
+
+	## Triangulo com UV explicito (leque do teto do prisma dos predios).
+	## Mesma convencao de winding do resto do arquivo: a frente e -(b-a)x(c-a).
+	func tri_uv(a: Vector3, b: Vector3, c: Vector3, normal: Vector3,
+			ua: Vector2, ub: Vector2, uc: Vector2, color: Color) -> void:
+		v.append(a)
+		v.append(b)
+		v.append(c)
+		n.append(normal)
+		n.append(normal)
+		n.append(normal)
+		uv.append(ua)
+		uv.append(ub)
+		uv.append(uc)
+		col.append(color)
+		col.append(color)
+		col.append(color)
 
 
 ## PRNG xorshift32: deterministico e independente da versao do motor.

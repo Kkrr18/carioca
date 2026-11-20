@@ -21,7 +21,8 @@ o qual o jogo vai ser julgado. Nenhum número abaixo é resultado de teste.
 
 - 1 malha e 1 draw call por setor, cor por vértice (0 texturas, 0 materiais
   extras), mais 1 MultiMesh por setor para props.
-- LOD por anel: o anel externo descarta telhado, toldo, árvore e props.
+- LOD por anel: o anel externo descarta toldo, árvore, meio-fio e props (a
+  cobertura dos prédios é prop: casa de máquinas, caixa d'água, antena).
 - Streaming limitado a 3 x 3 setores detalhados + 5 x 5 ao todo (2 setores por
   frame).
 - Sem corpos físicos estáticos: colisão por consulta de altura + retângulos.

@@ -39,6 +39,14 @@ static func color_for(kind: String, hue: float) -> Color:
 			return Color(0.88, 0.87, 0.85)
 		"carro_top":
 			return Color(0.75, 0.82, 0.88)
+		# Cobertura dos predios (B-50): a caixa d'agua branca/bege de fibra, a
+		# casa de maquinas de concreto e a antena escura.
+		"caixa_dagua":
+			return Color(0.88, 0.87, 0.82).darkened(hue * 0.22)
+		"casa_maquinas":
+			return Color(0.74, 0.73, 0.69)
+		"antena":
+			return Color(0.30, 0.31, 0.33)
 		_:
 			return LEAF
 
@@ -69,5 +77,13 @@ static func shape_for(kind: String, h: float) -> Array:
 			return [0.35, Vector3(4.2, 1.3, 1.8)]
 		"carro_top":
 			return [1.15, Vector3(2.2, 0.65, 1.6)]
+		# Cobertura: tamanhos em escala real (caixa d'agua ~1500 L, casa de
+		# maquinas de elevador, antena de 4,8 m).
+		"caixa_dagua":
+			return [0.75, Vector3(1.9, 1.5, 1.9)]
+		"casa_maquinas":
+			return [1.25, Vector3(3.2, 2.5, 2.6)]
+		"antena":
+			return [2.4, Vector3(0.14, 4.8, 0.14)]
 		_:
 			return [h * 0.5, Vector3(1.0, h, 1.0)]

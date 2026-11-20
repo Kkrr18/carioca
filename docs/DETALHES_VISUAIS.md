@@ -66,6 +66,9 @@ ATENÇÃO: HDRI é estático e o jogo tem ciclo dia/noite. Duas opções:
 3. **Prédios modulares em vez de caixa lisa:** módulo de base + corpo com
    janelas (atlas) + laje/telhado + detalhe de topo (caixa d'água, toldo).
    O city_gen passa a compor por hash determinístico — mantém o streaming.
+   Em parte FEITO no B-50, sem asset: planta sorteada, topo recuado ou
+   embasamento com torre, esquina chanfrada e cobertura como prop (casa de
+   máquinas, caixa d'água, antena). Falta o atlas por módulo e o AO assada.
 4. **MultiMesh por TIPO de prop** (postes, bancos, lixeiras, palmeiras,
    carros estacionados): 1 draw call por tipo por setor. A doc adverte que
    não há culling por instância — limitar por setor e variar

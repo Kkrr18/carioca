@@ -61,6 +61,7 @@ func _initialize() -> void:
 	_test_traffic_spacing_and_follow()
 	_test_audio_pure()
 	_test_windows()
+	_test_building_shapes()
 	_test_scripts_compile()
 	_test_save_roundtrip()
 	_test_save_rejects()
@@ -320,7 +321,7 @@ func _test_heights() -> void:
 
 func _test_props() -> void:
 	var ok := true
-	for s in ["palm", "tree", "bush", "kiosk", "umbrella"]:
+	for s in ["palm", "tree", "bush", "kiosk", "umbrella", "caixa_dagua", "casa_maquinas", "antena"]:
 		var sh := PropFactory.shape_for(s, 6.0)
 		if sh.size() != 2:
 			ok = false
@@ -328,7 +329,7 @@ func _test_props() -> void:
 		var size: Vector3 = sh[1]
 		if size.length() < 0.4 or size.length() > 20.0:
 			ok = false
-	check(ok, "props com forma plausivel (5 tipos)")
+	check(ok, "props com forma plausivel (8 tipos)")
 
 
 func _test_car_physics() -> void:
@@ -906,6 +907,68 @@ func _test_windows() -> void:
 	if car_col.r < 0.0 or lamp_col.r < 0.0:
 		props_ok = false
 	check(props_ok, "props de rua com forma e cor (%d defs no setor)" % full[4].size())
+
+
+func _test_building_shapes() -> void:
+	# B-50: os predios eram TODOS a mesma caixa (o autor reclamou, com razao).
+	# Agora o lote sorteia planta (largura x profundidade independentes), recuo
+	# (setback / embasamento com torre) e detalhe de cobertura. O teste cobre a
+	# matematica da planta e do prisma que o render usa, sem GPU.
+	var rect := CityGen._plan_rect(10.0, 20.0, 8.0, 6.0, -1, 0.0)
+	check(rect.size() == 4, "planta reta tem 4 cantos (%d)" % rect.size())
+	check(absf(CityGen.plan_area(rect) - 48.0) < 0.01,
+		"area da planta reta = 8 x 6 (%.2f m2)" % CityGen.plan_area(rect))
+	var cham := CityGen._plan_rect(0.0, 0.0, 10.0, 10.0, 2, 3.0)
+	check(cham.size() == 5, "planta com esquina chanfrada tem 5 cantos (%d)" % cham.size())
+	check(absf(CityGen.plan_area(cham) - (100.0 - 4.5)) < 0.01,
+		"chanfro tira o triangulo do canto (%.2f m2)" % CityGen.plan_area(cham))
+	var inside := true
+	for p in cham:
+		var pt: Vector2 = p
+		if pt.x < -5.001 or pt.x > 5.001 or pt.y < -5.001 or pt.y > 5.001:
+			inside = false
+	check(inside, "chanfro corta para dentro da planta")
+	# Chanfro enorme nao pode comer metade do predio.
+	var big := CityGen._plan_rect(0.0, 0.0, 10.0, 10.0, 0, 99.0)
+	check(CityGen.plan_area(big) > 50.0,
+		"chanfro limitado a 42% do lado (%.2f m2 de 100)" % CityGen.plan_area(big))
+	# Prisma: 5 paredes (quad = 6 verts) + teto em leque (5 triangulos de 3).
+	var tb := CityGen.TBuf.new(22.9, 12.0)
+	CityGen._add_prism_tx(tb, cham, 0.0, 12.0, Color.WHITE, Color.WHITE)
+	check(tb.v.size() == 5 * 6 + 5 * 3,
+		"prisma = 5 paredes + leque no teto (%d verts)" % tb.v.size())
+	check(tb.uv.size() == tb.v.size() and tb.col.size() == tb.v.size(),
+		"prisma com 1 UV e 1 cor por vertice")
+	var bad := 0
+	var tested := 0
+	var i := 0
+	while i + 2 < tb.v.size():
+		var a := tb.v[i]
+		var b := tb.v[i + 1]
+		var c := tb.v[i + 2]
+		var front := -(b - a).cross(c - a)
+		if front.length() > 0.0001:
+			tested += 1
+			if front.normalized().dot(tb.n[i]) < 0.9:
+				bad += 1
+		i += 3
+	check(tested >= 10 and bad == 0,
+		"prisma com winding coerente (%d/%d)" % [tested - bad, tested])
+	# No setor: cobertura detalhada e alturas variadas de topo.
+	var full := CityGen.generate(3, 0, 20260922, CityGen.LOD_FULL)
+	var kinds := {}
+	for d in (full[4] as Array):
+		var dd: Dictionary = d
+		kinds[String(dd.get("kind", ""))] = true
+	var roof_kinds := 0
+	for k in ["caixa_dagua", "casa_maquinas", "antena"]:
+		if kinds.has(k):
+			roof_kinds += 1
+	check(roof_kinds >= 2, "cobertura com %d tipos de detalhe" % roof_kinds)
+	var tops := {}
+	for p in (full[20] as PackedVector3Array):
+		tops[snappedf(p.y, 0.5)] = true
+	check(tops.size() > 12, "predios com %d alturas de topo diferentes" % tops.size())
 
 
 func _test_scripts_compile() -> void:

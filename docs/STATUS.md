@@ -412,6 +412,23 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   O padrao gerado continua como reserva. Poly Haven NAO tem categoria de
   fachada; ambientCG tem (CC0) mas so em .zip. NAO validado no aparelho: falta
   ver a escala da janela na tela e a noite.
+- B-50: Fase 4 — VOLUME DOS PREDIOS. O autor jogou e disse o que o codigo ja
+  mostrava: "os predios estao quadrados e meio feios". Diagnostico: a planta
+  era `lote - 1..3 m` nos DOIS eixos (todo lote saia ~19 x 20 m), o volume era
+  sempre a MESMA caixa e o topo era um caixote de 42% da area — cubo, cubo,
+  cubo. CORRIGIDO: (1) largura e profundidade agora sao independentes (metade a
+  inteira do lote) e o predio se desloca dentro do lote; (2) tres volumes —
+  caixa reta, topo recuado (setback) e embasamento de 4,2/6,3 m com torre
+  recuada, esta ultima as vezes com a esquina CHANFRADA; (3) a geometria passou
+  a ser um PRISMA de planta arbitraria (`_plan_rect` + `_add_prism_tx`, com
+  leque no teto e sem face de baixo), entao o chanfro custa o mesmo que a
+  caixa; (4) o caixote do telhado saiu da malha e virou prop no MultiMesh
+  (casa de maquinas, caixa d'agua, antena) — corte de ~8k vertices no buffer de
+  cor por setor, que paga a geometria nova com folga; (5) toldo virou lona
+  colorida e fica na face voltada para a calcada. Colisor continua sendo o
+  retangulo da planta cheia: recuo e chanfro so acontecem acima da rua, entao
+  nao existe parede invisivel na esquina. NAO validado no aparelho: falta ver
+  se a cidade deixou de parecer um formigueiro de cubos e o FPS (MEDIR).
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 

@@ -35,9 +35,10 @@ guardada: qualquer sistema pode perguntar a altura.
 - **Threads**: a worker só calcula `PackedArray`s (sem nós, sem rendering). A
   malha é montada na thread principal, 2 por frame. `WorkerThreadPool` com
   prioridade baixa.
-- **LOD**: anel interno (1) detalhado; anel externo (2) sem telhado, toldo,
-  árvore ou prop. O sorteio do lote acontece igual nos dois LODs, então a
-  silhueta não muda ao se aproximar.
+- **LOD**: anel interno (1) detalhado; anel externo (2) sem toldo, árvore,
+  detalhe de cobertura (props) nem meio-fio. O sorteio do lote acontece igual
+  nos dois LODs, então a silhueta (volume, recuo e altura do prédio) não muda
+  ao se aproximar.
 - **Fora do raio**: nada é carregado. O horizonte é o nevoeiro + o plano do mar.
 - **Frontal de quadra**: as ruas ficam nas bordas de quadras de 64 m e a grade
   é alinhada a x=0 e z=128; como 512 é múltiplo de 64, nenhuma quadra cruza a

@@ -19,6 +19,11 @@ GEOGRAFIA, SINALIZACAO e COMPORTAMENTO — nao textura fotografica:
   quadro, e o alvo e um telefone.
 - **Forma:** continua low-poly — e o que roda. O que muda e a referencia:
   proporcao, escala e cor de coisa real, no lugar certo do mapa.
+- **Silhueta de cidade, nao de caixa:** predio nao pode ser o mesmo cubo em
+  todo lote (B-50). Cada lote sorteia planta (largura e profundidade
+  independentes), posicao dentro do lote, e um volume entre caixa reta, topo
+  recuado e embasamento com torre recuada — porque e a silhueta que o jogador
+  ve de longe. Cobertura tem detalhe (casa de maquinas, caixa d'agua, antena).
 
 ## Direcao geral
 
@@ -49,8 +54,10 @@ fora do espectre definido:
 - **Areia**: seca `Color(0.86, 0.79, 0.64)`, molhada `Color(0.70, 0.65, 0.55)`.
 - **Asfalto**: `Color(0.21, 0.22, 0.24)`; calcada `Color(0.63, 0.62, 0.59)`.
 - **Predios**: paleta de pastel claro com tom de pedra (constante `PALETTE`) —
-  branco, creme, areia, verde-agua; telhado cinza `Color(0.36, 0.34, 0.32)`;
-  fachada de vidro `Color(0.55, 0.68, 0.78)` que acende a noite (emissao).
+  branco, creme, areia, verde-agua; laje/telhado cinza `Color(0.50, 0.49, 0.45)`;
+  embasamento 32% mais escuro que o corpo (pedra/concreto da loja); toldo em
+  lona colorida (`AWNINGS`), nunca cinza; fachada com a foto de janela (emissao
+  a noite).
 - **Vegetacao**: verde-mato `Color(0.22, 0.42, 0.24)` a `Color(0.33, 0.45, 0.27)`;
   tronco `Color(0.34, 0.27, 0.18)`.
 - **Carros**: vermelho, azul e branco (constantes de "carro" no PropFactory);
