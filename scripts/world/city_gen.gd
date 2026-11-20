@@ -122,7 +122,7 @@ static func generate(sx: int, sz: int, world_seed: int, lod: int) -> Array:
 	return [gb.v, gb.n, gb.c, colliders, defs, win.v, win.n, win.c,
 			road.v, road.n, road.uv, walk.v, walk.n, walk.uv, sand.v, sand.n, sand.uv,
 			calcadao.v, calcadao.n, calcadao.uv,
-			bld.v, bld.n, bld.uv, bld.c]
+			bld.v, bld.n, bld.uv, bld.col]
 
 
 # --- Terreno -----------------------------------------------------------------
