@@ -45,6 +45,7 @@ const CURB_COL := Color(0.73, 0.72, 0.69)
 const ROAD_TILE := 3.0
 const WALK_TILE := 3.0
 const SAND_TILE := 10.0
+const CALCADAO_TILE := 6.0   # onda da calcada de Copacabana: 1 padrao a cada 6 m
 
 const SAND := Color(0.86, 0.79, 0.64)
 const SAND_WET := Color(0.70, 0.65, 0.55)
@@ -88,6 +89,7 @@ static func generate(sx: int, sz: int, world_seed: int, lod: int) -> Array:
 	var road := TBuf.new(ROAD_TILE)
 	var walk := TBuf.new(WALK_TILE)
 	var sand := TBuf.new(SAND_TILE)
+	var calcadao := TBuf.new(CALCADAO_TILE)
 	var defs: Array = []
 	var colliders: Array = []
 	var ox := float(sx) * Cfg.SECTOR_SIZE
@@ -96,7 +98,7 @@ static func generate(sx: int, sz: int, world_seed: int, lod: int) -> Array:
 
 	_ground(gb, sand, ox, oz)
 	if sz == 0:
-		_beach(walk, road, defs, ox, lod)
+		_beach(walk, road, calcadao, defs, ox, lod)
 
 	var i0 := int(ceil(maxf(ox, 0.0) / BLOCK))
 	var i1 := int(ceil((ox + s) / BLOCK)) - 1
@@ -111,7 +113,8 @@ static func generate(sx: int, sz: int, world_seed: int, lod: int) -> Array:
 					world_seed, i, j, lod)
 
 	return [gb.v, gb.n, gb.c, colliders, defs, win.v, win.n, win.c,
-			road.v, road.n, road.uv, walk.v, walk.n, walk.uv, sand.v, sand.n, sand.uv]
+			road.v, road.n, road.uv, walk.v, walk.n, walk.uv, sand.v, sand.n, sand.uv,
+			calcadao.v, calcadao.n, calcadao.uv]
 
 
 # --- Terreno -----------------------------------------------------------------
@@ -151,7 +154,7 @@ static func _ground(gb: GBuf, sand: TBuf, ox: float, oz: float) -> void:
 
 # --- Orla --------------------------------------------------------------------
 
-static func _beach(walk: TBuf, road: TBuf, defs: Array, ox: float, lod: int) -> void:
+static func _beach(walk: TBuf, road: TBuf, calcadao: TBuf, defs: Array, ox: float, lod: int) -> void:
 	# Calcadao da Av. Atlantica: faixa clara entre z = 112 e z = 126.
 	var z0 := 112.0
 	var z1 := 126.0
@@ -165,7 +168,9 @@ static func _beach(walk: TBuf, road: TBuf, defs: Array, ox: float, lod: int) -> 
 		var b := Vector3(x1, Cfg.height_at(x1, z0) + FLAT_LIFT, z0)
 		var c := Vector3(x1, Cfg.height_at(x1, z1) + FLAT_LIFT, z1)
 		var d := Vector3(x, Cfg.height_at(x, z1) + FLAT_LIFT, z1)
-		walk.quad(a, b, c, d, Vector3.UP)
+		# O calcadao tem material proprio: o padrao de ondas da calcada
+		# portuguesa, gerado em codigo (nao existe CC0 com URL direta).
+		calcadao.quad(a, b, c, d, Vector3.UP)
 		x = x1
 	if lod == LOD_FAR:
 		return

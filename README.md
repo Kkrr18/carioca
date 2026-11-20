@@ -42,7 +42,8 @@ Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
 - Calçada com meio-fio: o miolo da quadra fica 15 cm acima da rua, e o chão de
   quem anda acompanha (personagem e carro sobem no meio-fio).
 - Texturas no chão: asfalto, calçada e areia com texturas CC0 1K do Poly Haven,
-  em escala de mundo (repetem por metro), a +3 desenhos por setor.
+  em escala de mundo (repetem por metro). O calçadão de Copacabana tem o padrão
+  de ondas da calçada portuguesa, gerado em código (sem download).
 - Som: motor sintetizado em código que sobe de tom com o giro, ruído de cidade
   ao fundo e impacto CC0 nas batidas (o Safari só libera áudio depois do
   primeiro toque na tela).

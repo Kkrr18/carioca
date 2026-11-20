@@ -37,6 +37,7 @@ var _win_mat: StandardMaterial3D
 var _mat_road: StandardMaterial3D
 var _mat_walk: StandardMaterial3D
 var _mat_sand: StandardMaterial3D
+var _mat_calcadao: StandardMaterial3D
 var _requests_this_frame := 0
 
 var generated_total: int = 0
@@ -62,6 +63,9 @@ func _ready() -> void:
 	_mat_road = _tex_material(TEX_ROAD, Color(0.21, 0.22, 0.24))
 	_mat_walk = _tex_material(TEX_WALK, Color(0.63, 0.62, 0.59))
 	_mat_sand = _tex_material(TEX_SAND, Color(0.86, 0.79, 0.64))
+	# Calcadao de Copacabana: o padrao de ondas e gerado em codigo (nao existe
+	# textura CC0 com URL direta para ele) e mora no proprio material.
+	_mat_calcadao = _calcada_material()
 
 
 ## Material de superficie texturada. Sem a textura, cai na cor de reserva.
@@ -77,6 +81,33 @@ func _tex_material(path: String, fallback: Color) -> StandardMaterial3D:
 			# A textura ja traz a cor: albedo branco nao tinge.
 			m.albedo_color = Color.WHITE
 			m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	return m
+
+
+## Cor da calcada portuguesa em coordenadas de textura: 0,10 = pedra preta,
+## 0,88 = pedra branca. Faixas que ondulam como as ondas de Copacabana.
+## Puro (sem GPU), para o teste conferir o padrao sem placa de video.
+static func calcada_value(u: float, v: float) -> float:
+	var wave := sin((u * 2.0 + v * 0.35) * TAU)
+	var band := fposmod(v * 4.0 + wave * 0.35, 1.0)
+	return 0.10 if band < 0.5 else 0.88
+
+
+## Material do calcadao: textura 128x128 gerada em codigo (mipmaps para nao
+## tremer ao longe) + o mesmo tratamento das outras superficies do chao.
+func _calcada_material() -> StandardMaterial3D:
+	var size := 128
+	var img := Image.create(size, size, true, Image.FORMAT_RGB8)
+	for y in size:
+		for x in size:
+			var c := calcada_value(float(x) / float(size), float(y) / float(size))
+			img.set_pixel(x, y, Color(c, c, c))
+	img.generate_mipmaps()
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = ImageTexture.create_from_image(img)
+	m.roughness = 0.85
+	m.metallic_specular = 0.1
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	return m
 
 
@@ -222,11 +253,13 @@ func _install(sec: Vector2i, lod: int, res: Array) -> void:
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, warrays)
 		mesh.surface_set_material(si, _win_mat)
 		si += 1
-	# Superficies texturadas: asfalto, calcada e areia (3 desenhos por setor).
+	# Superficies texturadas: asfalto, calcada, areia e o calcadao de Copacabana.
 	if res.size() >= 17:
 		si = _tex_surface(mesh, si, res[8], res[9], res[10], _mat_road)
 		si = _tex_surface(mesh, si, res[11], res[12], res[13], _mat_walk)
 		si = _tex_surface(mesh, si, res[14], res[15], res[16], _mat_sand)
+	if res.size() >= 20:
+		si = _tex_surface(mesh, si, res[17], res[18], res[19], _mat_calcadao)
 
 	var node := Node3D.new()
 	node.name = "S%d_%d" % [sec.x, sec.y]

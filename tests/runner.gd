@@ -18,6 +18,7 @@ const ModelProp = preload("res://scripts/world/model_prop.gd")
 const Player = preload("res://scripts/player/player.gd")
 const TouchControls = preload("res://scripts/ui/touch_controls.gd")
 const VehicleAudio = preload("res://scripts/audio/vehicle_audio.gd")
+const SectorStreamer = preload("res://scripts/world/sector_streamer.gd")
 const Traffic = preload("res://scripts/world/traffic.gd")
 
 var _pass := 0
@@ -41,6 +42,7 @@ func _initialize() -> void:
 	_test_vertex_budget()
 	_test_road_markings()
 	_test_ground_textures()
+	_test_calcada()
 	_test_normals()
 	_test_heights()
 	_test_props()
@@ -238,8 +240,8 @@ func _test_ground_textures() -> void:
 	# areia vem em buffers proprios, com UV em escala de mundo (a textura repete
 	# por metro, sem esticar).
 	var full := CityGen.generate(3, 0, 20260922, CityGen.LOD_FULL)
-	check(full.size() >= 17, "setor traz as superficies texturadas (%d arrays)" % full.size())
-	if full.size() < 17:
+	check(full.size() >= 20, "setor traz as superficies texturadas (%d arrays)" % full.size())
+	if full.size() < 20:
 		return
 	var road_v: PackedVector3Array = full[8]
 	var road_uv: PackedVector2Array = full[10]
@@ -249,6 +251,8 @@ func _test_ground_textures() -> void:
 		"calcada texturada: %d vertices" % (full[11] as PackedVector3Array).size())
 	check((full[14] as PackedVector3Array).size() > 0,
 		"areia texturada: %d vertices" % (full[14] as PackedVector3Array).size())
+	check((full[17] as PackedVector3Array).size() > 0,
+		"calcadao texturado: %d vertices" % (full[17] as PackedVector3Array).size())
 	var span := 0.0
 	for uv in road_uv:
 		span = maxf(span, maxf(absf(uv.x), absf(uv.y)))
@@ -257,6 +261,28 @@ func _test_ground_textures() -> void:
 	var sea := CityGen.generate(3, -1, 20260922, CityGen.LOD_FULL)
 	check((sea[14] as PackedVector3Array).is_empty(), "mar sem textura de areia")
 	check((sea[0] as PackedVector3Array).size() > 0, "mar com geometria de cor por vertice")
+
+
+func _test_calcada() -> void:
+	# Calcada portuguesa do calcadao, gerada em codigo: tem que alternar pedra
+	# preta e branca, repetir sem emenda (tileavel) e ficar na faixa de tom.
+	var dark := 0
+	var light := 0
+	for i in 64:
+		for j in 64:
+			var c := SectorStreamer.calcada_value(float(i) / 64.0, float(j) / 64.0)
+			if c < 0.3:
+				dark += 1
+			elif c > 0.7:
+				light += 1
+	check(dark > 0 and light > 0,
+		"calcada com pedra preta e branca (%d / %d amostras)" % [dark, light])
+	check(absf(SectorStreamer.calcada_value(0.13, 0.29) - SectorStreamer.calcada_value(1.13, 0.29)) < 0.001,
+		"padrao da calcada repete a cada 1 em U (tileavel)")
+	check(absf(SectorStreamer.calcada_value(0.13, 0.29) - SectorStreamer.calcada_value(0.13, 1.29)) < 0.001,
+		"padrao da calcada repete a cada 1 em V (tileavel)")
+	var s := SectorStreamer.calcada_value(0.5, 0.5)
+	check(s >= 0.09 and s <= 0.89, "tom da calcada dentro da faixa (%.2f)" % s)
 
 
 func _test_normals() -> void:

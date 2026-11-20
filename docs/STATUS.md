@@ -385,6 +385,14 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   com marca d'agua. O proximo passo e gerar o padrao de ondas em codigo
   (ImageTexture) no calcadao. NAO validado no aparelho: falta ver o custo em
   FPS das 3 texturas e se o tiling ficou na escala certa.
+- B-47: Fase 4 — CALCADAO DE COPACABANA. O padrao de ondas da calcada
+  portuguesa nao existe em CC0 com URL direta (so pedra de Lisboa ou foto com
+  marca d'agua), entao ele e GERADO em codigo: `SectorStreamer.calcada_value()`
+  devolve a cor de cada ponto (faixas senoidais pretas e brancas, periodicas e
+  portanto tileaveis) e o material monta uma ImageTexture 128x128 com mipmaps.
+  O calcadao (z 112-126) virou a quarta superficie texturada do setor, so nos
+  setores da orla. Testes: o padrao tem as duas cores, repete em U e em V e
+  fica na faixa de tom. NAO validado no aparelho (escala da onda e FPS).
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 
