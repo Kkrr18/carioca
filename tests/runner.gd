@@ -65,6 +65,7 @@ func _initialize() -> void:
 	_test_audio_pure()
 	_test_sky()
 	_test_pedestrians()
+	_test_pedestrian_model()
 	_test_windows()
 	_test_building_shapes()
 	_test_scripts_compile()
@@ -1043,6 +1044,38 @@ func _test_pedestrians() -> void:
 			if d >= 20.0 and d <= 200.0 and pos.y > 40.0 and pos.y < 260.0:
 				placed += 1
 	check(placed >= 10, "nasce perto do jogador (%d de 12)" % placed)
+
+
+func _test_pedestrian_model() -> void:
+	# B-54: o pedestre externo (CesiumMan, CC-BY 4.0). O CI tem que importar o
+	# .glb e provar o que o jogo usa: malha com triangulos, esqueleto com UMA
+	# animacao de caminhada e altura plausivel para normalizar a escala.
+	check(ResourceLoader.exists(Pedestrians.MODEL_PATH),
+		"modelo do pedestre no projeto (%s)" % Pedestrians.MODEL_PATH)
+	var scene := Pedestrians.load_model()
+	check(scene != null, "modelo do pedestre carrega como cena")
+	if scene == null:
+		return
+	var inst: Node3D = scene.instantiate()
+	var mi := Pedestrians._find_mesh(inst)
+	var ap := Pedestrians._find_anim(inst)
+	check(mi != null and mi.mesh != null, "modelo do pedestre tem malha")
+	var tris := ModelProp.count_tris(inst)
+	var box := ModelProp.mesh_aabb(inst)
+	check(tris > 200 and tris < 20000, "modelo do pedestre: %d triangulos" % tris)
+	check(box.size.y > 1.0 and box.size.y < 3.0,
+		"altura do modelo plausivel (%.2f m)" % box.size.y)
+	check(ap != null, "modelo do pedestre tem AnimationPlayer")
+	if ap != null and ap.get_animation_list().size() > 0:
+		var an := String(ap.get_animation_list()[0])
+		var anim := ap.get_animation(an)
+		var length := anim.length if anim != null else 0.0
+		var tracks := anim.get_track_count() if anim != null else 0
+		check(length > 0.3 and tracks > 5,
+			"ciclo de caminhada de %.2f s, %d trilhas (%s)" % [length, tracks, an])
+	else:
+		check(false, "modelo do pedestre sem animacao (o passo nao andaria)")
+	inst.free()
 
 
 func _test_windows() -> void:

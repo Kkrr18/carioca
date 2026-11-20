@@ -40,13 +40,14 @@ Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
   acompanham você pela cidade. O carro que você dirige é o sedã CC0, com rodas
   que giram e esterçam. As ruas têm sinalização pintada: eixo amarelo, faixa de
   pedestres e linha de retenção.
-- Pedestres com rotina: 28 pessoas andando na calçada em volta das quadras e na
-  praia. Cada uma tem destino, pressa e roupa próprios, para no canto, espera o
-  sinal abrir para atravessar (a mesma fase dos semáforos dos carros), desiste e
-  segue se demorar, sai da sua frente quando você chega perto e corre se um carro
-  aparece em cima dela na travessia. À noite a rua esvazia. Custo: 3 desenhos
-  por quadro para a cidade inteira (3 MultiMesh), com as pernas balançando de
-  verdade porque cada perna é uma instância girada no quadril.
+- Pedestres com rotina: pessoas andando na calçada em volta das quadras e na
+  praia, com modelo animado de verdade (CesiumMan, CC-BY 4.0: esqueleto e ciclo
+  de caminhada). Cada uma tem destino, pressa e roupa próprios, para no canto,
+  espera o sinal abrir para atravessar (a mesma fase dos semáforos dos carros),
+  desiste e segue se demorar, sai da sua frente quando você chega perto e corre
+  se um carro aparece em cima dela na travessia. À noite a rua esvazia. O passo
+  congela quando a pessoa espera. Sem o modelo, o jogo volta sozinho para
+  bonecos de caixa (3 desenhos para todos).
 - Semáforos: quatro postes por cruzamento com ciclo verde/amarelo/vermelho
   defasado; os carros param na linha de retenção e atravessam no verde. A
   cidade inteira de semáforos custa 2 desenhos por quadro.

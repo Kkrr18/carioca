@@ -490,6 +490,24 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   A logica (cantos, travessia de 13 m, sinal, vida por hora, semente) e pura e
   testada no CI. NAO validado no aparelho: falta ver se eles andam no lugar
   certo da calcada, se param no sinal e quanto custou em FPS.
+- B-54: Fase 4 — MODELO NOS PEDESTRES. O autor pediu "pega um modelo e aplica
+  nesses npcs, um modelo bonito". Entrou o **CesiumMan** (Khronos glTF Sample
+  Assets, `Models/CesiumMan`, CC-BY 4.0, (c) 2017 Cesium): personagem COM
+  ESQUELETO e ciclo de caminhada embutido, 1,5 mil triangulos, 428 KB, com
+  atribuicao em `data/ATTRIBUTION.md`. Escolha do arquivo: nao existe CC0 com
+  humano animado e URL direta (Kenney, Quaternius e KayKit sao .zip; poly.pizza
+  baixa por JavaScript), e o repositorio de amostras da Khronos e o unico com
+  .glb direto, estavel e de licenca clara. Como o modelo e animado, cada pessoa
+  virou um no proprio (esqueleto + AnimationPlayer), e nao MultiMesh: por isso a
+  turma caiu de 28 para 18 e cada pessoa so e desenhada ate 110 m. Escala e
+  apoio no chao saem do AABB do modelo; a tinta de 35% da cor da camisa
+  diferencia as pessoas sem tingir a pele; o passo CONGELA quando a pessoa para
+  (senao ela marcha no lugar esperando o sinal) e a velocidade da animacao
+  segue a pressa. Sem o arquivo (ou se o import quebrar), o sistema volta
+  sozinho para os bonecos de caixa de 3 MultiMesh — o jogo nunca fica sem
+  gente. NAO validado no aparelho: falta ver se ele anda PARA A FRENTE (o glTF
+  olha para +Z; se estiver de costas, trocar `MODEL_YAW` de PI para 0) e quanto
+  o esqueleto custou em FPS.
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 

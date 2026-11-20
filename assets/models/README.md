@@ -17,6 +17,7 @@ copyright de jogo comercial.
 | quaternius-suv.glb | Quaternius ([poly.pizza/m/xsMtZhBkxL](https://poly.pizza/m/xsMtZhBkxL)) | CC0 1.0 | 177 KB | tráfego |
 | quaternius-sports-car.glb | Quaternius (pack "Cars") | CC0 1.0 | 171 KB | tráfego (carro raro/mais rápido) |
 | quaternius-taxi.glb | Quaternius (pack "Cars") | CC0 1.0 | 177 KB | tráfego (taxi carioca) |
+| pedestrian.glb | [Khronos glTF Sample Assets — CesiumMan](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/CesiumMan) | **CC-BY 4.0**, (c) 2017 Cesium (atribuição obrigatória) | 428 KB | pedestres (B-54): personagem com esqueleto e ciclo de caminhada |
 
 **Os carros da Quaternius nao tem textura**: as cores vem de material por peça
 (carroceria, vidros, farois, lanternas, pneus). Isso e otimo aqui: como a cor e

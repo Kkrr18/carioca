@@ -43,6 +43,13 @@
 - Regra do projeto: so CC0 ou CC-BY, com origem e licenca anotadas aqui e em
   [assets/models/README.md](../assets/models/README.md). Nada de conteudo com
   copyright de jogo comercial.
+- `assets/models/pedestrian.glb` — **"Cesium Man"**, personagem animado e com
+  esqueleto do **Khronos glTF Sample Assets**
+  (https://github.com/KhronosGroup/glTF-Sample-Assets, `Models/CesiumMan`).
+  (c) 2017 **Cesium**, licenca **CC-BY 4.0**
+  (https://creativecommons.org/licenses/by/4.0/): atribuicao obrigatoria —
+  "Cesium Man, (c) 2017 Cesium, CC-BY 4.0". Um ciclo de caminhada embutido,
+  ~1,5 mil triangulos. Usado nos pedestres (B-54).
 
 ## Texturas
 

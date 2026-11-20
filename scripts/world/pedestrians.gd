@@ -17,10 +17,9 @@ extends Node3D
 ##     pessoa, mesma roupa, sempre);
 ##   - de madrugada sobram poucas pessoas na rua; de dia a calcada enche.
 ##
-## Custo: 3 MultiMesh (corpo, cabeca+bracos, pernas) para TODOS os pedestres,
-## entao a cidade inteira de gente custa 3 chamadas de desenho. As pernas
-## balancam de verdade porque cada perna e uma instancia propria girada no
-## quadril — e nao existe esqueleto nem animacao importada.
+## Custo com o modelo (B-54): um modelo animado por pessoa, 18 pessoas, com
+## corte de visibilidade a 110 m. Sem o modelo, cai para 3 MultiMesh (caixas)
+## com as pernas girando no quadril — nenhum esqueleto, nenhuma animacao.
 ## A logica e PURA (funcoes estaticas) e testada no CI sem cena.
 
 const Cfg = preload("res://scripts/core/cfg.gd")
@@ -59,6 +58,18 @@ const GIVE_UP := 18.0           # s esperando o sinal antes de desistir
 const DODGE_RADIUS := 1.5       # m do jogador: sai da frente
 const CAR_PANIC := 9.0          # carro a menos disso durante a travessia: corre
 
+# --- Modelo externo (B-54) ---------------------------------------------------
+## Pessoa animada de verdade no lugar das caixas: CesiumMan (Khronos glTF Sample
+## Assets, CC-BY 4.0, (c) 2017 Cesium), 1,5 mil triangulos e um ciclo de
+## caminhada. Um modelo por pedestre custa um desenho por pessoa, por isso a
+## turma cai para MODEL_PEDS; sem o arquivo, o jogo volta sozinho para as caixas.
+const MODEL_PATH := "res://assets/models/pedestrian.glb"
+const MODEL_PEDS := 18          # quantas pessoas quando o modelo carrega
+const MODEL_HEIGHT := 1.72      # altura final em metros (normalizada pelo AABB)
+## O glTF olha para +Z; o pedestre anda com o -Z do no virado para a frente.
+const MODEL_YAW := PI
+const VIS_RANGE := 110.0        # m: alem disso o pedestre nem e desenhado
+
 # Paleta das pessoas. Pele e roupa variam, como na rua de verdade.
 const SKINS := [
 	Color(0.94, 0.79, 0.67), Color(0.86, 0.69, 0.54), Color(0.74, 0.56, 0.41),
@@ -83,6 +94,11 @@ var peds: Array = []
 var _clock := 0.0
 var _follow_t := 0.0
 var _visible := 0
+var _use_model := false
+var _holders: Array = []        # Node3D de cada pedestre (modelo animado)
+var _anims: Array = []          # AnimationPlayer de cada pedestre
+var _anim_name := ""
+var _idle_seek := 0.0
 var _mat: StandardMaterial3D
 var _mm_body: MultiMeshInstance3D
 var _mm_skin: MultiMeshInstance3D
@@ -326,23 +342,116 @@ func setup(base_seed: int, focus: Vector3 = Vector3.ZERO) -> void:
 	_mat.roughness = 0.92
 	_mat.metallic_specular = 0.1
 
+	# Modelo animado (B-54). Sem ele (arquivo faltando ou import quebrado) o
+	# sistema continua com as caixas coloridas: o jogo nunca fica sem gente.
+	var scene := load_model()
+	var can_model := false
+	if scene != null:
+		var probe: Node = scene.instantiate()
+		can_model = _find_mesh(probe) != null
+		probe.free()
+	_use_model = can_model
+	if _use_model:
+		peds_total = mini(peds_total, MODEL_PEDS)
+
 	peds.clear()
 	for k in peds_total:
 		peds.append(spawn_ped(base_seed + k * 6151, k))
 
+	if _use_model:
+		_build_models(scene)
+	else:
+		_build_boxes()
+	for i in peds.size():
+		place_ped(peds[i], focus, RESPAWN_NEAR, RESPAWN_FAR)
+
+	update(0.0, focus, focus, Vector3.ZERO, 0.0, 12.0)
+
+
+## Carrega o .glb do pedestre; null se o arquivo nao existe ou nao importou.
+static func load_model() -> PackedScene:
+	if not ResourceLoader.exists(MODEL_PATH):
+		return null
+	var res: Resource = load(MODEL_PATH)
+	return res as PackedScene
+
+
+## Um modelo animado por pedestre: escala e apoio no chao pelo AABB (nao se
+## confia no export), tinta suave por pessoa e o ciclo de caminhada tocando
+## defasado, senao a rua inteira anda no mesmo compasso.
+func _build_models(scene: PackedScene) -> void:
+	_holders.clear()
+	_anims.clear()
+	for i in peds.size():
+		var p: Dictionary = peds[i]
+		var root := Node3D.new()
+		root.name = "Ped%d" % i
+		var inst: Node3D = scene.instantiate()
+		root.add_child(inst)
+		var mi := _find_mesh(inst)
+		if mi != null and mi.mesh != null:
+			var box: AABB = mi.transform * mi.mesh.get_aabb()
+			var h := maxf(0.5, box.size.y)
+			var centre := box.get_center()
+			inst.scale = Vector3.ONE * (MODEL_HEIGHT / h)
+			inst.position = Vector3(-centre.x, -box.position.y, -centre.z) * (MODEL_HEIGHT / h)
+			# Tinta leve: a textura multiplica a cor, entao 35% da cor da camisa
+			# ja diferencia as pessoas sem tingir a pele.
+			var base := mi.get_active_material(0) as StandardMaterial3D
+			if base != null:
+				var tint := base.duplicate() as StandardMaterial3D
+				if tint != null:
+					tint.albedo_color = Color.WHITE.lerp(p["shirt"], 0.35)
+					mi.material_override = tint
+			mi.visibility_range_end = VIS_RANGE
+			mi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
+		var ap := _find_anim(inst)
+		if ap != null:
+			var names := ap.get_animation_list()
+			if names.size() > 0:
+				_anim_name = String(names[0])
+				ap.play(_anim_name)
+				ap.seek(float(i) * 0.11, true)
+				ap.speed_scale = 1.0
+			else:
+				ap = null
+		_anims.append(ap)
+		add_child(root)
+		_holders.append(root)
+
+
+static func _find_mesh(n: Node) -> MeshInstance3D:
+	if n is MeshInstance3D:
+		return n as MeshInstance3D
+	for c in n.get_children():
+		var f := _find_mesh(c)
+		if f != null:
+			return f
+	return null
+
+
+static func _find_anim(n: Node) -> AnimationPlayer:
+	if n is AnimationPlayer:
+		return n as AnimationPlayer
+	for c in n.get_children():
+		var f := _find_anim(c)
+		if f != null:
+			return f
+	return null
+
+
+## Caixas coloridas (reserva): 3 MultiMesh para todos, com as pernas girando no
+## quadril. So e usada quando o modelo nao carrega.
+func _build_boxes() -> void:
 	_mm_body = _make_mm("PedBodies", body_mesh(), peds_total)
 	_mm_skin = _make_mm("PedSkin", skin_mesh(), peds_total)
 	_mm_legs = _make_mm("PedLegs", leg_mesh(), peds_total * 2)
-
 	for i in peds.size():
 		var p: Dictionary = peds[i]
 		_mm_body.multimesh.set_instance_color(i, p["shirt"])
 		_mm_skin.multimesh.set_instance_color(i, p["skin"])
 		for side in 2:
 			_mm_legs.multimesh.set_instance_color(i * 2 + side, p["pants"])
-		place_ped(p, focus, RESPAWN_NEAR, RESPAWN_FAR)
-
-	update(0.0, focus, focus, Vector3.ZERO, 0.0, 12.0)
 
 
 func _make_mm(nm: String, mesh: Mesh, count: int) -> MultiMeshInstance3D:
@@ -370,7 +479,10 @@ func update(delta: float, focus: Vector3 = Vector3.ZERO, player_pos: Vector3 = V
 		_step(p, delta, player_pos, car_pos, car_speed)
 	# De madrugada a rua esvazia (os primeiros `n` continuam em cena).
 	_visible = maxi(4, int(round(float(peds_total) * life_fraction(hour))))
-	_write_instances()
+	if _use_model:
+		_write_models()
+	else:
+		_write_boxes()
 
 
 ## Quem ficou longe demais volta para perto (a cidade nao pode ficar vazia
@@ -495,9 +607,39 @@ func _next_target(p: Dictionary) -> void:
 	p["target"] = corner(p["block"], k)
 
 
-## Escreve as instancias: corpo e cabeca usam a MESMA transformacao (mesma
-## origem, pe no chao); cada perna e uma instancia girada no quadril.
-func _write_instances() -> void:
+## Modelo animado: posiciona o no de cada pessoa, aponta para onde ela anda e
+## regula a animacao de caminhada pela pressa. Parado, o passo CONGELA (senao a
+## pessoa fica marchando no lugar enquanto espera o sinal).
+func _write_models() -> void:
+	for i in _holders.size():
+		var root: Node3D = _holders[i]
+		var vis := i < _visible
+		root.visible = vis
+		if not vis:
+			continue
+		var p: Dictionary = peds[i]
+		var pos: Vector2 = p["pos"]
+		root.position = Vector3(pos.x, Cfg.surface_at(pos.x, pos.y), pos.y)
+		root.rotation.y = float(p["yaw"]) + MODEL_YAW
+		root.scale = Vector3.ONE * float(p["scale"])
+		var ap: AnimationPlayer = _anims[i]
+		if ap == null:
+			continue
+		var kind: int = p["kind"]
+		var moving := kind == KIND_WALK or kind == KIND_CROSS
+		if moving:
+			# O ciclo do modelo cobre ~1,4 m/s; anda mais rapido, anda mais rapido.
+			ap.speed_scale = clampf(float(p["speed"]) / 1.40, 0.60, 2.20)
+			if not ap.is_playing():
+				ap.play(_anim_name)
+		elif ap.is_playing():
+			ap.pause()
+			ap.seek(_idle_seek, true)
+
+
+## Escreve as instancias das caixas: corpo e cabeca usam a MESMA transformacao
+## (mesma origem, pe no chao); cada perna e uma instancia girada no quadril.
+func _write_boxes() -> void:
 	if _mm_body == null:
 		return
 	var n := mini(_visible, peds.size())
@@ -533,4 +675,6 @@ func _write_instances() -> void:
 
 
 func describe() -> String:
-	return "pedestres: %d pessoas na rua (3 desenhos por quadro)" % _visible
+	if _use_model:
+		return "pedestres: %d pessoas com modelo animado CC-BY (Cesium), 1 desenho cada" % _visible
+	return "pedestres: %d pessoas em caixas (3 desenhos por quadro) - modelo nao carregou" % _visible
