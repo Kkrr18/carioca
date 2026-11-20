@@ -447,20 +447,33 @@ func _test_car_models() -> void:
 			"modelo %s com %.2f m de comprimento (eixo Z)" % [label, box.size.z])
 		check(box.size.y < 2.5, "modelo %s com %.2f m de altura" % [label, box.size.y])
 		check(wheels >= 2, "modelo %s com %d nos de roda separados" % [label, wheels])
+		# B-40: o teste antigo lia a ORIGEM do no da roda, que no .glb fica no
+		# centro do modelo — tudo dava zero e a deteccao de frente nunca funcionou.
+		# Agora o centro vem do AABB da malha, entao tem que haver separacao real.
+		var zmin := 9999.0
+		var zmax := -9999.0
+		for w in ModelProp.wheel_centers(inst):
+			var c: Vector3 = w["center"]
+			zmin = minf(zmin, c.z)
+			zmax = maxf(zmax, c.z)
+		check(zmax - zmin > 1.0,
+			"modelo %s com eixos dianteiro e traseiro separados (%.2f m)" % [label, zmax - zmin])
 		inst.free()
 
 
 func _wheel_rig(front_z: float) -> Node3D:
 	# Raiz com duas rodas (nomes como os da Quaternius): a dianteira em front_z.
+	# Cada roda e uma MeshInstance3D COM malha: o centro e lido do AABB da malha,
+	# nao da origem do no (B-40).
 	var root := Node3D.new()
-	var f := Node3D.new()
-	f.name = "FrontLeftWheel"
-	f.position = Vector3(0.8, 0.3, front_z)
-	root.add_child(f)
-	var b := Node3D.new()
-	b.name = "BackLeftWheel"
-	b.position = Vector3(0.8, 0.3, -front_z)
-	root.add_child(b)
+	var wheel := BoxMesh.new()
+	wheel.size = Vector3(0.25, 0.7, 0.7)
+	for spec in [["FrontLeftWheel", front_z], ["BackLeftWheel", -front_z]]:
+		var mi := MeshInstance3D.new()
+		mi.name = String(spec[0])
+		mi.mesh = wheel
+		mi.position = Vector3(0.8, 0.3, float(spec[1]))
+		root.add_child(mi)
 	return root
 
 
@@ -586,13 +599,13 @@ func _test_traffic_models() -> void:
 		var fn := 0
 		var bz := 0.0
 		var bn := 0
-		for w in mp.wheel_info:
-			var o: Vector3 = ModelProp.rel_xf(w["node"], mp).origin
+		for w in ModelProp.wheel_centers(mp):
+			var c: Vector3 = w["center"]
 			if bool(w["front"]):
-				fz += o.z
+				fz += c.z
 				fn += 1
 			else:
-				bz += o.z
+				bz += c.z
 				bn += 1
 		if fn > 0 and bn > 0:
 			check(fz / float(fn) < bz / float(bn), "%s: rodas da frente ficam em -Z" % label)

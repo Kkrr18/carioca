@@ -309,6 +309,16 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   sai do proprio modelo para a velocidade angular bater. Testes novos no CI
   cobrem o pivo e a direcao de rolagem. Licao: em .glb de terceiro, nem a
   origem do no nem o "eixo" da peca sao o que o nome sugere.
+- B-40: RESOLVIDO ESCRITO. A deteccao de "para onde o carro aponta" lia a
+  ORIGEM do no da roda no .glb. Nesses modelos (export obj2gltf) a origem do no
+  da roda fica no centro do modelo e a geometria vive nos vertices, entao a
+  leitura dava ZERO para todas as rodas: a frente nunca era detectada e a meia
+  volta nunca era aplicada. O CI pegou isso nos quatro modelos de transito
+  ("rodas da frente ficam em -Z" falhou nos quatro, com 128 checagens verdes).
+  Correcao: o centro de cada roda vem do AABB da MALHA
+  (ModelProp.wheel_centers), usado tanto pela deteccao de frente quanto pelo
+  teste, mais uma checagem de que os eixos dianteiro e traseiro estao
+  separados por mais de 1 m — que teria pego o caso dos zeros.
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 

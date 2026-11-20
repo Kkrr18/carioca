@@ -64,31 +64,49 @@ static func placement(root: Node3D, box: AABB, target: float) -> Array:
 	return [float(norm[0]), yaw]
 
 
+## Centros das rodas no espaco de `root`: [{"node", "center", "front"}].
+## Usa o centro do AABB da MALHA, nao a origem do no: num .glb exportado por
+## obj2gltf a origem do no da roda fica no centro do modelo e a geometria vive
+## nos vertices — a transform do no nao diz onde a roda esta (B-39/B-40).
+static func wheel_centers(root: Node3D) -> Array:
+	var out: Array = []
+	for w in wheel_nodes(root):
+		var n3 := w as Node3D
+		if n3 == null:
+			continue
+		var xf := rel_xf(n3, root)
+		var c: Vector3 = xf * mesh_aabb(n3).get_center()
+		out.append({
+			"node": n3,
+			"center": c,
+			"front": String(n3.name).to_lower().contains("front"),
+		})
+	return out
+
+
 ## True se as rodas "front" estiverem atras das "back"/"rear" no eixo longo.
-## Sem nomes de frente e tras, nao ha como saber: devolve false (nao gira).
+## Sem nomes de frente e tras, ou sem separacao entre elas, devolve false.
 static func facing_flip(root: Node3D, box: AABB) -> bool:
 	var along_z := box.size.z >= box.size.x
 	var fsum := 0.0
 	var fn := 0
 	var bsum := 0.0
 	var bn := 0
-	for w in wheel_nodes(root):
-		var n3 := w as Node3D
-		if n3 == null:
-			continue
-		var nm := String(n3.name).to_lower()
-		var p := rel_xf(n3, root).origin
-		var c := p.z if along_z else p.x
-		if nm.contains("front"):
-			fsum += c
+	for w in wheel_centers(root):
+		var c: Vector3 = w["center"]
+		var v := c.z if along_z else c.x
+		if bool(w["front"]):
+			fsum += v
 			fn += 1
-		elif nm.contains("back") or nm.contains("rear"):
-			bsum += c
+		else:
+			bsum += v
 			bn += 1
 	if fn == 0 or bn == 0:
 		return false
 	var f := fsum / float(fn)
 	var b := bsum / float(bn)
+	if absf(f - b) < 0.05:
+		return false
 	# Com o eixo longo em Z, a frente deve ficar em -Z: flip se estiver em +Z.
 	# Com o eixo longo em X, o giro de 90 graus leva +X para -Z: flip se a
 	# frente estiver em -X.
