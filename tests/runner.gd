@@ -17,6 +17,7 @@ const Car = preload("res://scripts/vehicles/car.gd")
 const ModelProp = preload("res://scripts/world/model_prop.gd")
 const Player = preload("res://scripts/player/player.gd")
 const TouchControls = preload("res://scripts/ui/touch_controls.gd")
+const VehicleAudio = preload("res://scripts/audio/vehicle_audio.gd")
 const Traffic = preload("res://scripts/world/traffic.gd")
 
 var _pass := 0
@@ -49,6 +50,9 @@ func _initialize() -> void:
 	_test_facing_and_roll()
 	_test_traffic_pure()
 	_test_traffic_models()
+	_test_traffic_collision()
+	_test_traffic_spacing_and_follow()
+	_test_audio_pure()
 	_test_windows()
 	_test_scripts_compile()
 	_test_save_roundtrip()
@@ -612,6 +616,74 @@ func _test_traffic_models() -> void:
 		mp.free()
 
 
+func _test_traffic_collision() -> void:
+	# Fase 4: o carro do jogador nao atravessa um carro de transito.
+	var t := Traffic.new()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 3
+	t.cars = [{"node": Vector2i(2, 2), "h": Vector2i(1, 0), "s": 10.0, "lat": Vector2.ZERO,
+		"speed": 6.0, "rng": rng, "model": 0, "index": 0, "pace": 1.0}]
+	var o: Vector3 = Traffic.pose(t.cars[0]).origin
+	check(t.hit_test(o + Vector3(0.0, 0.0, 30.0), 1.5).is_empty(), "carro a 30 m nao colide")
+	var hit: Dictionary = t.hit_test(o + Vector3(0.4, 0.0, 0.3), 1.5)
+	check(not hit.is_empty(), "carro em cima do outro colide")
+	if not hit.is_empty():
+		var pushed: Vector3 = hit["pushed"]
+		var d := Vector2(pushed.x - o.x, pushed.z - o.z).length()
+		check(d >= 1.5 + Traffic.CAR_RADIUS - 0.01,
+			"empurrao tira o carro de dentro do outro (%.2f m)" % d)
+	t.free()
+
+
+func _test_traffic_spacing_and_follow() -> void:
+	# Distancia entre carros: quem vem atras alivia e para se preciso.
+	var t := Traffic.new()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 9
+	var a := {"node": Vector2i(3, 3), "h": Vector2i(1, 0), "s": 0.0, "lat": Vector2.ZERO,
+		"speed": 6.0, "rng": rng, "model": 0, "index": 0, "pace": 1.0}
+	var b := {"node": Vector2i(3, 3), "h": Vector2i(1, 0), "s": 6.0, "lat": Vector2.ZERO,
+		"speed": 6.0, "rng": rng, "model": 0, "index": 1, "pace": 1.0}
+	t.cars = [a, b]
+	t._apply_spacing()
+	check(float(a["pace"]) < 1.0,
+		"quem vem atras alivia com carro na frente (pace %.2f)" % float(a["pace"]))
+	check(absf(float(b["pace"]) - 1.0) < 0.01, "quem vem na frente segue solto")
+	b["s"] = 60.0
+	t._apply_spacing()
+	check(absf(float(a["pace"]) - 1.0) < 0.01, "longe da frente, volta ao ritmo normal")
+	# O transito acompanha o jogador: carro longe volta para perto, em rua valida.
+	var c := {"node": Vector2i(0, 0), "h": Vector2i(1, 0), "s": 0.0, "lat": Vector2.ZERO,
+		"speed": 6.0, "rng": rng, "model": 0, "index": 2, "pace": 1.0}
+	var focus := Vector3(1600.0, 1.0, 200.0)
+	check(Traffic.place_near(c, focus, 150.0, 260.0), "carro reposicionado em volta do jogador")
+	check(Traffic.valid(c["node"]), "posicao nova esta na grade da cidade")
+	var o: Vector3 = Traffic.pose(c).origin
+	var dist := Vector2(o.x - focus.x, o.z - focus.z).length()
+	check(dist >= 60.0 and dist <= 340.0, "carro volta a uma distancia util (%.0f m)" % dist)
+	t.free()
+
+
+func _test_audio_pure() -> void:
+	# Som sintetizado: a conta e pura, entao o CI pode conferir sem placa de audio.
+	check(absf(VehicleAudio.engine_hz(0.0) - VehicleAudio.IDLE_HZ) < 0.01,
+		"motor em marcha lenta a %.0f Hz" % VehicleAudio.engine_hz(0.0))
+	check(absf(VehicleAudio.engine_hz(1.0) - VehicleAudio.MAX_HZ) < 0.01,
+		"motor a pleno giro a %.0f Hz" % VehicleAudio.engine_hz(1.0))
+	check(VehicleAudio.engine_hz(0.5) > VehicleAudio.engine_hz(0.2),
+		"o tom sobe com a velocidade")
+	var table: PackedFloat32Array = VehicleAudio.engine_table()
+	var peak := 0.0
+	for v in table:
+		peak = maxf(peak, absf(v))
+	check(table.size() == VehicleAudio.TABLE_SIZE, "tabela do motor com %d amostras" % table.size())
+	check(peak > 0.95 and peak <= 1.001, "tabela do motor normalizada (pico %.2f)" % peak)
+	check(absf(table[0]) < 0.01, "tabela do motor comeca em zero (sem clique no loop)")
+	check(VehicleAudio.impact_pitch(0.0) > VehicleAudio.impact_pitch(1.0),
+		"batida forte soa mais grave")
+	check(VehicleAudio.load_impact() != null, "som de batida CC0 carregou")
+
+
 func _test_windows() -> void:
 	# Fachadas de vidro: existem no LOD full, nao existem no LOD far nem no mar.
 	var full := CityGen.generate(3, 0, 20260922, CityGen.LOD_FULL)
@@ -657,6 +729,7 @@ func _test_scripts_compile() -> void:
 		"res://scripts/world/city_gen.gd",
 		"res://scripts/world/prop_factory.gd",
 		"res://scripts/world/model_prop.gd",
+		"res://scripts/audio/vehicle_audio.gd",
 		"res://scripts/world/traffic.gd",
 		"res://scripts/world/sector_streamer.gd",
 		"res://scripts/world/day_night.gd",

@@ -71,6 +71,18 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   pelo AABB e fallback silencioso. O CI importa o .glb e TESTA que ele vira
   PackedScene com volume e triangulos. Isolado de proposito: nao substitui o
   carro dirigivel nem os props procedurais ate vermos o custo no aparelho.
+- Transito (Fase 4, rodada 2): o carro do jogador COLIDE com os carros de
+  transito (hit_test por circulos no plano XZ, empurrao para fora, perda do
+  embalo e signal `crashed`), os carros mantem distancia entre si
+  (_apply_spacing: quem vem atras alivia e para) e o transito ACOMPANHA o
+  jogador (place_near: quem ficou a mais de 260 m volta para 150-260 m, fora do
+  campo de visao). Pendente: validar no aparelho.
+- Som (Fase 4): motor sintetizado em AudioStreamGenerator (tom sobe com o giro,
+  amplitude com o acelerador) + ruido filtrado de cidade + impacto CC0
+  (thud2.wav). Nao existe loop de motor CC0 em .wav/.mp3 com URL direta, e o
+  Safari do iPhone nao toca .ogg — por isso a sintese. O Safari so libera audio
+  depois do primeiro toque, o que ja acontece no joystick. Pendente: ouvir no
+  aparelho e ajustar volume/timbre.
 - Frota externa (Fase 4): quatro carros CC0 da Quaternius (sedan, SUV,
   esportivo e taxi) em assets/models/, 161-177 KB e ~3k triangulos cada, SEM
   textura (so cor de material) e com rodas em nos separados — o que permite
@@ -81,8 +93,9 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   carros na grade de ruas perto do nascimento, um desenho por modelo, cada
   modelo assado numa malha unica com cor de vertice. NAO validado no aparelho:
   falta ver o FPS com o transito em cena e se as rodas giram no sentido certo.
-  Limitacoes conhecidas: sem colisao com o jogador, sem semaforo, e na curva
-  a faixa desliza em linha reta (sem arco).
+  Limitacoes conhecidas: sem semaforo, e na curva a faixa desliza em linha
+  reta (sem arco). Colisao com o jogador, distancia entre carros e o transito
+  que acompanha o jogador entraram na rodada seguinte (duas entradas acima).
   Descartados na pesquisa: Khronos ToyCar (CC0, mas 5,4 MB, ~89k triangulos e
   materiais que o renderer Compatibility nao aplica) e o Range Rover da
   IvOfficial (o mais bonito, 23k triangulos e texturizado — pesado demais para

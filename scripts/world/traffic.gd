@@ -8,9 +8,13 @@ extends Node3D
 ## - Visual barato: um MultiMesh por modelo. Cada modelo (carros CC0 da
 ##   Quaternius) e assado numa malha unica com cor de vertice (bake), entao o
 ##   transito inteiro custa uma chamada de desenho por modelo.
-## - Ainda NAO: semaforos, colisao com o jogador, rodas girando, distancia
-##   entre carros. Cada um e um passo proprio da Fase 4.
-## - A logica (advance, choose_heading, pose) e pura e testada no CI sem cena.
+## - O transito ACOMPANHA o jogador: carro que ficou longe demais volta para
+##   perto, fora do campo de visao (senao a cidade fica vazia quando ele acelera
+##   para longe do nascimento). Ha distancia minima entre carros e colisao com o
+##   carro do jogador (hit_test).
+## - Ainda NAO: semaforos, rodas girando, pedestres, faixas pintadas.
+## - A logica (advance, choose_heading, pose, place_near, hit_test) e pura e
+##   testada no CI sem cena.
 
 const Cfg = preload("res://scripts/core/cfg.gd")
 const ModelProp = preload("res://scripts/world/model_prop.gd")
@@ -18,10 +22,24 @@ const ModelProp = preload("res://scripts/world/model_prop.gd")
 const LANE := 2.5                       # m do eixo da rua ate o centro da faixa
 const BLOCK := Cfg.BLOCK_SIZE           # 64 m entre cruzamentos
 const ORIGIN := Vector2(1280.0, 128.0)  # no (0, 0): x = 1280, z = CITY_MIN_Z
-const GRID := Vector2i(10, 6)           # nos em x e em z: 9 x 5 quadras
+const GRID := Vector2i(10, 6)           # janela de nascimento (perto do spawn)
 const SPEED_MIN := 5.0                  # m/s (~18 km/h)
 const SPEED_MAX := 9.0                  # m/s (~32 km/h)
 const LAT_RATE := 4.0                   # m/s com que a faixa se ajusta numa curva
+
+# Grade inteira da cidade desenhada (CITY_MIN_Z ate CITY_MAX_Z, x de 0 a 6144):
+# os carros podem circular por toda ela, nao so pela janela do nascimento.
+const CITY_MIN := Vector2i(-20, 0)
+const CITY_MAX := Vector2i(76, 34)
+
+const CAR_RADIUS := 1.45                # raio de colisao do carro de transito (m)
+const GAP_LOOK := 14.0                  # distancia em que o carro de tras alivia
+const GAP_MIN := 4.5                    # distancia em que ele para de vez
+const GAP_LATERAL := 2.4                # so freia se estiver na mesma faixa
+const RESPAWN_NEAR := 150.0             # ao voltar para perto: de 150 a...
+const RESPAWN_FAR := 260.0              # ...260 m do jogador (fora do susto)
+
+const DIRS := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
 
 const MODEL_PATHS := [
 	"res://assets/models/quaternius-car.glb",
@@ -36,6 +54,7 @@ var models_loaded := 0
 var cars: Array = []
 var _mats_mm: Array = []      # MultiMeshInstance3D, um por modelo carregado
 var _material: StandardMaterial3D
+var _follow_t := 0.0          # relogio do "acompanhar o jogador"
 
 
 # --- Nucleo puro (sem cena; testado em tests/runner.gd) ----------------------
@@ -45,7 +64,39 @@ static func node_pos(n: Vector2i) -> Vector2:
 
 
 static func valid(n: Vector2i) -> bool:
-	return n.x >= 0 and n.x < GRID.x and n.y >= 0 and n.y < GRID.y
+	return n.x >= CITY_MIN.x and n.x <= CITY_MAX.x and n.y >= CITY_MIN.y and n.y <= CITY_MAX.y
+
+
+## No da grade mais proximo de uma posicao do mundo (metros).
+static func nearest_node(p: Vector2) -> Vector2i:
+	return Vector2i(
+		int(round((p.x - ORIGIN.x) / BLOCK)),
+		int(round((p.y - ORIGIN.y) / BLOCK)))
+
+
+## Poe o carro perto de `focus`, a uma distancia entre near_m e far_m, numa rua
+## valida. Usado ao nascer e para trazer de volta quem ficou longe. Devolve
+## false se nao achou posicao (grade pequena, por exemplo).
+static func place_near(car: Dictionary, focus: Vector3, near_m: float, far_m: float) -> bool:
+	var rng: RandomNumberGenerator = car["rng"]
+	for attempt in 12:
+		var ang := rng.randf() * TAU
+		var d := rng.randf_range(near_m, far_m)
+		var p := Vector2(focus.x, focus.z) + Vector2(cos(ang), sin(ang)) * d
+		var n := nearest_node(p)
+		if not valid(n):
+			continue
+		var h: Vector2i = DIRS[rng.randi_range(0, DIRS.size() - 1)]
+		if not valid(n + h):
+			continue
+		car["node"] = n
+		car["h"] = h
+		car["s"] = rng.randf() * BLOCK
+		car["lat"] = Vector2(right_of(h)) * LANE
+		car["speed"] = rng.randf_range(SPEED_MIN, SPEED_MAX)
+		car["pace"] = 1.0
+		return true
+	return false
 
 
 ## Faixa da direita do sentido h (mao direita). Para h = (1, 0) (leste) da (0, 1).
@@ -101,7 +152,9 @@ static func spawn_car(rng_seed: int, index: int, model: int) -> Dictionary:
 ## Avanca o carro dt segundos. Ao passar de um no, escolhe a proxima rua.
 ## A faixa ('lat') desliza ate a faixa certa do novo sentido, sem salto.
 static func advance(car: Dictionary, dt: float) -> void:
-	var s: float = float(car["s"]) + float(car["speed"]) * dt
+	# 'pace' vem do espacamento (0 = parado atras de outro carro).
+	var pace: float = clampf(float(car.get("pace", 1.0)), 0.0, 1.0)
+	var s: float = float(car["s"]) + float(car["speed"]) * pace * dt
 	var n: Vector2i = car["node"]
 	var h: Vector2i = car["h"]
 	var rng: RandomNumberGenerator = car["rng"]
@@ -180,7 +233,8 @@ static func _albedo(mat: Material) -> Color:
 
 ## Carrega os modelos, assa cada um e cria os carros. Modelos que nao carregam
 ## sao pulados; se nenhum carregar, o transito fica vazio e describe() diz por que.
-func setup(base_seed: int) -> void:
+## `focus` (posicao do jogador) faz os carros nascerem em volta dele.
+func setup(base_seed: int, focus: Vector3 = Vector3.ZERO) -> void:
 	_material = StandardMaterial3D.new()
 	_material.vertex_color_use_as_albedo = true
 	_material.vertex_color_is_srgb = false
@@ -202,7 +256,10 @@ func setup(base_seed: int) -> void:
 
 	cars.clear()
 	for k in cars_total:
-		cars.append(spawn_car(base_seed + k * 7919, k, k % meshes.size()))
+		var c := spawn_car(base_seed + k * 7919, k, k % meshes.size())
+		if focus != Vector3.ZERO:
+			place_near(c, focus, 30.0, 130.0)
+		cars.append(c)
 
 	for m in meshes.size():
 		var n := 0
@@ -222,17 +279,83 @@ func setup(base_seed: int) -> void:
 	update(0.0)
 
 
-## Um passo do transito: anda os carros e reescreve as transformacoes.
-func update(delta: float) -> void:
-	var used := PackedInt32Array()
-	used.resize(_mats_mm.size())
+## Um passo do transito: mantem os carros perto do jogador, aplica a distancia
+## entre eles, anda e reescreve as transformacoes.
+func update(delta: float, focus: Vector3 = Vector3.ZERO) -> void:
+	if focus != Vector3.ZERO:
+		_follow(focus, delta)
+	_apply_spacing()
 	for c in cars:
 		if delta > 0.0:
 			advance(c, delta)
+	_write_instances()
+
+
+## Carro que ficou longe demais volta para perto (fora do campo de visao), para
+## a cidade nao ficar vazia quando o jogador acelera para longe do nascimento.
+func _follow(focus: Vector3, delta: float) -> void:
+	_follow_t -= delta
+	if _follow_t > 0.0:
+		return
+	_follow_t = 0.5
+	for c in cars:
+		var o: Vector3 = pose(c).origin
+		if Vector2(o.x - focus.x, o.z - focus.z).length() > RESPAWN_FAR:
+			place_near(c, focus, RESPAWN_NEAR, RESPAWN_FAR)
+
+
+## Distancia entre carros: quem vem atras alivia o acelerador e para se preciso.
+## Sem isso dois carros ficam um dentro do outro num cruzamento.
+func _apply_spacing() -> void:
+	var poses: Array = []
+	for c in cars:
+		poses.append(pose(c).origin)
+	for i in cars.size():
+		var a: Dictionary = cars[i]
+		var pa: Vector3 = poses[i]
+		var h: Vector2i = a["h"]
+		var fwd := Vector3(float(h.x), 0.0, float(h.y))
+		var pace := 1.0
+		for j in cars.size():
+			if i == j:
+				continue
+			var d: Vector3 = poses[j] - pa
+			var along := d.dot(fwd)
+			if along <= 0.5 or along >= GAP_LOOK:
+				continue
+			if (d - fwd * along).length() > GAP_LATERAL:
+				continue
+			pace = minf(pace, clampf((along - GAP_MIN) / (GAP_LOOK - GAP_MIN), 0.0, 1.0))
+		a["pace"] = pace
+
+
+func _write_instances() -> void:
+	var used := PackedInt32Array()
+	used.resize(_mats_mm.size())
+	for c in cars:
 		var m: int = c["model"]
 		var mm: MultiMesh = _mats_mm[m].multimesh
 		mm.set_instance_transform(used[m], pose(c))
 		used[m] += 1
+
+
+## Colisao do carro do jogador com o transito (circulos no plano XZ).
+## Devolve {} se estiver livre, ou {"pushed": Vector3, "normal": Vector3} com a
+## posicao corrigida para fora do outro carro.
+func hit_test(pos: Vector3, radius: float) -> Dictionary:
+	var min_d := radius + CAR_RADIUS
+	for c in cars:
+		var o: Vector3 = pose(c).origin
+		var d := Vector2(pos.x - o.x, pos.z - o.z)
+		var dist := d.length()
+		if dist >= min_d:
+			continue
+		var nrm := d / dist if dist > 0.001 else Vector2(1.0, 0.0)
+		return {
+			"pushed": Vector3(o.x + nrm.x * min_d, pos.y, o.z + nrm.y * min_d),
+			"normal": Vector3(nrm.x, 0.0, nrm.y),
+		}
+	return {}
 
 
 func describe() -> String:

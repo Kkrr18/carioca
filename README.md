@@ -31,9 +31,13 @@ Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
   dirija com o volante no joystick e os pedais ACEL/FREIO; direção cinemática
   estável, rodas que giram e estercam, carroceria que acompanha o relevo e
   câmera própria.
-- Tráfego básico: 12 carros de passeio (4 modelos CC0) andando pela grade de
-  ruas perto do nascimento, um desenho por modelo. O carro que você dirige já é
-  o sedã CC0, com rodas que giram e esterçam.
+- Tráfego: 12 carros de passeio (4 modelos CC0) pela grade de ruas, um desenho
+  por modelo. Eles colidem com o seu carro, mantêm distância entre si e
+  acompanham você pela cidade. O carro que você dirige é o sedã CC0, com rodas
+  que giram e esterçam.
+- Som: motor sintetizado em código que sobe de tom com o giro, ruído de cidade
+  ao fundo e impacto CC0 nas batidas (o Safari só libera áudio depois do
+  primeiro toque na tela).
 - Botão MEDIR no HUD: 15 s sem o limite de 30 FPS, com média, p95 e pior frame
   na telemetria — é assim que o FPS real é medido no aparelho.
 - Piloto de asset externo: um modelo .glb CC0 (Kenney) carregado e normalizado

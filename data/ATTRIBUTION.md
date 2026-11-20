@@ -44,6 +44,16 @@
   [assets/models/README.md](../assets/models/README.md). Nada de conteudo com
   copyright de jogo comercial.
 
+## Sons
+
+- `assets/sounds/impact.wav` — "Metal Impact Sounds" (`thud2.wav`), de
+  **Brian MacIntosh (BMacZero)** em
+  https://opengameart.org/content/metal-impact-sounds. Licenca **CC0 1.0**
+  (o credito e opcional; fica registrado por respeito ao autor).
+- O motor e o ruido da cidade **nao vem de arquivo**: sao sintetizados em
+  `scripts/audio/vehicle_audio.gd`. Motivo: nao existe loop de motor CC0 em
+  .wav/.mp3 com URL direta, e o Safari do iPhone nao decodifica .ogg.
+
 ## Terceiros
 
 - Nao ha conteudo de jogos comerciais. Nomes de bairros, ruas e praias sao

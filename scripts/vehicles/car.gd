@@ -16,6 +16,9 @@ extends Node3D
 ## - A Fase 4 completa (trafego, faixas, semaforos, moto) cresce a partir
 ##   deste nucleo; o estado do carro ainda NAO entra no save (schema 1).
 
+## Emitido quando o carro bate em outro veiculo (o main liga ao som e ao HUD).
+signal crashed(strength: float)
+
 const Cfg = preload("res://scripts/core/cfg.gd")
 const TouchControls = preload("res://scripts/ui/touch_controls.gd")
 const PropFactory = preload("res://scripts/world/prop_factory.gd")
@@ -35,6 +38,7 @@ const WHEEL_RADIUS := 0.34
 # Distancia (m) para o prompt ENTRAR aparecer. Era 3,5 m: no iPhone o jogador
 # nao achava o carro e nao conseguia entrar (B-36).
 const PROXIMITY := 12.0
+const COLLIDE_RADIUS := 1.5    # raio do carro para colisao com o transito (m)
 
 var speed := 0.0               # m/s assinada (+ frente, - re)
 var steer := 0.0               # rad assinado (+ esquerda)
@@ -45,6 +49,8 @@ var input_throttle := 0.0
 var input_steer := 0.0
 var player = null              # main conecta; usado para entrar/sair
 var streamer = null
+var traffic = null             # main conecta; colisao com os carros de transito
+var hit_flash := 0.0           # tempo desde a ultima batida (HUD/som)
 
 ## Modelo CC0 do carro (sedan). Vazio = so a caixa de codigo.
 var model_path := ""
@@ -321,6 +327,7 @@ func _update_marker() -> void:
 # --- Direcao ------------------------------------------------------------------
 
 func _physics_process(delta: float) -> void:
+	hit_flash = maxf(0.0, hit_flash - delta)
 	if occupied:
 		_drive(delta)
 		_inclinar(delta)
@@ -389,6 +396,18 @@ func _drive(delta: float) -> void:
 			# Bateu num predio: mata a velocidade para frente (a re continua).
 			if speed > 0.0:
 				speed = 0.0
+	# Colisao com o transito: o carro nao atravessa outro carro. Empurra para
+	# fora e mata o embalo, com um pequeno recuo que da a sensacao de batida.
+	if traffic != null:
+		var hit: Dictionary = traffic.hit_test(next, COLLIDE_RADIUS)
+		if not hit.is_empty():
+			var pushed: Vector3 = hit["pushed"]
+			next.x = pushed.x
+			next.z = pushed.z
+			var impact := clampf(absf(speed) / MAX_SPEED, 0.2, 1.0)
+			speed = -1.6 if speed > 0.0 else 0.0
+			hit_flash = 0.8
+			crashed.emit(impact)
 	position = next
 	position.y = Cfg.height_at(next.x, next.z)
 
