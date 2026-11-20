@@ -71,6 +71,18 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   pelo AABB e fallback silencioso. O CI importa o .glb e TESTA que ele vira
   PackedScene com volume e triangulos. Isolado de proposito: nao substitui o
   carro dirigivel nem os props procedurais ate vermos o custo no aparelho.
+- Frota externa (Fase 4): quatro carros CC0 da Quaternius (sedan, SUV,
+  esportivo e taxi) em assets/models/, 161-177 KB e ~3k triangulos cada, SEM
+  textura (so cor de material) e com rodas em nos separados — o que permite
+  girar e estercar depois. O CI valida o import, os triangulos, as dimensoes e
+  a existencia dos nos de roda (_test_car_models). Ainda NAO entram em cena: o
+  proximo passo e usar o sedan no carro dirigivel e os outros no trafego, com
+  1 chamada de desenho por carro (malha unica com cor de vertice), porque sao
+  6 materiais por modelo do jeito que vem.
+  Descartados na pesquisa: Khronos ToyCar (CC0, mas 5,4 MB, ~89k triangulos e
+  materiais que o renderer Compatibility nao aplica) e o Range Rover da
+  IvOfficial (o mais bonito, 23k triangulos e texturizado — pesado demais para
+  trafego, fica como opcao para um carro unico no futuro).
 
 ## Testados
 

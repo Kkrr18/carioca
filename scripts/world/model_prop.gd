@@ -93,6 +93,24 @@ static func count_tris(root: Node3D) -> int:
 	return n
 
 
+## Nos do modelo cujo nome indica roda (ex.: Quaternius "NormalCar1_FrontLeftWheel").
+## Serve para girar/estercar as rodas do carro dirigivel e para o teste avisar
+## quando um modelo novo vier com a malha toda soldada numa peca so.
+static func wheel_nodes(root: Node) -> Array:
+	var out: Array = []
+	_collect_wheels(root, out)
+	return out
+
+
+static func _collect_wheels(n: Node, out: Array) -> void:
+	var low := String(n.name).to_lower()
+	if low.contains("wheel") or low.contains("roda"):
+		out.append(n)
+		return
+	for c in n.get_children():
+		_collect_wheels(c, out)
+
+
 static func _collect_meshes(n: Node, out: Array) -> void:
 	if n is MeshInstance3D:
 		out.append(n)

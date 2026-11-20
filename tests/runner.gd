@@ -43,6 +43,7 @@ func _initialize() -> void:
 	_test_car_scene_enter_exit()
 	_test_model_prop()
 	_test_model_asset()
+	_test_car_models()
 	_test_windows()
 	_test_scripts_compile()
 	_test_save_roundtrip()
@@ -364,6 +365,47 @@ func _test_model_asset() -> void:
 	var tris: int = ModelProp.count_tris(inst)
 	check(tris > 0, "modelo com %d triangulos" % tris)
 	inst.free()
+
+
+func _test_car_models() -> void:
+	# Modelos CC0 da Quaternius (pack "Cars"), trazidos para a frota da Fase 4.
+	# O CI prova o caminho todo: arquivo -> import -> PackedScene -> AABB,
+	# triangulos e nos de roda. E este teste que vai avisar se um modelo novo
+	# vier pesado, com dimensao estranha ou com as rodas soldadas na carroceria.
+	var models := [
+		["res://assets/models/quaternius-car.glb", "sedan"],
+		["res://assets/models/quaternius-suv.glb", "suv"],
+		["res://assets/models/quaternius-sports-car.glb", "esportivo"],
+		["res://assets/models/quaternius-taxi.glb", "taxi"],
+	]
+	for m in models:
+		var path := String(m[0])
+		var label := String(m[1])
+		check(FileAccess.file_exists(path), "modelo %s no repositorio" % label)
+		if not FileAccess.file_exists(path):
+			continue
+		if not ResourceLoader.exists(path):
+			known(false, "modelo %s importado (rodar --import antes)" % label)
+			continue
+		var res: Resource = load(path)
+		check(res is PackedScene, "modelo %s importado como PackedScene" % label)
+		if not (res is PackedScene):
+			continue
+		var inst := (res as PackedScene).instantiate() as Node3D
+		if inst == null:
+			check(false, "modelo %s com raiz Node3D" % label)
+			continue
+		var box: AABB = ModelProp.mesh_aabb(inst)
+		var tris: int = ModelProp.count_tris(inst)
+		var wheels: int = ModelProp.wheel_nodes(inst).size()
+		print("  info: %s = %d tris, %.2f x %.2f x %.2f m, %d nos de roda" % [
+			label, tris, box.size.x, box.size.y, box.size.z, wheels])
+		check(tris > 500 and tris < 12000, "modelo %s com %d triangulos" % [label, tris])
+		check(box.size.z > 3.0 and box.size.z < 6.0,
+			"modelo %s com %.2f m de comprimento (eixo Z)" % [label, box.size.z])
+		check(box.size.y < 2.5, "modelo %s com %.2f m de altura" % [label, box.size.y])
+		check(wheels >= 2, "modelo %s com %d nos de roda separados" % [label, wheels])
+		inst.free()
 
 
 func _test_windows() -> void:

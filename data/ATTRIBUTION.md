@@ -33,6 +33,13 @@
   do kit e MIT. Usado como piloto de asset externo (B-21): um unico modelo,
   carregado por `scripts/world/model_prop.gd`. O `.glb` referencia o PNG por
   caminho relativo, entao os dois arquivos andam juntos (B-37).
+- `assets/models/quaternius-car.glb`, `quaternius-suv.glb`,
+  `quaternius-sports-car.glb`, `quaternius-taxi.glb` — carros low-poly do pack
+  **"Cars"** de **Quaternius** (https://quaternius.com, tambem em
+  https://poly.pizza). Licenca **CC0 1.0**; nenhuma atribuicao e exigida, mas
+  fica registrada por respeito ao autor. Obtidos de um espelho no GitHub
+  (little-zack-wong/vehicle-museum, commit `c46c517`) porque o download do
+  poly.pizza e por JavaScript, sem URL direta de arquivo.
 - Regra do projeto: so CC0 ou CC-BY, com origem e licenca anotadas aqui e em
   [assets/models/README.md](../assets/models/README.md). Nada de conteudo com
   copyright de jogo comercial.
