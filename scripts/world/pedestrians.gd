@@ -410,8 +410,18 @@ func _build_models(scene: PackedScene) -> void:
 			var names := ap.get_animation_list()
 			if names.size() > 0:
 				_anim_name = String(names[0])
+				var anim := ap.get_animation(_anim_name)
+				# O import do glTF pode deixar a animacao em LOOP_NONE, e ai o
+				# passo roda UMA vez e a pessoa congela andando. Loop garantido.
+				var length := 1.0
+				if anim != null:
+					anim.loop_mode = Animation.LOOP_LINEAR
+					length = maxf(0.2, anim.length)
+					# Quadro do "passo junto": e a pose de quem esta parado.
+					_idle_seek = length * 0.25
 				ap.play(_anim_name)
-				ap.seek(float(i) * 0.11, true)
+				# Defasa o passo: senao a rua inteira anda no mesmo compasso.
+				ap.seek(fposmod(float(i) * 0.11, length), true)
 				ap.speed_scale = 1.0
 			else:
 				ap = null
