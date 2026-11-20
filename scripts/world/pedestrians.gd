@@ -65,7 +65,7 @@ const CAR_PANIC := 9.0          # carro a menos disso durante a travessia: corre
 ## caminhada. Um modelo por pedestre custa um desenho por pessoa, por isso a
 ## turma cai para MODEL_PEDS; sem o arquivo, o jogo volta sozinho para as caixas.
 const MODEL_PATH := "res://assets/models/pedestrian.glb"
-const MODEL_PEDS := 14          # quantas pessoas quando o modelo carrega
+const MODEL_PEDS := 12          # quantas pessoas quando o modelo carrega
 const MODEL_HEIGHT := 1.72      # altura final em metros (normalizada pelo AABB)
 ## O glTF olha para +Z; o pedestre anda com o -Z do no virado para a frente.
 const MODEL_YAW := PI
@@ -399,19 +399,21 @@ func _build_models(scene: PackedScene) -> void:
 			var centre := box.get_center()
 			inst.scale = Vector3.ONE * (MODEL_HEIGHT / h)
 			inst.position = Vector3(-centre.x, -box.position.y, -centre.z) * (MODEL_HEIGHT / h)
-			# Tinta leve: a textura multiplica a cor, entao 35% da cor da camisa
-			# ja diferencia as pessoas sem tingir a pele.
+			# Tinta de roupa: 0,62 para a cor da camisa (com 0,35 o modelo saia
+			# lavado no sol da praia e todo mundo era o mesmo homem palido), e
+			# 20% mais escuro para ganhar contraste com a areia branca.
 			var base := mi.get_active_material(0) as StandardMaterial3D
 			if base != null:
 				var tint := base.duplicate() as StandardMaterial3D
 				if tint != null:
-					tint.albedo_color = Color.WHITE.lerp(p["shirt"], 0.35)
+					tint.albedo_color = Color(0.80, 0.80, 0.80).lerp(p["shirt"], 0.62)
 					mi.material_override = tint
 			mi.visibility_range_end = VIS_RANGE
 			mi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
-			# Sem sombra propria: 14 esqueletos no mapa de sombra custam tanto
-			# quanto eles proprios e a 20 m a sombra de uma pessoa nao aparece.
-			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			# Sombra no chao SIM: sem ela o pedestre le como adesivo colado na
+			# areia (o inspetor descreveu exatamente isso). Foram 12 pessoas, e
+			# nao 14, para pagar essa sombra.
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		var ap := _find_anim(inst)
 		if ap != null:
 			var names := ap.get_animation_list()
