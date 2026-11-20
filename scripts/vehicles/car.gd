@@ -19,6 +19,8 @@ extends Node3D
 const Cfg = preload("res://scripts/core/cfg.gd")
 const TouchControls = preload("res://scripts/ui/touch_controls.gd")
 const PropFactory = preload("res://scripts/world/prop_factory.gd")
+const ModelProp = preload("res://scripts/world/model_prop.gd")
+const MODEL_LENGTH := 4.3      # comprimento do sedan CC0 (m); frente em -Z
 
 const MAX_SPEED := 22.0        # ~80 km/h a pleno acelerador
 const REVERSE_MAX := 7.0       # |velocidade| maxima em marcha a re
@@ -43,6 +45,11 @@ var input_throttle := 0.0
 var input_steer := 0.0
 var player = null              # main conecta; usado para entrar/sair
 var streamer = null
+
+## Modelo CC0 do carro (sedan). Vazio = so a caixa de codigo.
+var model_path := ""
+var model_loaded := false
+var _model_wheels: Array = []  # {node, rest, front, axle} de cada roda do modelo
 
 var camera: Camera3D
 var _camera_rig: Node3D
@@ -87,8 +94,12 @@ func _ready() -> void:
 	# O main posiciona o carro antes do add_child; aqui ele encosta no chao
 	# analitico para nao nascer flutuando nem enterrado.
 	position.y = Cfg.height_at(position.x, position.z)
-	_build_body()
-	_build_wheels()
+	# Modelo CC0 quando carrega; a caixa de codigo e a reserva se nao carregar.
+	if not model_path.is_empty():
+		_build_model()
+	if not model_loaded:
+		_build_body()
+		_build_wheels()
 	_build_camera()
 	_build_marker()
 	set_physics_process(true)
@@ -179,6 +190,39 @@ func _build_wheels() -> void:
 		_wheels.append(pivot)
 		if pos.z < 0.0:
 			_front_pivots.append(pivot)
+
+
+## Carrega o .glb do carro e guarda as rodas. Se nao carregar, o no volta
+## a vazio e a caixa de codigo assume.
+func _build_model() -> void:
+	var mp := ModelProp.new()
+	mp.model_path = model_path
+	mp.target_length = MODEL_LENGTH
+	add_child(mp)
+	mp.load_model()
+	if not mp.loaded:
+		remove_child(mp)
+		mp.free()
+		return
+	model_loaded = true
+	for w in mp.wheel_info:
+		var node := w["node"] as Node3D
+		_model_wheels.append({
+			"node": node,
+			"rest": w["rest"],
+			"front": w["front"],
+			"axle": roll_axis(ModelProp.mesh_aabb(node).size),
+		})
+
+
+## Eixo de rolagem de uma roda: a menor dimensao do seu AABB e a espessura do
+## pneu, e o eixo de giro e essa direcao, no sistema local da roda.
+static func roll_axis(size: Vector3) -> Vector3:
+	if size.x <= size.y and size.x <= size.z:
+		return Vector3.RIGHT
+	if size.y <= size.x and size.y <= size.z:
+		return Vector3.UP
+	return Vector3.BACK
 
 
 func _build_camera() -> void:
@@ -336,6 +380,18 @@ func _update_wheels(delta: float) -> void:
 	# wrapf mantem o angulo pequeno: sem isso o acumulo perde precisao float
 	# depois de alguns minutos dirigindo.
 	_spin = wrapf(_spin + (speed / WHEEL_RADIUS) * delta, -TAU, TAU)
+	if model_loaded:
+		# Roda do modelo: a rotacao de rolagem vem no eixo da propria roda, e a
+		# de esterco (so nas dianteiras) vem em torno do Y do carro, na frente
+		# da transformacao de repouso.
+		for wi in _model_wheels:
+			var node := wi["node"] as Node3D
+			var rest: Transform3D = wi["rest"]
+			var axle: Vector3 = wi["axle"]
+			var roll := Basis(axle, _spin)
+			var steer_b := Basis(Vector3.UP, steer) if bool(wi["front"]) else Basis()
+			node.transform = Transform3D(steer_b * rest.basis * roll, rest.origin)
+		return
 	for w in _wheels:
 		w.rotation.x = _spin
 	for p in _front_pivots:

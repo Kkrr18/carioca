@@ -17,6 +17,7 @@ const Car = preload("res://scripts/vehicles/car.gd")
 const ModelProp = preload("res://scripts/world/model_prop.gd")
 const Player = preload("res://scripts/player/player.gd")
 const TouchControls = preload("res://scripts/ui/touch_controls.gd")
+const Traffic = preload("res://scripts/world/traffic.gd")
 
 var _pass := 0
 var _fail := 0
@@ -44,6 +45,9 @@ func _initialize() -> void:
 	_test_model_prop()
 	_test_model_asset()
 	_test_car_models()
+	_test_facing_and_roll()
+	_test_traffic_pure()
+	_test_traffic_models()
 	_test_windows()
 	_test_scripts_compile()
 	_test_save_roundtrip()
@@ -408,6 +412,144 @@ func _test_car_models() -> void:
 		inst.free()
 
 
+func _wheel_rig(front_z: float) -> Node3D:
+	# Raiz com duas rodas (nomes como os da Quaternius): a dianteira em front_z.
+	var root := Node3D.new()
+	var f := Node3D.new()
+	f.name = "FrontLeftWheel"
+	f.position = Vector3(0.8, 0.3, front_z)
+	root.add_child(f)
+	var b := Node3D.new()
+	b.name = "BackLeftWheel"
+	b.position = Vector3(0.8, 0.3, -front_z)
+	root.add_child(b)
+	return root
+
+
+func _test_facing_and_roll() -> void:
+	# Frente do modelo em -Z (como o carro dirigivel). Rodas "front" no lado +Z
+	# pedem meia volta; no lado -Z, nao.
+	var box := AABB(Vector3(-1.0, 0.0, -2.0), Vector3(2.0, 1.0, 4.0))
+	var ok_root := _wheel_rig(-1.4)
+	var bad_root := _wheel_rig(1.4)
+	check(not ModelProp.facing_flip(ok_root, box), "frente das rodas em -Z: modelo nao gira")
+	check(ModelProp.facing_flip(bad_root, box), "frente das rodas em +Z: modelo gira meia volta")
+	var p_ok: Array = ModelProp.placement(ok_root, box, 4.0)
+	var p_bad: Array = ModelProp.placement(bad_root, box, 4.0)
+	check(absf(float(p_ok[1])) < 0.001 and absf(float(p_bad[1]) - PI) < 0.001,
+		"placement soma meia volta so quando a frente esta errada")
+	ok_root.free()
+	bad_root.free()
+	check(Car.roll_axis(Vector3(0.3, 0.7, 0.7)) == Vector3.RIGHT, "roda fina em X: gira em X")
+	check(Car.roll_axis(Vector3(0.7, 0.3, 0.7)) == Vector3.UP, "roda fina em Y: gira em Y")
+	check(Car.roll_axis(Vector3(0.7, 0.7, 0.2)) == Vector3.BACK, "roda fina em Z: gira em Z")
+
+
+func _test_traffic_pure() -> void:
+	# Transito basico (Fase 4): nucleo puro de scripts/world/traffic.gd.
+	check(fmod(Traffic.ORIGIN.x, Cfg.BLOCK_SIZE) == 0.0 and Traffic.ORIGIN.y == Cfg.CITY_MIN_Z,
+		"grade do transito cai nas linhas de rua do city_gen")
+	check(Traffic.LANE < Cfg.ROAD_WIDTH * 0.5,
+		"faixa do carro cabe dentro da rua (%.1f m)" % Traffic.LANE)
+	check(Traffic.right_of(Vector2i(1, 0)) == Vector2i(0, 1),
+		"mao direita: indo para leste, a faixa fica a +Z")
+
+	var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var escolha_ok := true
+	for i in 4000:
+		var n := Vector2i(rng.randi_range(0, Traffic.GRID.x - 1), rng.randi_range(0, Traffic.GRID.y - 1))
+		var h: Vector2i = dirs[rng.randi_range(0, 3)]
+		var nh := Traffic.choose_heading(n, h, rng.randf())
+		if not Traffic.valid(n + nh):
+			escolha_ok = false
+	check(escolha_ok, "cruzamento nunca escolhe rua fora da grade")
+
+	var a := Traffic.spawn_car(5, 0, 0)
+	var b := Traffic.spawn_car(5, 0, 0)
+	check(a["node"] == b["node"] and a["h"] == b["h"], "mesmo seed, mesmo carro de transito")
+
+	var sim: Array = []
+	for k in 12:
+		sim.append(Traffic.spawn_car(1000 + k * 7919, k, 0))
+	for step in 6000:
+		for c in sim:
+			Traffic.advance(c, 1.0 / 30.0)
+	var sim_ok := true
+	for c in sim:
+		if not Traffic.valid(c["node"]):
+			sim_ok = false
+	check(sim_ok, "12 carros por 3 min de jogo continuam dentro da grade")
+
+	# Sem teleporte: o passo de um quadro nunca passa de velocidade + deslize
+	# lateral. Cobre as curvas, onde o no muda de sentido.
+	var one := Traffic.spawn_car(42, 0, 0)
+	var prev := Traffic.pose(one).origin
+	var worst := 0.0
+	for i in 3000:
+		Traffic.advance(one, 1.0 / 30.0)
+		var cur := Traffic.pose(one).origin
+		worst = maxf(worst, Vector2(cur.x - prev.x, cur.z - prev.z).length())
+		prev = cur
+	var bound := (Traffic.SPEED_MAX + Traffic.LAT_RATE) / 30.0 + 0.001
+	check(worst <= bound, "carro nao teleporta nas curvas (passo maximo %.3f m, limite %.3f)" % [worst, bound])
+
+	# O modelo olha para o sentido da rua (frente = -Z local).
+	for h in dirs:
+		var c := {"node": Vector2i(3, 2), "h": h, "s": 0.0, "lat": Vector2.ZERO,
+			"speed": 0.0, "rng": rng, "model": 0, "index": 0}
+		var fwd: Vector3 = -Traffic.pose(c).basis.z
+		check(absf(fwd.x - float(h.x)) < 0.001 and absf(fwd.z - float(h.y)) < 0.001,
+			"modelo aponta para o sentido %s" % str(h))
+
+
+func _test_traffic_models() -> void:
+	# Os 4 modelos de transito: importam, sao assados numa malha unica sem
+	# perder triangulos e a frente deles aponta para -Z.
+	for i in Traffic.MODEL_PATHS.size():
+		var path: String = Traffic.MODEL_PATHS[i]
+		var label := path.get_file()
+		if not ResourceLoader.exists(path):
+			known(false, "modelo de transito %s importado (rodar --import antes)" % label)
+			continue
+		var mp := ModelProp.new()
+		mp.model_path = path
+		mp.target_length = float(Traffic.MODEL_LENGTHS[i])
+		mp.load_model()
+		check(mp.loaded, "modelo de transito %s carrega" % label)
+		if not mp.loaded:
+			mp.free()
+			continue
+		var mesh := Traffic.bake(mp)
+		var baked := 0
+		for s in mesh.get_surface_count():
+			var arr: Array = mesh.surface_get_arrays(s)
+			var idx: Variant = arr[Mesh.ARRAY_INDEX]
+			if idx is PackedInt32Array and (idx as PackedInt32Array).size() > 0:
+				baked += (idx as PackedInt32Array).size() / 3
+			else:
+				baked += (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() / 3
+		var original := ModelProp.count_tris(mp)
+		check(mesh.get_surface_count() > 0 and baked == original,
+			"malha unica de %s mantem os %d triangulos (%d)" % [label, original, baked])
+		var fz := 0.0
+		var fn := 0
+		var bz := 0.0
+		var bn := 0
+		for w in mp.wheel_info:
+			var o: Vector3 = ModelProp.rel_xf(w["node"], mp).origin
+			if bool(w["front"]):
+				fz += o.z
+				fn += 1
+			else:
+				bz += o.z
+				bn += 1
+		if fn > 0 and bn > 0:
+			check(fz / float(fn) < bz / float(bn), "%s: rodas da frente ficam em -Z" % label)
+		mp.free()
+
+
 func _test_windows() -> void:
 	# Fachadas de vidro: existem no LOD full, nao existem no LOD far nem no mar.
 	var full := CityGen.generate(3, 0, 20260922, CityGen.LOD_FULL)
@@ -453,6 +595,7 @@ func _test_scripts_compile() -> void:
 		"res://scripts/world/city_gen.gd",
 		"res://scripts/world/prop_factory.gd",
 		"res://scripts/world/model_prop.gd",
+		"res://scripts/world/traffic.gd",
 		"res://scripts/world/sector_streamer.gd",
 		"res://scripts/world/day_night.gd",
 		"res://scripts/vehicles/car.gd",

@@ -1,10 +1,10 @@
 extends Node3D
-## ModelProp: um modelo .glb externo (CC0) dentro do mundo procedural.
+## ModelProp: um modelo .glb externo (CC0) dentro do mundo.
 ##
 ## Piloto de assets externos (Fase 1.5, B-21): prova o caminho completo —
 ## arquivo .glb no repositorio, import no CI, export Web e custo medido no
-## aparelho — com UM arquivo e risco zero: se o modelo nao carregar, este no
-## fica vazio, o motivo vai para o HUD e o resto do jogo nao muda.
+## aparelho. Se o modelo nao carregar, este no fica vazio, o motivo vai para o
+## HUD e o resto do jogo nao muda.
 ##
 ## Por que normalizar por codigo: os pacotes CC0 vem em escala, eixo e pivo
 ## arbitrarios e nao ha como abrir o .glb no iPhone para conferir (B-21).
@@ -12,7 +12,9 @@ extends Node3D
 ##   1. escala para `target_length` metros no maior eixo horizontal;
 ##   2. se o maior eixo for X, gira 90 graus — o comprimento fica em Z, que e
 ##      o eixo para onde carro/caminhao "apontam" neste jogo;
-##   3. o ponto mais baixo vai para y = 0 e o centro X/Z para a origem, para o
+##   3. se as rodas "front" estiverem do lado de tras, gira mais 180 graus
+##      (a frente do carro passa a ser -Z, como no carro dirigivel);
+##   4. o ponto mais baixo vai para y = 0 e o centro X/Z para a origem, para o
 ##      modelo encostar no chao analitico (Cfg.height_at) sem flutuar.
 ## A funcao pura normalize_for() faz a conta (1 e 2) e e testada no CI.
 
@@ -27,10 +29,15 @@ var tris := 0
 var load_ms := 0.0
 var size_m := Vector3.ZERO
 var stats_text := ""
+## Rodas do modelo (nome com "wheel" ou "roda"): lista de
+## {"node": Node3D, "rest": Transform3D, "front": bool}. O carro dirigivel gira
+## e esterca estes nos; lista vazia = modelo sem rodas separadas.
+var wheel_info: Array = []
+var _built := false
 
 
 func _ready() -> void:
-	_load_model()
+	load_model()
 
 
 func describe() -> String:
@@ -45,6 +52,49 @@ static func normalize_for(size: Vector3, target: float) -> Array:
 	var s: float = target / span
 	var yaw: float = 0.0 if size.z >= size.x else PI * 0.5
 	return [s, yaw]
+
+
+## Escala e giro finais: normalize_for() mais meia volta quando a frente do
+## modelo aponta para o lado errado. [escala, yaw].
+static func placement(root: Node3D, box: AABB, target: float) -> Array:
+	var norm := normalize_for(box.size, target)
+	var yaw: float = float(norm[1])
+	if facing_flip(root, box):
+		yaw += PI
+	return [float(norm[0]), yaw]
+
+
+## True se as rodas "front" estiverem atras das "back"/"rear" no eixo longo.
+## Sem nomes de frente e tras, nao ha como saber: devolve false (nao gira).
+static func facing_flip(root: Node3D, box: AABB) -> bool:
+	var along_z := box.size.z >= box.size.x
+	var fsum := 0.0
+	var fn := 0
+	var bsum := 0.0
+	var bn := 0
+	for w in wheel_nodes(root):
+		var n3 := w as Node3D
+		if n3 == null:
+			continue
+		var nm := String(n3.name).to_lower()
+		var p := rel_xf(n3, root).origin
+		var c := p.z if along_z else p.x
+		if nm.contains("front"):
+			fsum += c
+			fn += 1
+		elif nm.contains("back") or nm.contains("rear"):
+			bsum += c
+			bn += 1
+	if fn == 0 or bn == 0:
+		return false
+	var f := fsum / float(fn)
+	var b := bsum / float(bn)
+	# Com o eixo longo em Z, a frente deve ficar em -Z: flip se estiver em +Z.
+	# Com o eixo longo em X, o giro de 90 graus leva +X para -Z: flip se a
+	# frente estiver em -X.
+	if along_z:
+		return f > b
+	return f < b
 
 
 ## AABB de todas as MeshInstance3D abaixo de `root`, no espaco de `root`.
@@ -102,6 +152,18 @@ static func wheel_nodes(root: Node) -> Array:
 	return out
 
 
+## Todas as MeshInstance3D abaixo de `root` (uso publico, para a malha unica).
+static func collect_meshes(root: Node) -> Array:
+	var out: Array = []
+	_collect_meshes(root, out)
+	return out
+
+
+## Transform de `node` relativa a `root` (uso publico).
+static func rel_xf(node: Node3D, root: Node3D) -> Transform3D:
+	return _rel_transform(node, root)
+
+
 static func _collect_wheels(n: Node, out: Array) -> void:
 	var low := String(n.name).to_lower()
 	if low.contains("wheel") or low.contains("roda"):
@@ -130,7 +192,12 @@ static func _rel_transform(node: Node3D, root: Node3D) -> Transform3D:
 	return xf
 
 
-func _load_model() -> void:
+## Carrega o modelo uma vez. Pode ser chamado de fora (o carro faz isso quando
+## o _ready do no ainda nao rodou); a guarda impede carregar duas vezes.
+func load_model() -> void:
+	if _built:
+		return
+	_built = true
 	if model_path.is_empty():
 		stats_text = "modelo: caminho vazio"
 		push_warning("ModelProp sem model_path")
@@ -156,7 +223,6 @@ func _load_model() -> void:
 
 	size_m = mesh_aabb(inst).size
 	tris = count_tris(inst)
-	mesh_count = 0
 	var found: Array = []
 	_collect_meshes(inst, found)
 	mesh_count = found.size()
@@ -166,18 +232,29 @@ func _load_model() -> void:
 		return
 
 	var box := mesh_aabb(inst)
-	var norm := normalize_for(box.size, target_length)
+	var pl := placement(inst, box, target_length)
 	var center := box.get_center()
 
 	# Pivo proprio: escala e giro ficam nele; o modelo e centrado e apoiado no
 	# chao dentro dele. Assim a rotacao em Y nao desfaz o apoio no chao.
 	var pivot := Node3D.new()
 	pivot.name = "Normalized"
-	pivot.scale = Vector3.ONE * float(norm[0])
-	pivot.rotation.y = float(norm[1])
+	pivot.scale = Vector3.ONE * float(pl[0])
+	pivot.rotation.y = float(pl[1])
 	inst.position = Vector3(-center.x, -box.position.y, -center.z)
 	pivot.add_child(inst)
 	add_child(pivot)
+
+	wheel_info.clear()
+	for w in wheel_nodes(inst):
+		var n3 := w as Node3D
+		if n3 == null:
+			continue
+		wheel_info.append({
+			"node": n3,
+			"rest": n3.transform,
+			"front": String(n3.name).to_lower().contains("front"),
+		})
 
 	loaded = true
 	stats_text = "modelo %s: %d malhas, %d tris, %.1f m, %.1f ms" % [

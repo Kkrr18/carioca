@@ -75,10 +75,14 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   esportivo e taxi) em assets/models/, 161-177 KB e ~3k triangulos cada, SEM
   textura (so cor de material) e com rodas em nos separados — o que permite
   girar e estercar depois. O CI valida o import, os triangulos, as dimensoes e
-  a existencia dos nos de roda (_test_car_models). Ainda NAO entram em cena: o
-  proximo passo e usar o sedan no carro dirigivel e os outros no trafego, com
-  1 chamada de desenho por carro (malha unica com cor de vertice), porque sao
-  6 materiais por modelo do jeito que vem.
+  a existencia dos nos de roda (_test_car_models). Agora o sedan e o carro do
+  jogador (rodas que giram e esterçam; a caixa de codigo e a reserva) e os
+  quatro modelos abastecem o transito basico (scripts/world/traffic.gd): 12
+  carros na grade de ruas perto do nascimento, um desenho por modelo, cada
+  modelo assado numa malha unica com cor de vertice. NAO validado no aparelho:
+  falta ver o FPS com o transito em cena e se as rodas giram no sentido certo.
+  Limitacoes conhecidas: sem colisao com o jogador, sem semaforo, e na curva
+  a faixa desliza em linha reta (sem arco).
   Descartados na pesquisa: Khronos ToyCar (CC0, mas 5,4 MB, ~89k triangulos e
   materiais que o renderer Compatibility nao aplica) e o Range Rover da
   IvOfficial (o mais bonito, 23k triangulos e texturizado — pesado demais para

@@ -16,6 +16,7 @@ const Player = preload("res://scripts/player/player.gd")
 const TouchControls = preload("res://scripts/ui/touch_controls.gd")
 const Hud = preload("res://scripts/ui/hud.gd")
 const ModelProp = preload("res://scripts/world/model_prop.gd")
+const Traffic = preload("res://scripts/world/traffic.gd")
 const PerfLog = preload("res://scripts/core/perf_log.gd")
 
 const SPAWN := Vector3(1600.0, 1.2, 100.0)
@@ -31,6 +32,7 @@ var hud = null
 var perf_log = null
 var touch = null
 var model_prop = null
+var traffic = null
 
 var _sun: DirectionalLight3D
 var _moon: DirectionalLight3D
@@ -121,6 +123,7 @@ func _ready() -> void:
 	car.name = "Car"
 	car.player = player
 	car.streamer = streamer
+	car.model_path = "res://assets/models/quaternius-car.glb"
 	car.position = Vector3(1604.0, Cfg.height_at(1604.0, 96.0), 96.0)
 	car.rotation.y = PI * 0.5
 	add_child(car)
@@ -137,7 +140,13 @@ func _ready() -> void:
 	model_prop.position = Vector3(1594.0, Cfg.height_at(1594.0, 90.0), 90.0)
 	model_prop.rotation.y = PI * 0.5
 	add_child(model_prop)
-	hud.set_model_note(model_prop.describe())
+	# Transito basico (Fase 4): carros de passeio na grade de ruas perto do
+	# nascimento. Cada modelo vira uma malha unica (um desenho por modelo).
+	traffic = Traffic.new()
+	traffic.name = "Traffic"
+	add_child(traffic)
+	traffic.setup(world_seed)
+	hud.set_model_note(model_prop.describe() + "\n" + traffic.describe())
 
 	_boot_step("toque")
 	var touch_layer := CanvasLayer.new()
@@ -286,6 +295,8 @@ func _process(delta: float) -> void:
 		touch.set_car_state(near or car.occupied, car.occupied)
 		if touch.take_car_press():
 			_on_hud_action("car")
+	if traffic != null:
+		traffic.update(delta)
 	perf_log.sample(delta)
 
 
