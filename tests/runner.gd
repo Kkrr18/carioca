@@ -24,6 +24,7 @@ var _pass := 0
 var _fail := 0
 var _known := 0
 var _msgs: PackedStringArray = []
+var _fails: PackedStringArray = []   # repetidas no fim: o log do CI chega truncado
 var _json: Dictionary = {}
 var _poly: Array = []
 
@@ -66,6 +67,13 @@ func _initialize() -> void:
 	for m in _msgs:
 		print(m)
 	print("")
+	# O log de um job que falha chega truncado no fim: repetir as falhas aqui e
+	# o que garante que elas apareçam sem precisar abrir o log inteiro.
+	if not _fails.is_empty():
+		print("FALHAS:")
+		for f in _fails:
+			print("  - " + f)
+		print("")
 	print("RESULTADO: %d passaram, %d falharam, %d desvios conhecidos" % [_pass, _fail, _known])
 	quit(0 if _fail == 0 else 1)
 
@@ -77,6 +85,7 @@ func check(cond: bool, what: String) -> void:
 	else:
 		_fail += 1
 		_msgs.append("  FALHA " + what)
+		_fails.append(what)
 
 
 func known(cond: bool, what: String) -> void:
