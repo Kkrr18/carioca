@@ -34,7 +34,8 @@ Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
 - Tráfego: 12 carros de passeio (4 modelos CC0) pela grade de ruas, um desenho
   por modelo. Eles colidem com o seu carro, mantêm distância entre si e
   acompanham você pela cidade. O carro que você dirige é o sedã CC0, com rodas
-  que giram e esterçam.
+  que giram e esterçam. As ruas têm sinalização pintada: eixo amarelo, faixa de
+  pedestres e linha de retenção.
 - Som: motor sintetizado em código que sobe de tom com o giro, ruído de cidade
   ao fundo e impacto CC0 nas batidas (o Safari só libera áudio depois do
   primeiro toque na tela).
@@ -42,8 +43,9 @@ Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
   na telemetria — é assim que o FPS real é medido no aparelho.
 - Piloto de asset externo: um modelo .glb CC0 (Kenney) carregado e normalizado
   por código (escala, eixo e apoio no chão), com o import verificado no CI.
-- Caderno de estilo visual ([docs/ESTILO.md](docs/ESTILO.md)): low-poly
-  estilizado com iluminação moderna, paleta do Rio, regras de render.
+- Caderno de estilo visual ([docs/ESTILO.md](docs/ESTILO.md)): premissa de
+  realismo máximo dentro do orçamento do iPhone (geografia e sinalização reais,
+  forma low-poly), paleta do Rio, regras de render.
 - HUD com telemetria e gravador de desempenho em CSV.
 - Salvamento versionado (`schema`, sha256, gzip, escrita atômica, recusa de
   versão futura e de arquivo corrompido).

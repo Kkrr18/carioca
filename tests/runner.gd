@@ -38,6 +38,7 @@ func _initialize() -> void:
 	_test_landmarks()
 	_test_determinism()
 	_test_vertex_budget()
+	_test_road_markings()
 	_test_normals()
 	_test_heights()
 	_test_props()
@@ -196,6 +197,28 @@ func _test_vertex_budget() -> void:
 	check(vs < 6000, "setor de mar so tem terreno (%d)" % vs)
 	check(colliders.size() > 20, "setor cheio tem colisores (%d)" % colliders.size())
 	check(defs.size() > 10, "setor da orla tem props (%d)" % defs.size())
+
+
+func _test_road_markings() -> void:
+	# Sinalizacao pintada (premissa de realismo): eixo amarelo, faixa de
+	# pedestres e linha de retencao no LOD full; nada no LOD far, que e detalhe
+	# de longe.
+	var full := CityGen.generate(3, 0, 20260922, CityGen.LOD_FULL)
+	var far := CityGen.generate(3, 0, 20260922, CityGen.LOD_FAR)
+	var yellow := 0
+	var white := 0
+	for c in (full[2] as PackedColorArray):
+		if c.is_equal_approx(CityGen.MARK_YELLOW):
+			yellow += 1
+		elif c.is_equal_approx(CityGen.MARK_WHITE):
+			white += 1
+	check(yellow > 0, "sinalizacao: %d vertices de eixo amarelo" % yellow)
+	check(white > 0, "sinalizacao: %d vertices de faixa branca" % white)
+	var far_marks := 0
+	for c in (far[2] as PackedColorArray):
+		if c.is_equal_approx(CityGen.MARK_YELLOW) or c.is_equal_approx(CityGen.MARK_WHITE):
+			far_marks += 1
+	check(far_marks == 0, "sinalizacao so no LOD full (far: %d vertices)" % far_marks)
 
 
 func _test_normals() -> void:

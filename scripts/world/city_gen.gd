@@ -25,6 +25,9 @@ const LOT_COLS := 2
 const LOT_ROWS := 2
 const FLAT_LIFT := 0.04              # superficies planas 4 cm acima do terreno
 const PLAZA_LIFT := 0.08
+const MARK_LIFT := 0.06              # pintura da rua: acima do asfalto
+const MARK_WHITE := Color(0.88, 0.88, 0.85)
+const MARK_YELLOW := Color(0.86, 0.72, 0.22)
 
 const SAND := Color(0.86, 0.79, 0.64)
 const SAND_WET := Color(0.70, 0.65, 0.55)
@@ -176,7 +179,7 @@ static func _block(gb: GBuf, win: GBuf, defs: Array, colliders: Array, ax: float
 	var rng := Rng.new(mix3(world_seed, bi * 4096 + 1, bj * 4096 + 7))
 	var edge := ROAD * 0.5
 	# Ruas: a quadra desenha a meia-rua de sua borda oeste e sul.
-	_add_roads(gb, ax, az)
+	_add_roads(gb, ax, az, lod)
 	# Calcada: miolo da quadra, entre as meias-ruas (sem sobreposicao com a rua).
 	_add_flat(gb, ax + edge, az + edge, ax + BLOCK - edge, az + BLOCK - edge, WALK_COL)
 
@@ -253,10 +256,61 @@ static func _lot(gb: GBuf, win: GBuf, defs: Array, colliders: Array, rng: Rng,
 	colliders.append(Rect2(lx - w * 0.5, lz - d * 0.5, w, d))
 
 
-static func _add_roads(gb: GBuf, ax: float, az: float) -> void:
+## Ruas da quadra (borda oeste e sul) com a sinalizacao pintada.
+##
+## A rua vertical sobe 5 mm em relacao a horizontal: as duas se cruzam na
+## esquina e, no MESMO nivel, o asfalto piscava (z-fighting) em todo cruzamento.
+## A pintura (eixo amarelo, faixa de pedestres, linha de retencao) e so do LOD
+## full: e detalhe de perto e custa vertices que o anel distante nao precisa.
+static func _add_roads(gb: GBuf, ax: float, az: float, lod: int) -> void:
 	var h := ROAD * 0.5
 	_add_flat(gb, ax, az - h, ax + BLOCK, az + h, ASPHALT)
-	_add_flat(gb, ax - h, az, ax + h, az + BLOCK, ASPHALT)
+	_add_flat(gb, ax - h, az, ax + h, az + BLOCK, ASPHALT, FLAT_LIFT + 0.005)
+	if lod != LOD_FULL:
+		return
+	# Eixo amarelo tracejado nas duas ruas (4 m de tinta, 8 m de vazio).
+	_add_dashes_x(gb, ax + h + 1.5, ax + BLOCK - 1.5, az, 0.16, 4.0, 8.0, MARK_YELLOW)
+	_add_dashes_z(gb, az + h + 1.5, az + BLOCK - 1.5, ax, 0.16, 4.0, 8.0, MARK_YELLOW)
+	# Faixa de pedestres do lado de dentro da esquina e linha de retencao antes
+	# dela, na faixa da direita de cada sentido.
+	_add_crosswalk_x(gb, ax - h - 3.2, ax - h - 0.4, az - h + 0.4, az + h - 0.4, MARK_WHITE)
+	_add_crosswalk_z(gb, az - h - 3.2, az - h - 0.4, ax - h + 0.4, ax + h - 0.4, MARK_WHITE)
+	_add_flat(gb, ax - h - 4.2, az, ax - h - 3.8, az + h - 0.4, MARK_WHITE, MARK_LIFT)
+	_add_flat(gb, ax, az - h - 4.2, ax + h - 0.4, az - h - 3.8, MARK_WHITE, MARK_LIFT)
+
+
+## Tracejado ao longo de X (eixo de uma rua leste-oeste).
+static func _add_dashes_x(gb: GBuf, x0: float, x1: float, z: float, w: float,
+		dash: float, gap: float, col: Color) -> void:
+	var x := x0
+	while x + dash <= x1:
+		_add_flat(gb, x, z - w * 0.5, x + dash, z + w * 0.5, col, MARK_LIFT)
+		x += dash + gap
+
+
+## Tracejado ao longo de Z (eixo de uma rua norte-sul).
+static func _add_dashes_z(gb: GBuf, z0: float, z1: float, x: float, w: float,
+		dash: float, gap: float, col: Color) -> void:
+	var z := z0
+	while z + dash <= z1:
+		_add_flat(gb, x - w * 0.5, z, x + w * 0.5, z + dash, col, MARK_LIFT)
+		z += dash + gap
+
+
+## Faixa de pedestres atravessando a rua que corre em X (listras ao longo de X).
+static func _add_crosswalk_x(gb: GBuf, x0: float, x1: float, z0: float, z1: float, col: Color) -> void:
+	var z := z0
+	while z + 0.6 <= z1:
+		_add_flat(gb, x0, z, x1, z + 0.6, col, MARK_LIFT)
+		z += 1.5
+
+
+## Faixa de pedestres atravessando a rua que corre em Z (listras ao longo de Z).
+static func _add_crosswalk_z(gb: GBuf, z0: float, z1: float, x0: float, x1: float, col: Color) -> void:
+	var x := x0
+	while x + 0.6 <= x1:
+		_add_flat(gb, x, z0, x + 0.6, z1, col, MARK_LIFT)
+		x += 1.5
 
 
 ## Superficie plana entre (x0, z0) e (x1, z1), acompanhando o terreno nos cantos.

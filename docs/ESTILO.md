@@ -4,13 +4,29 @@ Este documento e a lei visual do jogo. Toda melhoria grafica nova (prop,
 veiculo, bairro, efeito, interface) precisa caber aqui; se nao couber, discute-se
 o documento antes — nao se cria excecao depois.
 
+## Premissa: realismo maximo dentro do que o iPhone aguenta
+
+Decisao do autor (2026-11): o jogo persegue **realismo maximo**. Como o alvo e um
+iPhone 12 a 30 FPS no renderer Compatibility, isso quer dizer realismo de
+GEOGRAFIA, SINALIZACAO e COMPORTAMENTO — nao textura fotografica:
+
+- **Realismo que entra:** mapa real (OSM + DEM, Fase 2), ruas com eixo amarelo,
+  faixa de pedestres e linha de retencao, semaforos com ciclo, mao direita,
+  calcada e meio-fio, trafego com distancia e cruzamento, relevo real, sol na
+  posicao da hora, mar e nevoa.
+- **Realismo que NAO cabe:** textura fotografica em tudo, PBR pesado, reflexo em
+  tempo real, SSAO/SSR, modelos de 20k+ triangulos em quantidade. Cada um custa
+  quadro, e o alvo e um telefone.
+- **Forma:** continua low-poly — e o que roda. O que muda e a referencia:
+  proporcao, escala e cor de coisa real, no lugar certo do mapa.
+
 ## Direcao geral
 
-- **Low-poly estilizado com iluminacao moderna.** Formas simples e legiveis
-  (caixas, cilindros, silhuetas claras), mas com luz e atmosfera
+- **Low-poly por orcamento, realismo por referencia.** Formas simples e
+  legiveis (caixas, cilindros, silhuetas claras), mas com luz e atmosfera
   contemporaneas: tonemap ACES, glow suave, nevoia litoranea, sombras de
-  contato. O Rio e reconhecivel pela SILHUETA (morro, calçadão, ondas,
-  postes), nao por textura fotografica.
+  contato. O Rio e reconhecivel pela SILHUETA (morro, calçadão, ondas, postes)
+  e pela GEOMETRIA CERTA: rua onde a rua existe, ponte onde a ponte existe.
 - **Legibilidade antes de detalhe.** Em tela de iPhone a 30 FPS, um objeto
   precisa ser reconhecivel a 40 m. Cor e silhueta valem mais que densidade de
   poligono.
@@ -81,8 +97,8 @@ fora do espectre definido:
 
 ## O que recusar
 
-- Texturas fotograficas de alta resolucao (pesam no download do build Web e
-  destoam do estilo).
+- Texturas fotograficas de alta resolucao: 1K–2K tileavel (asfalto, calcada,
+  fachada) entra; 4K/8K nao.
 - Modelos realistas ou de terceiros com copyright.
 - Efeitos que so o PC roda: nada entra no jogo sem passar pelo teste do
   iPhone (export Web + Safari), a cada melhoria.

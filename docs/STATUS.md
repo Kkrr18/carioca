@@ -71,6 +71,13 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   pelo AABB e fallback silencioso. O CI importa o .glb e TESTA que ele vira
   PackedScene com volume e triangulos. Isolado de proposito: nao substitui o
   carro dirigivel nem os props procedurais ate vermos o custo no aparelho.
+- Premissa de realismo (decisao do autor, 2026-11): registrada em
+  docs/ESTILO.md. Realismo maximo, no alvo iPhone 12, significa geografia,
+  sinalizacao e comportamento reais; a forma continua low-poly por orcamento.
+  Primeiro passo entregue: sinalizacao pintada nas ruas (eixo amarelo
+  tracejado, faixa de pedestres e linha de retencao, so no LOD full) em
+  city_gen.gd, mais o asfalto das duas ruas em niveis diferentes — as esquinas
+  piscavam por z-fighting desde a Fase 1.
 - Transito (Fase 4, rodada 2): o carro do jogador COLIDE com os carros de
   transito (hit_test por circulos no plano XZ, empurrao para fora, perda do
   embalo e signal `crashed`), os carros mantem distancia entre si
