@@ -22,7 +22,11 @@ Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
   chão analítico (sem corpos físicos estáticos).
 - Controles de toque: joystick na esquerda, arrasto para olhar na direita,
   botões PULAR e CORRER.
-- Ciclo dia/noite com céu procedural, nevoeiro e dois estados de tempo.
+- Céu e luz do Rio: o sol percorre um arco de azimute carioca (nasce no mar,
+  se põe sobre o continente) e o céu passa pelos quatro momentos da cidade —
+  meio-dia tropical, hora dourada com o zênite ainda azul, hora azul e noite
+  com brilho de cidade no horizonte. Nevoeiro copia a cor do horizonte e
+  engrossa de madrugada.
 - Fase 1.5 visual: água com ondas/fresnel, glow + tonemap ACES, sombra de
   contato, fachadas de vidro que acendem à noite, postes, bancos, lixeiras
   e carros estacionados (plano completo em docs/DETALHES_VISUAIS.md).

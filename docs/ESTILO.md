@@ -62,8 +62,26 @@ fora do espectre definido:
   tronco `Color(0.34, 0.27, 0.18)`.
 - **Carros**: vermelho, azul e branco (constantes de "carro" no PropFactory);
   pneu quase preto, vidro claro.
-- **Ceu**: azul profundo no topo `Color(0.20, 0.40, 0.72)`, horizon claro
-  `Color(0.68, 0.79, 0.88)` — o "haze" de cidade litoranea.
+- **Ceu**: zenite e horizonte com paletas SEPARADAS (um gradiente unico de
+  azul para branco e o que faz o ceu parecer plastico). Os quatro momentos
+  estao em `scripts/world/day_night.gd` e valem como lei:
+  - **Meio-dia tropical**: zenite `Color(0.09, 0.31, 0.74)`, horizonte
+    `Color(0.74, 0.85, 0.93)` (nevoa marinha umida) e sol branco-quente
+    `Color(1.00, 0.96, 0.89)` a 72 graus de altura.
+  - **Hora dourada**: sol ambar `Color(1.00, 0.64, 0.32)`, horizonte coral
+    `Color(0.99, 0.60, 0.36)` e o zenite AINDA azul `Color(0.15, 0.33, 0.66)`.
+    Essa separacao de cor e o por do sol carioca; sombra comprida, gradiente
+    longo (`sky_curve` baixo).
+  - **Hora azul** (logo depois do por do sol): zenite indigo
+    `Color(0.09, 0.15, 0.42)`, horizonte rosa-ambar `Color(0.84, 0.44, 0.42)`.
+  - **Noite**: zenite `Color(0.020, 0.031, 0.074)`, mas o horizonte tem brilho
+    de cidade `Color(0.125, 0.104, 0.104)` — o ceu do Rio nao fica preto, e a
+    exposicao sobe para o que esta na rua continuar legivel.
+  - A nevoa copia a cor do horizonte (senao a emenda aparece) e engrossa de
+    madrugada, quando a umidade do mar fecha o tempo.
+- **Caminho do sol**: o sol NASCE NO MAR (azimute 112 graus, sobre z negativo) e
+  SE POE SOBRE O CONTINENTE (292 graus). Nada de sol subindo e descendo sempre
+  no mesmo lugar do ceu: sem arco de azimute nao existe por do sol.
 - **Noite**: janelas e luminarias quentes `Color(1.0, 0.85, 0.55)`; luz da lua
   fria `Color(0.62, 0.72, 1.0)`, fraca.
 

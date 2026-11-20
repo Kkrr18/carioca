@@ -20,6 +20,7 @@ const TouchControls = preload("res://scripts/ui/touch_controls.gd")
 const VehicleAudio = preload("res://scripts/audio/vehicle_audio.gd")
 const SectorStreamer = preload("res://scripts/world/sector_streamer.gd")
 const Traffic = preload("res://scripts/world/traffic.gd")
+const DayNight = preload("res://scripts/world/day_night.gd")
 
 var _pass := 0
 var _fail := 0
@@ -60,6 +61,7 @@ func _initialize() -> void:
 	_test_traffic_collision()
 	_test_traffic_spacing_and_follow()
 	_test_audio_pure()
+	_test_sky()
 	_test_windows()
 	_test_building_shapes()
 	_test_scripts_compile()
@@ -878,6 +880,60 @@ func _test_audio_pure() -> void:
 		av._ready()
 	check(av.describe().contains("toque"), "som espera o primeiro toque: %s" % av.describe())
 	av.free()
+
+
+func _test_sky() -> void:
+	# B-51: ceu e luz do Rio. O sol NASCE NO MAR (e-sudeste), culmina alto ao
+	# meio-dia e se poe sobre o continente (oeste-noroeste). Antes ele subia e
+	# descia sempre no mesmo lugar do ceu, entao nao existia por do sol.
+	var rise := DayNight.sun_direction(6.0)
+	check(absf(rise.y) < 0.06, "sol no horizonte as 6h (altura %.3f)" % rise.y)
+	check(rise.x > 0.7, "sol nasce a leste (x %.2f)" % rise.x)
+	check(rise.z < -0.2, "sol nasce do lado do MAR (z %.2f)" % rise.z)
+	check(DayNight.sun_direction(12.0).y > 0.9, "sol de meio-dia alto como no Rio (%.2f)" % DayNight.sun_direction(12.0).y)
+	var set_ := DayNight.sun_direction(18.0)
+	check(set_.x < -0.7, "sol se poe a oeste (x %.2f)" % set_.x)
+	check(set_.z > 0.2, "sol se poe sobre o CONTINENTE (z %.2f)" % set_.z)
+	check(DayNight.sun_direction(0.0).y < -0.5, "sol abaixo do horizonte a meia-noite")
+
+	var noon := DayNight.look(12.0, "claro")
+	var gold := DayNight.look(17.6, "claro")
+	var night := DayNight.look(23.0, "claro")
+	var noon_top: Color = noon["top"]
+	var noon_hor: Color = noon["horizon"]
+	check(noon_hor.get_luminance() > noon_top.get_luminance() * 1.5,
+		"meio-dia: horizonte muito mais claro que o zenite (nevoa marinha)")
+	check(noon_hor.b > noon_hor.r, "meio-dia: horizonte azulado (b %.2f > r %.2f)" % [noon_hor.b, noon_hor.r])
+	check(noon_top.b > 0.5 and noon_top.r < 0.2, "meio-dia: zenite azul tropical fundo")
+	var gold_hor: Color = gold["horizon"]
+	var gold_top: Color = gold["top"]
+	check(float(gold["gold"]) > 0.5, "hora dourada detectada (%.2f)" % float(gold["gold"]))
+	check(gold_hor.r > gold_hor.b + 0.3,
+		"hora dourada: horizonte coral (r %.2f, b %.2f)" % [gold_hor.r, gold_hor.b])
+	check(gold_top.b > gold_top.r + 0.2,
+		"hora dourada: zenite AINDA azul (b %.2f, r %.2f)" % [gold_top.b, gold_top.r])
+	var night_top: Color = night["top"]
+	var night_hor: Color = night["horizon"]
+	check(night_top.get_luminance() < 0.12, "noite: zenite escuro (%.3f)" % night_top.get_luminance())
+	check(night_hor.r >= night_hor.b and night_hor.get_luminance() > night_top.get_luminance(),
+		"noite: brilho de cidade no horizonte (o ceu do Rio nao e preto)")
+	check(float(noon["night"]) < 0.01 and float(night["night"]) > 0.9,
+		"janelas: 0 de dia, 1 de noite (%.2f / %.2f)" % [float(noon["night"]), float(night["night"])])
+	check(float(night["fog_density"]) > float(noon["fog_density"]) * 1.3,
+		"nevoa maritima fecha o tempo a noite (%.4f > %.4f)" % [
+			float(night["fog_density"]), float(noon["fog_density"])])
+	check(float(noon["sun_energy"]) > float(gold["sun_energy"]),
+		"sol mais fraco e mais ambar na hora dourada")
+	check((noon["sun_color"] as Color).g > (gold["sun_color"] as Color).g,
+		"cor do sol esfria do ambar para o branco ao subir")
+	# A luz viaja no -Z do no: o +Z da base tem que apontar para o astro.
+	var to_dir := Vector3(0.0, 0.8, 0.6).normalized()
+	check(DayNight.aim_basis(to_dir).z.is_equal_approx(to_dir),
+		"aim_basis aponta o +Z da luz para o sol (luz viaja no -Z)")
+	check(absf(DayNight.aim_basis(to_dir).determinant() - 1.0) < 0.01,
+		"aim_basis e uma base valida (determinante 1, sem espelho)")
+	check(DayNight.aim_basis(Vector3.UP).z.is_equal_approx(Vector3.UP),
+		"aim_basis aguenta o sol exatamente no zenite")
 
 
 func _test_windows() -> void:

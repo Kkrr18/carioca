@@ -22,7 +22,7 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
 | Personagem em terceira pessoa + colisao simples | Escrito | scripts/player/player.gd |
 | Controles por toque | Escrito | scripts/ui/touch_controls.gd |
 | HUD e telemetria | Escrito | scripts/ui/hud.gd, scripts/core/perf_log.gd |
-| Ciclo dia/noite e clima (2 estados de tempo) | Escrito | scripts/world/day_night.gd |
+| Luz do Rio (4 momentos de ceu) e clima (claro/nublado/chuva) | Escrito, nao validado | scripts/world/day_night.gd |
 | Veiculo dirigivel (carro — Fase 4, incremento minimo) | Escrito | scripts/vehicles/car.gd |
 | Piloto de asset externo (.glb CC0 normalizado pelo AABB) | Escrito | scripts/world/model_prop.gd, assets/models/ |
 | Salvamento versionado (schema 1, sha256, gzip) | Escrito | scripts/autoload/save_manager.gd |
@@ -432,6 +432,22 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   fachada 6120 -> 10485 vertices; no total o setor ficou com MENOS triangulos
   que antes, com dois volumes por predio. NAO validado no aparelho: falta ver
   se a cidade deixou de parecer um formigueiro de cubos e o FPS (MEDIR).
+- B-51: Fase 4 — CEU E LUZ DO RIO. O autor pediu "ceu mais bonito e uma
+  iluminacao propria do rio". O ciclo antigo tinha um sol que subia e descia
+  SEMPRE no mesmo lugar do ceu (so a altura mudava) e um gradiente unico de
+  azul para branco — por isso nao havia por do sol e o ceu parecia plastico.
+  Agora `scripts/world/day_night.gd` tem um modelo de luz puro e testavel
+  (`sun_direction`, `look`, `aim_basis`): (1) o sol percorre um ARCO de
+  azimute do Rio, nascendo no mar (112 graus) e se pondo sobre o continente
+  (292), com 72 graus de altura maxima; (2) quatro momentos com paleta propria
+  — meio-dia tropical, hora dourada (horizonte coral com zenite ainda azul),
+  hora azul e noite com brilho de cidade no horizonte (o ceu do Rio nao e
+  preto); (3) a nevoa copia a cor do horizonte e engrossa de madrugada
+  (umidade do mar); (4) exposicao, glow e bloom sobem a noite; (5) o ceu so e
+  reescrito a cada 1/50 de hora, porque cada escrita no material do ceu manda
+  o Godot refazer o mapa de radiancia (economia para o iPhone). Teste novo de
+  20 checagens no CI, sem GPU. NAO validado no aparelho: falta ver o por do sol
+  na praia e se a noite ficou legivel (e o custo em FPS).
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 
@@ -449,4 +465,8 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
    resolveu o "quadrado" e se o FPS aguentou (MEDIR). Se ainda faltar forma,
    o proximo passo barato e VARIAR A LARGURA do lote na quadra (hoje 2 x 2
    lotes identicos de 23 x 23 m) e dar recuos diferentes por quadra.
+9. B-51: deixar o relogio correr ate umas 17h30 (uns 8 min de jogo, a partir
+   das 9h30 do nascimento), ir para a areia e olhar o por do sol sobre o
+   continente de frente para o mar; depois conferir a noite (janelas acesas,
+   rua legivel). Se o sol baixo encandear na camera, abaixar `SUN_ENERGY`.
 
