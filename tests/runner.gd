@@ -697,12 +697,15 @@ func _test_traffic_lights() -> void:
 	check(not Traffic.must_stop(node, Vector2i(1, 0), Traffic.BLOCK - 1.0, t_red),
 		"carro ja dentro do cruzamento termina de passar")
 
-	# No vermelho o carro para na linha e nao atravessa.
+	# No vermelho o carro para na linha e nao atravessa. A velocidade e fixada
+	# aqui: com a velocidade sorteada (~5 m/s) 10 s de simulacao nao chegavam
+	# aos 59 m da linha de retencao e o teste acusava falha no codigo certo.
 	var red_car := Traffic.spawn_car(11, 0, 0)
 	red_car["node"] = node
 	red_car["h"] = Vector2i(1, 0)
 	red_car["s"] = 0.0
-	for i in 300:
+	red_car["speed"] = 9.0
+	for i in 600:
 		Traffic.advance(red_car, 1.0 / 30.0, t_red)
 	check(red_car["node"] == node, "no vermelho o carro nao atravessa o cruzamento")
 	var limite := Traffic.BLOCK - Traffic.STOP_BEFORE
@@ -714,7 +717,8 @@ func _test_traffic_lights() -> void:
 	green_car["node"] = node
 	green_car["h"] = Vector2i(1, 0)
 	green_car["s"] = 0.0
-	for i in 300:
+	green_car["speed"] = 9.0
+	for i in 600:
 		Traffic.advance(green_car, 1.0 / 30.0, t_green)
 	check(green_car["node"] != node, "no verde o carro atravessa o cruzamento")
 
