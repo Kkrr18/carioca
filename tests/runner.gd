@@ -66,6 +66,7 @@ func _initialize() -> void:
 	_test_sky()
 	_test_pedestrians()
 	_test_pedestrian_model()
+	_test_player_model()
 	_test_windows()
 	_test_building_shapes()
 	_test_scripts_compile()
@@ -1153,6 +1154,67 @@ func _test_pedestrian_model() -> void:
 	var sm := Pedestrians.soft_shadow_material(0.45)
 	check(sm.albedo_texture != null and sm.albedo_color.a > 0.2,
 		"sombra de contato redonda (gradiente), nao um quadrado cinza")
+
+
+func _test_player_model() -> void:
+	# B-63: o protagonista deixou de ser caixas. O CI prova o que o jogo usa: o
+	# modelo carrega, tem esqueleto e clipes, a pintura acerta calca/camisa/pele/
+	# cabelo, e o giro deixa o modelo OLHANDO para onde anda.
+	var scene := Pedestrians.load_scene(Player.AVATAR_PATH)
+	check(scene != null, "modelo do protagonista carrega (%s)" % Player.AVATAR_PATH)
+	if scene == null:
+		return
+	var inst: Node3D = scene.instantiate()
+	var sk := Pedestrians._find_skel(inst)
+	var tris := ModelProp.count_tris(inst)
+	var box := ModelProp.mesh_aabb(inst)
+	print("  info: protagonista: %d tris, %.2f m de bind pose, rig %s" % [
+		tris, box.size.y, "sim" if sk != null else "NAO"])
+	var ap := Pedestrians._find_anim(inst)
+	var clips := {}
+	if ap != null:
+		for nm in ap.get_animation_list():
+			var a := ap.get_animation(String(nm))
+			if a != null:
+				clips[String(nm)] = a
+	check(sk != null and tris > 200, "protagonista tem esqueleto e geometria")
+	var walk := Pedestrians.pick_clip(clips, "walk")
+	check(walk != "", "clipe de andar no modelo")
+	check(Pedestrians.pick_clip(clips, "idle") != "", "clipe de parado no modelo")
+	check(walk != "" and Pedestrians.clip_motion(clips[walk]) > 0.05,
+		"clipe de andar do protagonista tem movimento de verdade")
+	inst.free()
+	# Frente: o avatar gira por atan2(dir.x, dir.y) e o modelo leva PI (ele olha
+	# para -Z). O -Z do modelo tem que apontar no sentido do passo — sem isso ele
+	# anda de costas, que foi o bug corrigido nos pedestres (B-62).
+	var facing_ok := true
+	for d in [Vector2(1.0, 0.0), Vector2(0.0, 1.0), Vector2(-0.6, 0.8), Vector2(0.0, -1.0)]:
+		var b := Basis(Vector3.UP, atan2(d.x, d.y)) * Basis(Vector3.UP, PI)
+		var front := -b.z
+		if Vector2(front.x, front.z).normalized().distance_to(d.normalized()) > 0.01:
+			facing_ok = false
+	check(facing_ok, "protagonista olha para onde anda (4 direcoes)")
+	# Pintura por altura: calca embaixo, camisa no meio, pele no alto e cabelo na
+	# nuca (z > 0 no modelo, que olha para -Z).
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for y in [0.10, 1.00, 1.70]:
+		var z := 0.10 if y > 1.5 else 0.0
+		st.add_vertex(Vector3(0.0, y, z))
+		st.add_vertex(Vector3(0.10, y, z))
+		st.add_vertex(Vector3(0.20, y, z))
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	var painted := Pedestrians.paint_body(mi, Color(1, 1, 1), Color(0, 0, 1),
+			Color(1, 0, 0), Color(0, 0, 0))
+	check(painted, "pintura do corpo aplica")
+	var cols: PackedColorArray = mi.mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	check(cols.size() == 9, "pintura gera 1 cor por vertice (%d)" % cols.size())
+	if cols.size() == 9:
+		check(cols[0].is_equal_approx(Color(1, 0, 0)), "pe = calca")
+		check(cols[3].is_equal_approx(Color(0, 0, 1)), "tronco = camisa")
+		check(cols[6].is_equal_approx(Color(0, 0, 0)), "nuca = cabelo preto")
+	mi.free()
 
 
 func _test_windows() -> void:

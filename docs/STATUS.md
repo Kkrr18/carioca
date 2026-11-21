@@ -549,8 +549,7 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   corpos importam, tem esqueleto e o clipe de caminhada casa com os ossos deles
   (se nao casasse, o pedestre ficaria em T-pose e o teste falharia). Custo:
   4 arquivos, ~2,7 MB; cada pessoa continua 1 desenho. NAO validado no aparelho
-  ainda.
-- B-58: Fase 4 — PEDESTRE EM T-POSE. O autor: "ta bem bugado os modelos. Joga e
+  ainda.- B-58: Fase 4 — PEDESTRE EM T-POSE. O autor: "ta bem bugado os modelos. Joga e
   veja voce mesmo". Joguei o build do Pages pelo inspetor de navegador: console
   LIMPO (nenhum erro de script) e, nas capturas, os pedestres de bracos
   horizontais, PARADOS na pose, DESLIZANDO pela areia e sem sombra nenhuma.
@@ -619,6 +618,26 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   direcoes, o -Z do no depois do giro aponta na direcao do passo (erro < 0,01).
   Licao para os proximos modelos: a frente do glTF nao se adivinha, se mede —
   quando entrar o modelo do jogador, conferir isso antes de tudo.
+
+- B-63: Fase 3/4 — PROTAGONISTA DE MODELO. O autor: "coloque um bom modelo para
+  o protagonista, ele ainda esta em blocos. Um homem de 1,80, branco, cabelo
+  preto". Ficou: o MESMO corpo CC0 da Quaternius que ja roda nos pedestres
+  (`ped-walk.glb`, o unico com as animacoes dentro do arquivo — idle, walk, run
+  e jump), entao o jogador nao depende de retarget nenhum. Pintura por altura do
+  vertice (a mesma `paint_body`, agora com um parametro de CABELO): calca
+  embaixo, camiseta no meio, pele no alto e cabelo na nuca e no topo do cranio —
+  a frente da cabeca continua pele (senao o rosto vira uma mascara preta). Cores
+  do pedido: pele branca (0,96/0,84/0,75), cabelo quase preto (0,09), camiseta
+  laranja e jeans (identidade do boneco antigo). Altura 1,80 m medida no
+  ESQUELETO POSADO (o AABB da malha mente — ver B-57), pe apoiado no chao.
+  Animacao escolhida pela velocidade: parado, andando (<2,2 m/s), correndo
+  (clipe de corrida com compasso = velocidade/4,6) e pulo no ar. O boneco de
+  caixas fica como reserva se o arquivo nao carregar.
+  O giro segue a licao da B-62: o avatar gira por atan2(dir) e o modelo leva PI
+  num filho, entao a frente olha no sentido do passo — e o CI tem checagem propria
+  para isso (4 direcoes) mais uma de que a pintura acerta calca/camisa/cabelo.
+  NAO validado no aparelho: falta ver se ele anda de frente e se o passo casa com
+  a velocidade (se patinar, ajustar os divisores 4,6 e 1,5).
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 

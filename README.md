@@ -18,6 +18,11 @@ Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
   palmeiras, quiosques.
 - Streaming de setores em `WorkerThreadPool`: só arrays na thread, a malha é
   criada na thread principal, 2 setores por frame.
+- Protagonista de modelo: o mesmo corpo CC0 da Quaternius que roda nos
+  pedestres, pintado por vértice (homem branco, de cabelo preto, 1,80 m,
+  camiseta laranja e jeans), com as animações de parado/andar/correr/pular que
+  vêm dentro do arquivo. Se o modelo não carregar, volta para o boneco de
+  caixas — o jogo nunca fica sem personagem.
 - Personagem em terceira pessoa com câmera orbital, colisão por retângulos e
   chão analítico (sem corpos físicos estáticos).
 - Controles de toque: joystick na esquerda, arrasto para olhar na direita,

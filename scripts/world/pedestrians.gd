@@ -638,10 +638,13 @@ static func posed_height(sk: Skeleton3D) -> float:
 ## Pinta o corpo pela ALTURA do vertice: calca embaixo, camisa no meio, pele em
 ## cima. O corpo da Quaternius vem SEM textura (um material branco so), entao sem
 ## isso o pedestre e um manequim branco nu (B-60). Devolve true se pintou.
+## `hair_c` com alpha > 0 (B-63) pinta o CABELO: o topo do cranio e a parte de
+## tras da cabeca (o modelo olha para -Z, entao a nuca e z > 0); a frente da
+## cabeca continua pele, senao o rosto vira uma mascara preta.
 ## Nao usa textura nem arquivo novo: a cor vai por vertice e o material usa a
 ## cor de vertice como albedo.
 static func paint_body(mi: MeshInstance3D, skin_c: Color, shirt_c: Color,
-		pants_c: Color) -> bool:
+		pants_c: Color, hair_c: Color = Color(0, 0, 0, 0)) -> bool:
 	if mi == null or mi.mesh == null:
 		return false
 	var src := mi.mesh
@@ -667,6 +670,8 @@ static func paint_body(mi: MeshInstance3D, skin_c: Color, shirt_c: Color,
 			var c := pants_c
 			if t > 0.84:
 				c = skin_c
+				if hair_c.a > 0.0 and (t > 0.945 or (t > 0.86 and verts[i].z > 0.01)):
+					c = hair_c
 			elif t > 0.52:
 				c = shirt_c
 			cols[i] = c

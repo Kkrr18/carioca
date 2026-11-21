@@ -10,6 +10,8 @@ extends CharacterBody3D
 
 const Cfg = preload("res://scripts/core/cfg.gd")
 const TouchControls = preload("res://scripts/ui/touch_controls.gd")
+const ModelProp = preload("res://scripts/world/model_prop.gd")
+const Pedestrians = preload("res://scripts/world/pedestrians.gd")
 
 const WALK_SPEED := 4.2
 const RUN_SPEED := 8.5
@@ -19,6 +21,18 @@ const JUMP_SPEED := 6.0
 const GRAVITY := 18.0
 const TURN_SPEED := 12.0
 const EYE_HEIGHT := 1.5
+
+# --- Modelo do protagonista (B-63) -------------------------------------------
+## O mesmo corpo CC0 da Quaternius que ja roda nos pedestres: e o unico com as
+## animacoes DENTRO do arquivo (idle, walk, run, jump), entao nao depende de
+## retarget nenhum. Pintado por vertice: homem BRANCO, de CABELO PRETO, 1,80 m,
+## camiseta laranja e calca jeans (a identidade do boneco antigo).
+const AVATAR_PATH := "res://assets/models/ped-walk.glb"
+const AVATAR_HEIGHT := 1.80
+const SKIN_COL := Color(0.96, 0.84, 0.75)
+const SHIRT_COL := Color(0.92, 0.45, 0.25)
+const PANTS_COL := Color(0.19, 0.27, 0.46)
+const HAIR_COL := Color(0.09, 0.08, 0.08)
 
 var streamer = null
 var camera_rig: Node3D
@@ -40,6 +54,12 @@ var _bob := 0.0
 var _legs: Array[Node3D] = []
 var _arms: Array[Node3D] = []
 var contact_shadow: MeshInstance3D
+var _using_model := false
+var _ap: AnimationPlayer
+var _walk_anim := ""
+var _idle_anim := ""
+var _run_anim := ""
+var _jump_anim := ""
 
 
 func _ready() -> void:
@@ -57,6 +77,76 @@ func _ready() -> void:
 func _build_avatar() -> void:
 	avatar = Node3D.new()
 	add_child(avatar)
+	if not _build_model_avatar():
+		_build_block_avatar()
+	_build_contact_shadow()
+
+
+## Avatar de MODELO (B-63). Devolve false se o arquivo nao carregar ou nao der
+## para pintar, e ai o jogador continua com o boneco de caixas: o jogo nunca fica
+## sem personagem.
+func _build_model_avatar() -> bool:
+	var scene := Pedestrians.load_scene(AVATAR_PATH)
+	if scene == null:
+		return false
+	# O avatar gira em Y pelo codigo de movimento (atan2(hv.x, hv.y)) e o modelo
+	# olha para -Z: um filho com PI deixa a frente no +Z do avatar, que e o que o
+	# resto do codigo ja esperava do boneco antigo (nariz em +Z). Sem esse PI o
+	# protagonista anda de costas (o mesmo erro que a B-62 corrigiu nos pedestres).
+	var holder := Node3D.new()
+	holder.rotation.y = PI
+	avatar.add_child(holder)
+	var inst: Node3D = scene.instantiate()
+	holder.add_child(inst)
+	var painted := 0
+	for node in ModelProp.collect_meshes(inst):
+		var mi := node as MeshInstance3D
+		if mi == null or mi.mesh == null:
+			continue
+		if Pedestrians.paint_body(mi, SKIN_COL, SHIRT_COL, PANTS_COL, HAIR_COL):
+			painted += 1
+		var mat := StandardMaterial3D.new()
+		mat.vertex_color_use_as_albedo = true
+		mat.vertex_color_is_srgb = false
+		mat.roughness = 0.92
+		mat.metallic_specular = 0.1
+		mi.material_override = mat
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	if painted == 0:
+		holder.queue_free()
+		return false
+	# Animacoes: o walker traz idle/walk/run/jump no proprio arquivo.
+	_ap = Pedestrians._find_anim(inst)
+	var clips := {}
+	if _ap != null:
+		for nm in _ap.get_animation_list():
+			var a := _ap.get_animation(String(nm))
+			if a != null:
+				clips[String(nm)] = a
+	_walk_anim = Pedestrians.pick_clip(clips, "walk")
+	_idle_anim = Pedestrians.pick_clip(clips, "idle")
+	_run_anim = Pedestrians.pick_clip(clips, "run")
+	_jump_anim = Pedestrians.pick_clip(clips, "jump")
+	for nm in [_walk_anim, _idle_anim, _run_anim]:
+		if nm != "" and clips.has(nm):
+			(clips[nm] as Animation).loop_mode = Animation.LOOP_LINEAR
+	if _idle_anim != "":
+		_ap.play(StringName(_idle_anim))
+	# Escala: posa um clipe, mede a altura do esqueleto POSADO (o AABB da malha e
+	# o do bind pose e mente), normaliza para 1,80 m e apoia o pe no chao.
+	var box := ModelProp.mesh_aabb(inst)
+	var sk := Pedestrians._find_skel(inst)
+	var posed := Pedestrians.posed_height(sk)
+	var h := posed / Pedestrians.BONE_EXTENT if posed > 0.3 else maxf(0.5, box.size.y)
+	var k := AVATAR_HEIGHT / maxf(0.5, h)
+	inst.scale = Vector3.ONE * k
+	inst.position = Vector3(-box.get_center().x, -box.position.y, -box.get_center().z) * k
+	_using_model = _ap != null
+	return true
+
+
+## Boneco de caixas: a reserva de sempre, usada so se o modelo nao carregar.
+func _build_block_avatar() -> void:
 	# Materiais compartilhados por cor.
 	var skin := _mat(Color(0.80, 0.63, 0.48))
 	var shirt := _mat(Color(0.92, 0.45, 0.25))
@@ -122,8 +212,6 @@ func _build_avatar() -> void:
 		leg_pivot.add_child(leg)
 		avatar.add_child(leg_pivot)
 		_legs.append(leg_pivot)
-
-	_build_contact_shadow()
 
 
 ## Sombra de contato (nao existe Decal no renderer Compatibility): disco
@@ -284,11 +372,32 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	position = next
 
-	# --- Orientacao e animacao de caminhada.
+	# --- Orientacao e animacao.
 	if hv.length() > 0.4:
 		var want_angle := atan2(hv.x, hv.y)
 		avatar.rotation.y = lerp_angle(avatar.rotation.y, want_angle, clampf(TURN_SPEED * delta, 0.0, 1.0))
-		_bob += delta * hv.length() * 2.2
+	_bob += delta * maxf(1.0, hv.length())
+	_update_anim(hv)
+
+	_update_camera(delta)
+
+
+## Animacao: clipes do MODELO quando ele existe (parado / andando / correndo /
+## pulando) e, no boneco de caixas, o balanco antigo de bracos e pernas.
+func _update_anim(hv: Vector2) -> void:
+	if _using_model and _ap != null:
+		var sp := hv.length()
+		if not _grounded and _jump_anim != "":
+			_play_anim(_jump_anim, 1.0)
+		elif sp > 2.2 and _run_anim != "":
+			# O clipe de corrida cobre ~4,6 m/s no compasso 1.
+			_play_anim(_run_anim, clampf(sp / 4.6, 0.55, 2.0))
+		elif sp > 0.35 and _walk_anim != "":
+			_play_anim(_walk_anim, clampf(sp / 1.5, 0.60, 1.70))
+		else:
+			_play_anim(_idle_anim, 1.0)
+		return
+	if hv.length() > 0.4:
 		var swing := sin(_bob) * clampf(hv.length() / RUN_SPEED, 0.0, 1.0) * 0.7
 		if _legs.size() == 2:
 			_legs[0].rotation.x = swing
@@ -297,13 +406,18 @@ func _physics_process(delta: float) -> void:
 			_arms[0].rotation.x = -swing * 0.8
 			_arms[1].rotation.x = swing * 0.8
 	else:
-		_bob += delta
 		for l in _legs:
 			l.rotation.x = lerpf(l.rotation.x, 0.0, 0.2)
 		for a in _arms:
 			a.rotation.x = lerpf(a.rotation.x, 0.0, 0.2)
 
-	_update_camera(delta)
+
+func _play_anim(nm: String, spd: float) -> void:
+	if _ap == null or nm == "":
+		return
+	if _ap.current_animation != StringName(nm):
+		_ap.play(StringName(nm))
+	_ap.speed_scale = spd
 
 
 func _update_camera(delta: float) -> void:
