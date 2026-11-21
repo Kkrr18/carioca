@@ -881,6 +881,44 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   proximo teste e repetir a MESMA cena parada no fim da tarde e comparar draw
   calls/primitivas/FPS com os numeros acima.
 
+- B-73: Fase 4 — O QUE A REPETICAO DO TESTE A/B MOSTROU (e o que ela NAO provou).
+  Rodei a mesma cena parada de novo (build com B-71/B-72) em viewport de
+  telefone e anotei a telemetria a cada ~90 min de jogo. RESULTADO HONESTO: o
+  trecho comparavel (09:45 a 13:55) ficou na MESMA faixa do build antigo —
+  draw calls 141-159 e primitivas 71k-84k (antes: 145/76.503 no inicio e 158/
+  82.563 as 14:07), FPS 12-21 (antes 12-15 nesse horario). Ou seja: nenhum ganho
+  visivel ANTES do fim da tarde, que e exatamente onde as sombras alongam — e
+  essa janela (14:03 -> 16:30) NAO foi medida, porque a aba perdeu o foco, o
+  loop congelou em 14:03 e o navegador recusou novos pedidos de tela cheia.
+  CONFIRMADO: (1) o aviso do HUD agora aparece bem abaixo da telemetria (o print
+  mostra o texto em duas linhas a ~68% da altura, sem encostar em "aderencia");
+  (2) sem erro de script no console (so as duas linhas [log] do Godot);
+  (3) `props 20 (0 acordados) + 0 destrocos` durante 4 horas de jogo.
+  ATENCAO AOS NUMEROS ABSOLUTOS: o renderer reportado pelo ambiente de teste e
+  "WebKit - WebKit WebGL" sem nome de GPU — cheiro forte de rasterizacao por
+  SOFTWARE (SwiftShader/llvmpipe), nao a GPU do iPhone. Entao os 12-21 FPS do
+  teste medem o ambiente do inspetor, NAO o iPhone 12; o que vale deles e a
+  COMPARACAO (draw calls/primitivas) e a tendencia. O FPS real continua sendo o
+  botao MEDIR com o dedo.
+  CORTE DAS BORDAS: no viewport de telefone em tela cheia a primeira fileira de
+  botoes (SALVAR/CARREGAR/PERF) e o titulo ficam cortados no topo, e o console
+  verde e cortado embaixo; com a janela menor (354x593) o HUD inteiro cabe. Como
+  o console e um elemento DOM preso em bottom:0 e TAMBEM e cortado, o problema
+  nao e do layout do HUD: e a PAGINA ficando mais alta que a area visivel do
+  Safari (100% inclui a area atras da barra de endereco no iPhone). Correcao
+  tentada (precisa de confirmacao no aparelho): o passo que injeta o console no
+  build Web agora injeta tambem `html,body{height:100dvh;overflow:hidden}`, e
+  `100dvh` acompanha a barra do Safari; em navegador que nao conhece a unidade
+  o CSS e ignorado e vale o 100% do template.
+  PROXIMO PASSO DE DESEMPENHO SE O MEDIR NO IPHONE AINDA MOSTRAR FPS BAIXO: o
+  custo dominante suspeito e PIXEL, nao geometria (draw calls/primitivas quase
+  nao mudam e o FPS oscila 12-21). Em retrato, o modo de esticar "viewport" com
+  base 1280x720 expande a altura logica para ~2770 px, ou seja o jogo desenha
+  ~3,5 MP para uma tela de ~0,33 MP de CSS. A alavanca de uma linha e baixar
+  `display/window/size/viewport_width/height` para 960x540 (a HUD ja se escala
+  por `vs.y/640`, entao o layout acompanha); nao fiz isso as cegas porque
+  suaviza a imagem no desktop e o ganho no iPhone precisa ser medido com MEDIR.
+
 ## Proximas tarefas (Fase 1 -> Fase 2)1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
 2. Medir FPS no iPhone jogando uma sessao real (B-09): o botao PERF grava CSV.
 3. Pedir ao usuario que toque em SALVAR e CARREGAR no jogo e confirme que o save volta (valida o B-08 no aparelho).
