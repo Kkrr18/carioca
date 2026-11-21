@@ -19,6 +19,18 @@ copyright de jogo comercial.
 | quaternius-taxi.glb | Quaternius (pack "Cars") | CC0 1.0 | 177 KB | tráfego (taxi carioca) |
 | ped-casual.glb, ped-worker.glb, ped-beach.glb | Quaternius, "Ultimate Modular Characters" ([espelho no GitHub](https://github.com/trebeljahr/quaternius-showcase/tree/main/public/glb/modular_men)) | CC0 1.0 | 767 / 658 / 814 KB | pedestres (B-57): adultos vestidos com esqueleto, **sem animação** |
 | ped-walk.glb | Quaternius, "Animated Human Low Poly" ([OpenGameArt](https://opengameart.org/content/animated-human-low-poly), [espelho](https://github.com/pengqianhan/campus-world-model)) | CC0 1.0 | 543 KB | só as animações (idle/walk/run), retargetadas para os corpos acima |
+| head.glb | Cabeça escaneada de **Lee Perry-Smith** (IR-LTD), do repositório do [three.js](https://github.com/mrdoob/three.js/tree/dev/examples/models/gltf/LeePerrySmith) | **CC-BY 3.0** (atribuição obrigatória) | 395 KB | cabeça 3D do protagonista (B-77), em `scripts/player/player.gd` |
+
+**A cabeça (`head.glb`) não é auto-contida**: o `.glb` traz só a geometria — as
+três texturas do autor (difusa, normal, specular) são arquivos `.jpg` separados
+na pasta de origem e não vieram. Por isso o jogo aplica um material chapado de
+pele, no tom do corpo. O modelo é um escaneamento realista (denso), então ele
+destoa de propósito do corpo low-poly; se o autor quiser a versão de mesmo
+estilo, o candidato é o **"Zuck Head"** (CC0, 2,8 mil triângulos, cabeça
+low-poly com olhos e boca) do [poly.pizza/m/axzPjFL6hB](https://poly.pizza/m/axzPjFL6hB),
+que **não tem URL direta** de arquivo (o download é por JavaScript): para usar,
+basta baixar pelo site, importar o arquivo como `assets/models/head.glb` (o
+código não muda) e anotar a origem aqui.
 
 **Os carros da Quaternius nao tem textura**: as cores vem de material por peça
 (carroceria, vidros, farois, lanternas, pneus). Isso e otimo aqui: como a cor e

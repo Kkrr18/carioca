@@ -19,7 +19,6 @@ const Surf = preload("res://scripts/core/surface_db.gd")
 const PropBody = preload("res://scripts/physics/prop_body.gd")
 const Damage = preload("res://scripts/physics/damage.gd")
 const PropField = preload("res://scripts/physics/prop_field.gd")
-const FaceTexture = preload("res://scripts/player/face_texture.gd")
 const ModelProp = preload("res://scripts/world/model_prop.gd")
 const Player = preload("res://scripts/player/player.gd")
 const TouchControls = preload("res://scripts/ui/touch_controls.gd")
@@ -78,7 +77,7 @@ func _initialize() -> void:
 	_test_pedestrian_model()
 	_test_pedestrian_life()
 	_test_player_model()
-	_test_face()
+	_test_head_model()
 	_test_shops()
 	_test_windows()
 	_test_building_shapes()
@@ -1425,37 +1424,39 @@ func _test_pedestrians() -> void:
 	check(placed >= 10, "nasce perto do jogador (%d de 12)" % placed)
 
 
-## B-76: rosto do protagonista desenhado em codigo (Image) e dimensionado pela
-## altura do personagem. O CI confere o desenho e a proporcao sem GPU.
-func _test_face() -> void:
-	var img := FaceTexture.face_image()
-	check(img.get_width() == 64 and img.get_height() == 96,
-		"rosto 64x96 (%dx%d)" % [img.get_width(), img.get_height()])
-	check(img.get_pixel(0, 0).a < 0.01,
-		"canto do rosto transparente (a pele do corpo aparece)")
-	var used := img.get_used_rect()
-	check(used.size.x >= 38 and used.size.y >= 44,
-		"rosto ocupa a area util (%dx%d px)" % [used.size.x, used.size.y])
-	var eye_y := int(round(96.0 * 0.40)) + 2
-	var left := img.get_pixel(int(round(64.0 * 0.30)), eye_y)
-	var right := img.get_pixel(int(round(64.0 * 0.70)), eye_y)
-	check(left.a > 0.5 and right.a > 0.5, "dois olhos opacos, um de cada lado")
-	check(left.get_luminance() < 0.25 and right.get_luminance() < 0.25,
-		"olhos escuros (luminancia %.2f)" % left.get_luminance())
-	var mouth := img.get_pixel(32, int(round(96.0 * 0.77)))
-	check(mouth.a > 0.5 and mouth.r > mouth.g, "boca visivel e avermelhada")
-	# Tamanho: tudo e fracao da altura do corpo (1,80 m do protagonista).
-	var big := FaceTexture.layout(1.80)
-	var small := FaceTexture.layout(1.60)
-	var big_size: Vector2 = big["size"]
-	var small_size: Vector2 = small["size"]
-	check(absf(big_size.y - 0.105 * 1.80) < 0.001,
-		"rosto de 1,80 m com %.3f m de altura" % big_size.y)
-	check(big_size.y > small_size.y,
-		"corpo mais alto tem rosto maior (%.3f x %.3f m)" % [big_size.y, small_size.y])
-	var center: Vector3 = big["center"]
-	check(center.y > 1.55 and center.y < 1.75 and center.z > 0.05,
-		"rosto na altura e na frente da cabeca (y %.2f, z %.2f)" % [center.y, center.z])
+## B-77: cabeca 3D do protagonista (modelo CC-BY) escalada pela altura do corpo.
+## O CI carrega o .glb de verdade, conta os triangulos e confere a escala.
+func _test_head_model() -> void:
+	if not ResourceLoader.exists(Player.HEAD_PATH):
+		known(false, "modelo de cabeca importado (rodar --import antes)")
+		return
+	var scene := Pedestrians.load_scene(Player.HEAD_PATH)
+	check(scene != null, "cabeca 3D carrega (%s)" % Player.HEAD_PATH.get_file())
+	if scene == null:
+		return
+	var inst: Node3D = scene.instantiate()
+	root.add_child(inst)
+	var box := ModelProp.mesh_aabb(inst)
+	var tris := 0
+	for node in ModelProp.collect_meshes(inst):
+		var mi := node as MeshInstance3D
+		if mi == null or mi.mesh == null:
+			continue
+		for si in mi.mesh.get_surface_count():
+			var arr: Array = mi.mesh.surface_get_arrays(si)
+			var idx: Variant = arr[Mesh.ARRAY_INDEX]
+			if idx is PackedInt32Array and (idx as PackedInt32Array).size() > 0:
+				tris += (idx as PackedInt32Array).size() / 3
+			else:
+				tris += (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() / 3
+	var k := Player.head_scale(box.size.y, 1.80)
+	check(tris > 100 and box.size.y > 0.1,
+		"cabeca com %d triangulos e %.2f m de altura" % [tris, box.size.y])
+	check(absf(box.size.y * k - Player.HEAD_HEIGHT_FRAC * 1.80) < 0.001,
+		"cabeca escala para %.2f m num corpo de 1,80 m" % (box.size.y * k))
+	var k_menor := Player.head_scale(box.size.y, 1.60)
+	check(k_menor < k, "corpo menor tem cabeca menor (%.3f x %.3f)" % [k_menor, k])
+	inst.queue_free()
 
 
 func _test_pedestrian_model() -> void:
@@ -1881,7 +1882,6 @@ func _test_scripts_compile() -> void:
 		"res://scripts/vehicles/car.gd",
 		"res://scripts/vehicles/vehicle_physics.gd",
 		"res://scripts/player/player.gd",
-		"res://scripts/player/face_texture.gd",
 		"res://scripts/ui/touch_controls.gd",
 		"res://scripts/ui/hud.gd",
 		"res://scripts/autoload/world.gd",

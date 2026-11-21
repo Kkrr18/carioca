@@ -998,9 +998,45 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   altura e na frente da cabeca. NAO validado no aparelho: se o rosto ficar alto
   ou baixo na cabeca, o ajuste e UM numero (`FACE_CENTER_Y`, hoje 0,92) e, se
   ficar afundado ou flutuando, `FACE_FRONT` (0,05) — quero o print para acertar
-  isso na primeira tentativa. PENDENTE: os pedestres continuam de cara lisa (sao
-  MultiMesh: um rosto por NPC custaria 12 desenhos a mais; fica para quando o
-  orcamento pedir).
+## B-77 (substitui o B-76)
+
+- B-77: Fase 3 — CABECA 3D DE VERDADE (o B-76 estava errado). O autor: "nao meu
+  querido, voce nao entendeu. Quero que voce pesquise por modelos 3D de rostos,
+  nao isso". O B-76 tinha desenhado o rosto como TEXTURA num quad; foi removido
+  (`scripts/player/face_texture.gd` apagado, junto do teste e da lista de
+  compilacao). PESQUISA FEITA (inspetor de navegador, com verificacao de link):
+  * poly.pizza tem o encaixe IDEAL — "Zuck Head", de Brielle Garcia, **CC0**,
+    2,8 mil triangulos, cabeca low-poly com olhos/sobrancelhas/boca — mas **nao
+    tem URL de arquivo**: o botao de download e JavaScript, o bucket
+    `static.poly.pizza` responde 403 e a API exige chave. O mesmo vale para
+    HeadRef (CC-BY 3.0, 3,3 mil tris) e Big Head Character Base.
+  * Kenney (blocky-characters) e so pacote `.zip`; Quaternius "Ultimate Modular
+    Characters" no espelho do GitHub traz CORPO inteiro, sem malha de cabeca
+    separada; a Khronos (glTF-Sample-Assets) **nao tem** modelo "Head".
+  * A unica cabeca humana com **arquivo direto** e a escaneada de **Lee
+    Perry-Smith**, publicada com o exemplo homonimo do three.js
+    (`raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/LeePerrySmith/LeePerrySmith.glb`,
+    395 KB). Licenca **CC-BY 3.0** (atribuicao obrigatoria, registrada em
+    data/ATTRIBUTION.md e assets/models/README.md).
+  ENTREGUE: `assets/models/head.glb` baixado e aplicado pelo `player.gd` no lugar
+  da cabeca lisa do corpo CC0. A cabeca e escalada pela ALTURA do personagem
+  (`Player.head_scale(model_height, body_height)`): o modelo inteiro vira
+  0,22 x altura (0,396 m em 1,80 m, o pescoco fica dentro do tronco) e o topo do
+  cranio encosta em 0,99 x altura, entao mudar AVATAR_HEIGHT muda a cabeca
+  junto. Fica no espaco do `avatar` (+Z e a frente), sem depender do rig nem do
+  eixo dos ossos. O `.glb` vem SEM material (as texturas do autor sao arquivos
+  separados), entao o tom vem de um material chapado de pele. A telemetria
+  mostra `cabeca=sim/nao`. Testes no CI: o `.glb` carrega, tem mais de 100
+  triangulos, e a escala leva a cabeca a 0,396 m num corpo de 1,80 m (e menor
+  num corpo de 1,60 m).
+  TRES RISCOS ASSUMIDOS, com o ajuste de uma linha cada: (1) o modelo e um
+  ESCANEAMENTO realista num corpo low-poly — se destoar demais, o caminho e o
+  Zuck Head (CC0, mesmo estilo): baixar pelo site do poly.pizza e importar como
+  `assets/models/head.glb`, sem mexer no codigo; (2) se ficar alto/baixo, o
+  numero e `HEAD_TOP_FRAC` (0,99); se ficar grande/pequeno, `HEAD_HEIGHT_FRAC`
+  (0,22); (3) se aparecer de costas, `HEAD_YAW` = PI. Falta confirmar no
+  aparelho qual dos tres (a cabeca e o resto do corpo podem se sobrepor de
+  formas que so o olho ve).
 
 ## Proximas tarefas (Fase 1 -> Fase 2)1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
 2. Medir FPS no iPhone jogando uma sessao real (B-09): o botao PERF grava CSV.

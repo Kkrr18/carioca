@@ -12,7 +12,6 @@ const Cfg = preload("res://scripts/core/cfg.gd")
 const TouchControls = preload("res://scripts/ui/touch_controls.gd")
 const ModelProp = preload("res://scripts/world/model_prop.gd")
 const Pedestrians = preload("res://scripts/world/pedestrians.gd")
-const FaceTexture = preload("res://scripts/player/face_texture.gd")
 
 const WALK_SPEED := 4.2
 const RUN_SPEED := 8.5
@@ -34,6 +33,24 @@ const SKIN_COL := Color(0.96, 0.84, 0.75)
 const SHIRT_COL := Color(0.92, 0.45, 0.25)
 const PANTS_COL := Color(0.19, 0.27, 0.46)
 const HAIR_COL := Color(0.09, 0.08, 0.08)
+
+# --- Cabeca 3D (B-77) ---------------------------------------------------------
+## Cabeca de verdade no lugar da cabeca lisa do corpo CC0. O modelo e a cabeca
+## escaneada de Lee Perry-Smith (CC-BY 3.0, ver data/ATTRIBUTION.md), baixada do
+## repositorio do three.js: e o unico modelo de cabeca humano com ARQUIVO DIRETO
+## (os low-poly CC0 do poly.pizza nao tem link de arquivo e os pacotes da Kenney
+## e da Quaternius vem em .zip, que aqui nao da para abrir).
+##
+## Tudo em FRACAO da altura do corpo, entao a cabeca acompanha o protagonista:
+##   HEAD_HEIGHT_FRAC  altura do modelo (tem pescoco) / altura do corpo
+##   HEAD_TOP_FRAC     topo do cranio / altura do corpo
+const HEAD_PATH := "res://assets/models/head.glb"
+const HEAD_HEIGHT_FRAC := 0.24
+## Um tico acima da altura do corpo (1,01): o topo do cranio novo tem de cobrir o
+## topo da cabeca lisa do corpo, senao ela aparece por cima.
+const HEAD_TOP_FRAC := 1.01
+## Se a cabeca aparecer de costas no jogo, trocar para PI (o glb olha para +Z).
+const HEAD_YAW := 0.0
 
 var streamer = null
 var camera_rig: Node3D
@@ -58,7 +75,7 @@ var contact_shadow: MeshInstance3D
 var _using_model := false
 var _ap: AnimationPlayer
 var _model_holder: Node3D
-var _face: MeshInstance3D      # rosto (B-76); null se o modelo nao carregou
+var _head: Node3D             # cabeca 3D (B-77); null se o modelo nao carregar
 var _idle_static := false      # clipe de parado sem movimento (pose parada)
 var _sway := 0.0
 var _walk_anim := ""
@@ -152,32 +169,46 @@ func _build_model_avatar() -> bool:
 	inst.scale = Vector3.ONE * k
 	inst.position = Vector3(-box.get_center().x, -box.position.y, -box.get_center().z) * k
 	_using_model = _ap != null
-	# Rosto (B-76): o corpo CC0 tem cabeca lisa. O quad do rosto entra DEPOIS da
-	# escala, como filho do `avatar` (que ja gira com o personagem e tem +Z como
-	# frente), entao ele acompanha o corpo e o tamanho do protagonista.
-	_build_face()
+	# Cabeca 3D (B-77): o corpo CC0 tem a cabeca lisa, entao o rosto vem de um
+	# MODELO de cabeca escalado pela altura do personagem.
+	_build_head()
 	return true
 
 
-## Rosto do protagonista: quad com olhos/sobrancelha/boca desenhados em codigo
-## (FaceTexture), do tamanho da cabeca do personagem (fracao de AVATAR_HEIGHT).
-## Fica no espaco do `avatar`: +Z e a frente, sem rotacao nenhuma — a frente do
-## QuadMesh ja aponta para +Z.
-func _build_face() -> void:
+## Escala do modelo de cabeca para um corpo de `body_height` metros.
+static func head_scale(model_height: float, body_height: float) -> float:
+	return (HEAD_HEIGHT_FRAC * maxf(1.0, body_height)) / maxf(0.01, model_height)
+
+
+## Cabeca 3D do protagonista (B-77). O modelo e escalado para
+## HEAD_HEIGHT_FRAC x altura do corpo com o TOPO em HEAD_TOP_FRAC x altura, entao
+## muda de tamanho junto com o personagem. Fica no espaco do `avatar` (+Z e a
+## frente, como o corpo), nao no osso: nao depende do rig nem do eixo dos ossos.
+func _build_head() -> void:
 	if avatar == null:
 		return
-	var lay := FaceTexture.layout(AVATAR_HEIGHT)
-	var quad := QuadMesh.new()
-	quad.size = lay["size"]
-	var mi := MeshInstance3D.new()
-	mi.name = "Rosto"
-	mi.mesh = quad
-	mi.material_override = FaceTexture.material()
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var center: Vector3 = lay["center"]
-	mi.position = center
-	avatar.add_child(mi)
-	_face = mi
+	var scene := Pedestrians.load_scene(HEAD_PATH)
+	if scene == null:
+		return
+	var inst: Node3D = scene.instantiate()
+	avatar.add_child(inst)
+	var box := ModelProp.mesh_aabb(inst)
+	var k := head_scale(box.size.y, AVATAR_HEIGHT)
+	inst.scale = Vector3.ONE * k
+	# Centraliza em X/Z e apoia o TOPO do cranio na altura do corpo.
+	var c := box.get_center()
+	inst.position = Vector3(-c.x * k, HEAD_TOP_FRAC * AVATAR_HEIGHT - box.end.y * k, -c.z * k)
+	inst.rotation.y = HEAD_YAW
+	# O .glb nao traz material (as texturas sao arquivos separados no repo de
+	# origem), entao o tom vem de um material chapado de pele.
+	var skin := _mat(SKIN_COL)
+	for node in ModelProp.collect_meshes(inst):
+		var mi := node as MeshInstance3D
+		if mi == null:
+			continue
+		mi.material_override = skin
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	_head = inst
 
 
 ## Boneco de caixas: a reserva de sempre, usada so se o modelo nao carregar.
@@ -490,10 +521,10 @@ func describe() -> String:
 	var playing := "parada"
 	if _ap != null and _ap.is_playing():
 		playing = "tocando"
-	return "avatar: modelo 1,80 m (%s; idle=%s walk=%s run=%s jump=%s; parado=%s; rosto=%s)" % [
+	return "avatar: modelo 1,80 m (%s; idle=%s walk=%s run=%s jump=%s; parado=%s; cabeca=%s)" % [
 		playing, _idle_anim, _walk_anim, _run_anim, _jump_anim,
 		"estatico+balanco" if _idle_static else "animado",
-		"sim" if _face != null else "nao"]
+		"sim" if _head != null else "nao"]
 
 
 func _update_camera(delta: float) -> void:

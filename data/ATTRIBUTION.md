@@ -25,6 +25,15 @@
 
 ## Modelos 3D externos
 
+- `assets/models/head.glb` — cabeça humana escaneada por **Lee Perry-Smith**
+  (Infinite-Realities / IR-LTD), distribuída com o exemplo "LeePerrySmith" do
+  **three.js** (https://github.com/mrdoob/three.js/tree/dev/examples/models/gltf/LeePerrySmith).
+  Licença **Creative Commons Attribution 3.0 Unported (CC BY 3.0)**
+  (https://creativecommons.org/licenses/by/3.0/): a atribuição é OBRIGATÓRIA e
+  está registrada aqui. Uso no jogo: cabeça 3D do protagonista (B-77),
+  carregada por `scripts/player/player.gd`. O `.glb` traz só a geometria — as
+  texturas do autor (difusa/normal/specular) ficaram de fora, então o jogo usa
+  um material chapado de pele.
 - `assets/models/vehicle-truck-red.glb` + `assets/models/Textures/colormap.png`
   — caminhao low-poly e o atlas de cores do
   **Starter Kit: Racing** de **Kenney** (https://kenney.nl,
