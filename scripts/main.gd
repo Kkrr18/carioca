@@ -678,7 +678,7 @@ func _player_fire() -> void:
 	if not player.can_fire():
 		return
 	var data: Dictionary = player.weapon_data()
-	var from := player.global_position + Vector3(0.0, 1.25, 0.0)
+	var from: Vector3 = player.global_position + Vector3(0.0, 1.25, 0.0)
 	var dir: Vector3 = player.aim_dir()
 	player.consume_fire()
 	var hit: Dictionary = police.damage_nearest(from, dir, float(data["range"]),

@@ -2057,6 +2057,13 @@ func _test_scripts_compile() -> void:
 		"res://scripts/ui/hud.gd",
 		"res://scripts/autoload/world.gd",
 		"res://scripts/autoload/save_manager.gd",
+		"res://scripts/game/wanted.gd",
+		"res://scripts/game/ipanema.gd",
+		"res://scripts/game/missions.gd",
+		"res://scripts/game/mission_runner.gd",
+		"res://scripts/ui/gta_hud.gd",
+		"res://scripts/ui/radar.gd",
+		"res://scripts/world/police.gd",
 		"res://scripts/main.gd",
 	]
 	var failed := PackedStringArray()

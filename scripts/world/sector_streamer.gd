@@ -439,7 +439,7 @@ func _install(sec: Vector2i, lod: int, res: Array) -> void:
 		si = _tex_surface(mesh, si, res[11], res[12], res[13], _mat_walk)
 		si = _tex_surface(mesh, si, res[14], res[15], res[16], _mat_sand)
 	if res.size() >= 20:
-		si = _tex_surface(mesh, si, res[17], res[18], res[19], _mat_calcadao)
+		si = _tex_surface(mesh, si, res[17], res[18], res[19], _mat_caladao)
 	# Fachada dos predios (com cor por vertice: a paleta tinge a textura).
 	if res.size() >= 24:
 		si = _tex_surface(mesh, si, res[20], res[21], res[22], _mat_facade, res[23])

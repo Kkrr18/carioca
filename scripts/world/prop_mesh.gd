@@ -638,9 +638,12 @@ static func _cadeira(buf: MBuf, hue: float) -> void:
 	var cloth: Color = PropFactory.color_for("umbrella", hue)
 	for s in [-1.0, 1.0]:
 		var x := float(s) * 0.30
-		prism_dir(buf, Vector3(x, 0.0, 0.42), Vector3(x, 0.30, -0.04), 0.030, 0.030, 3,
+		# A perna inclinada comeca 4 cm acima do chao: o anel do prisma desce
+		# ~2,5 cm na perpendicular do eixo, e comecar em y = 0 enterrava o prop
+		# (o teste "props apoiados no chao" pegou isso).
+		prism_dir(buf, Vector3(x, 0.04, 0.42), Vector3(x, 0.32, -0.04), 0.030, 0.030, 3,
 				frame, false, false)
-		prism_dir(buf, Vector3(x, 0.30, -0.04), Vector3(x, 0.72, -0.40), 0.030, 0.030, 3,
+		prism_dir(buf, Vector3(x, 0.32, -0.04), Vector3(x, 0.72, -0.40), 0.030, 0.030, 3,
 				frame, false, false)
 		prism_dir(buf, Vector3(x, 0.0, 0.42), Vector3(x, 0.28, 0.42), 0.030, 0.030, 3,
 				frame, false, false)

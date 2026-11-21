@@ -265,7 +265,7 @@ func _refresh_texts() -> void:
 			ammo = "  %d" % int(player.ammo)
 		_rweapon.text = String(player.weapon_label()) + ammo
 	if _rlocation != null:
-		var here := _focus if _has_focus else player.position
+		var here: Vector3 = _focus if _has_focus else player.position
 		_rlocation.text = Ipanema.location_line(here.x, here.z)
 	if _robjective != null:
 		if runner != null and bool(runner.get("active")):
