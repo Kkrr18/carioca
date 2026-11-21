@@ -12,6 +12,7 @@ const Cfg = preload("res://scripts/core/cfg.gd")
 const TouchControls = preload("res://scripts/ui/touch_controls.gd")
 const ModelProp = preload("res://scripts/world/model_prop.gd")
 const Pedestrians = preload("res://scripts/world/pedestrians.gd")
+const FaceTexture = preload("res://scripts/player/face_texture.gd")
 
 const WALK_SPEED := 4.2
 const RUN_SPEED := 8.5
@@ -57,6 +58,7 @@ var contact_shadow: MeshInstance3D
 var _using_model := false
 var _ap: AnimationPlayer
 var _model_holder: Node3D
+var _face: MeshInstance3D      # rosto (B-76); null se o modelo nao carregou
 var _idle_static := false      # clipe de parado sem movimento (pose parada)
 var _sway := 0.0
 var _walk_anim := ""
@@ -150,7 +152,32 @@ func _build_model_avatar() -> bool:
 	inst.scale = Vector3.ONE * k
 	inst.position = Vector3(-box.get_center().x, -box.position.y, -box.get_center().z) * k
 	_using_model = _ap != null
+	# Rosto (B-76): o corpo CC0 tem cabeca lisa. O quad do rosto entra DEPOIS da
+	# escala, como filho do `avatar` (que ja gira com o personagem e tem +Z como
+	# frente), entao ele acompanha o corpo e o tamanho do protagonista.
+	_build_face()
 	return true
+
+
+## Rosto do protagonista: quad com olhos/sobrancelha/boca desenhados em codigo
+## (FaceTexture), do tamanho da cabeca do personagem (fracao de AVATAR_HEIGHT).
+## Fica no espaco do `avatar`: +Z e a frente, sem rotacao nenhuma — a frente do
+## QuadMesh ja aponta para +Z.
+func _build_face() -> void:
+	if avatar == null:
+		return
+	var lay := FaceTexture.layout(AVATAR_HEIGHT)
+	var quad := QuadMesh.new()
+	quad.size = lay["size"]
+	var mi := MeshInstance3D.new()
+	mi.name = "Rosto"
+	mi.mesh = quad
+	mi.material_override = FaceTexture.material()
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var center: Vector3 = lay["center"]
+	mi.position = center
+	avatar.add_child(mi)
+	_face = mi
 
 
 ## Boneco de caixas: a reserva de sempre, usada so se o modelo nao carregar.
@@ -463,9 +490,10 @@ func describe() -> String:
 	var playing := "parada"
 	if _ap != null and _ap.is_playing():
 		playing = "tocando"
-	return "avatar: modelo 1,80 m (%s; idle=%s walk=%s run=%s jump=%s; parado=%s)" % [
+	return "avatar: modelo 1,80 m (%s; idle=%s walk=%s run=%s jump=%s; parado=%s; rosto=%s)" % [
 		playing, _idle_anim, _walk_anim, _run_anim, _jump_anim,
-		"estatico+balanco" if _idle_static else "animado"]
+		"estatico+balanco" if _idle_static else "animado",
+		"sim" if _face != null else "nao"]
 
 
 func _update_camera(delta: float) -> void:

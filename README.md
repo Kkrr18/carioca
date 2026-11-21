@@ -21,7 +21,10 @@ Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
 - Protagonista de modelo: o mesmo corpo CC0 da Quaternius que roda nos
   pedestres, pintado por vértice (homem branco, de cabelo preto, 1,80 m,
   camiseta laranja e jeans), com as animações de parado/andar/correr/pular que
-  vêm dentro do arquivo. Se o modelo não carregar, volta para o boneco de
+  vêm dentro do arquivo. O corpo tem a cabeça lisa, então o **rosto** (olhos,
+  sobrancelhas, nariz e boca) é desenhado em código e aplicado num plano na
+  frente da cabeça, dimensionado pela altura do personagem — nada baixado, nada
+  com licença duvidosa. Se o modelo não carregar, volta para o boneco de
   caixas — o jogo nunca fica sem personagem.
 - Personagem em terceira pessoa com câmera orbital, colisão por retângulos e
   chão analítico (sem corpos físicos estáticos).

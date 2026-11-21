@@ -975,6 +975,33 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   proximo print tem de mostrar `escala 1.40` e o FPS de volta aos 30, ou o
   gargalo e outro e eu ataco pelo proximo numero da telemetria.
 
+- B-76: Fase 3 — ROSTO DO PROTAGONISTA. Pedido: "procura modelo de rosto e
+  aplique conforme o tamanho do protagonista". O QUE EXISTE: o corpo CC0 da
+  Quaternius (`ped-walk.glb`) tem a cabeca LISA — `paint_body` pinta pele,
+  camiseta, calca e cabelo por ALTURA do vertice, e o rosto fica sem olhos,
+  boca ou sobrancelha (nos prints do aparelho o protagonista aparece com a cara
+  branca e vazia). Nao ha textura de rosto no projeto, e textura solta de rosto
+  em .png livre quase sempre vem em pacote .zip (que nao abrimos aqui) — e a
+  regra do projeto e CC0/CC-BY com atribuicao, sem dependencia baixada as
+  cegas. SOLUCAO: o rosto e DESENHADO EM CODIGO (`scripts/player/face_texture.gd`,
+  Image 64x96 RGBA: sobrancelhas, olhos escuros com brilho, sombra do nariz e
+  boca com cantos levantados) e aplicado num QUAD na frente da cabeca, com
+  material de recorte por alfa (sem ordem de transparencia no iPhone) e sem
+  projetar sombra. TAMANHO PELO PERSONAGEM: tudo e fracao de AVATAR_HEIGHT
+  (`layout()`): largura 0,075 x altura, altura 0,105 x altura, centro a 0,92 da
+  altura e 0,05 na frente — para 1,80 m da 0,135 x 0,189 m, ou seja o rosto
+  acompanha o corpo se a altura mudar. O quad e filho do `avatar` (que ja gira
+  com o personagem e tem +Z como frente), entao ele anda e gira junto. A
+  telemetria ganhou `rosto=sim/nao` na linha do avatar. Testes novos no CI: a
+  imagem tem canto transparente, area util, dois olhos escuros opacos e boca
+  avermelhada; e o layout escala com a altura (1,80 > 1,60) com o centro na
+  altura e na frente da cabeca. NAO validado no aparelho: se o rosto ficar alto
+  ou baixo na cabeca, o ajuste e UM numero (`FACE_CENTER_Y`, hoje 0,92) e, se
+  ficar afundado ou flutuando, `FACE_FRONT` (0,05) — quero o print para acertar
+  isso na primeira tentativa. PENDENTE: os pedestres continuam de cara lisa (sao
+  MultiMesh: um rosto por NPC custaria 12 desenhos a mais; fica para quando o
+  orcamento pedir).
+
 ## Proximas tarefas (Fase 1 -> Fase 2)1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
 2. Medir FPS no iPhone jogando uma sessao real (B-09): o botao PERF grava CSV.
 3. Pedir ao usuario que toque em SALVAR e CARREGAR no jogo e confirme que o save volta (valida o B-08 no aparelho).

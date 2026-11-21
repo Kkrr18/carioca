@@ -19,6 +19,7 @@ const Surf = preload("res://scripts/core/surface_db.gd")
 const PropBody = preload("res://scripts/physics/prop_body.gd")
 const Damage = preload("res://scripts/physics/damage.gd")
 const PropField = preload("res://scripts/physics/prop_field.gd")
+const FaceTexture = preload("res://scripts/player/face_texture.gd")
 const ModelProp = preload("res://scripts/world/model_prop.gd")
 const Player = preload("res://scripts/player/player.gd")
 const TouchControls = preload("res://scripts/ui/touch_controls.gd")
@@ -77,6 +78,7 @@ func _initialize() -> void:
 	_test_pedestrian_model()
 	_test_pedestrian_life()
 	_test_player_model()
+	_test_face()
 	_test_shops()
 	_test_windows()
 	_test_building_shapes()
@@ -1423,6 +1425,39 @@ func _test_pedestrians() -> void:
 	check(placed >= 10, "nasce perto do jogador (%d de 12)" % placed)
 
 
+## B-76: rosto do protagonista desenhado em codigo (Image) e dimensionado pela
+## altura do personagem. O CI confere o desenho e a proporcao sem GPU.
+func _test_face() -> void:
+	var img := FaceTexture.face_image()
+	check(img.get_width() == 64 and img.get_height() == 96,
+		"rosto 64x96 (%dx%d)" % [img.get_width(), img.get_height()])
+	check(img.get_pixel(0, 0).a < 0.01,
+		"canto do rosto transparente (a pele do corpo aparece)")
+	var used := img.get_used_rect()
+	check(used.size.x >= 38 and used.size.y >= 44,
+		"rosto ocupa a area util (%dx%d px)" % [used.size.x, used.size.y])
+	var eye_y := int(round(96.0 * 0.40)) + 2
+	var left := img.get_pixel(int(round(64.0 * 0.30)), eye_y)
+	var right := img.get_pixel(int(round(64.0 * 0.70)), eye_y)
+	check(left.a > 0.5 and right.a > 0.5, "dois olhos opacos, um de cada lado")
+	check(left.get_luminance() < 0.25 and right.get_luminance() < 0.25,
+		"olhos escuros (luminancia %.2f)" % left.get_luminance())
+	var mouth := img.get_pixel(32, int(round(96.0 * 0.77)))
+	check(mouth.a > 0.5 and mouth.r > mouth.g, "boca visivel e avermelhada")
+	# Tamanho: tudo e fracao da altura do corpo (1,80 m do protagonista).
+	var big := FaceTexture.layout(1.80)
+	var small := FaceTexture.layout(1.60)
+	var big_size: Vector2 = big["size"]
+	var small_size: Vector2 = small["size"]
+	check(absf(big_size.y - 0.105 * 1.80) < 0.001,
+		"rosto de 1,80 m com %.3f m de altura" % big_size.y)
+	check(big_size.y > small_size.y,
+		"corpo mais alto tem rosto maior (%.3f x %.3f m)" % [big_size.y, small_size.y])
+	var center: Vector3 = big["center"]
+	check(center.y > 1.55 and center.y < 1.75 and center.z > 0.05,
+		"rosto na altura e na frente da cabeca (y %.2f, z %.2f)" % [center.y, center.z])
+
+
 func _test_pedestrian_model() -> void:
 	# B-57/B-58: corpos da Quaternius (CC0). A prova que faltava: nao basta o
 	# clipe "casar" com o esqueleto. Os corpos modulares e o walker sao packs
@@ -1846,6 +1881,7 @@ func _test_scripts_compile() -> void:
 		"res://scripts/vehicles/car.gd",
 		"res://scripts/vehicles/vehicle_physics.gd",
 		"res://scripts/player/player.gd",
+		"res://scripts/player/face_texture.gd",
 		"res://scripts/ui/touch_controls.gd",
 		"res://scripts/ui/hud.gd",
 		"res://scripts/autoload/world.gd",
