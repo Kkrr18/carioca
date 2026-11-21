@@ -63,9 +63,10 @@ Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
   térreo — o vão entra até 4,5 m para dentro do prédio, com piso, forro, paredes,
   balcão, prateleira, produtos e uma placa colorida (padaria, farmácia, bar,
   loja, mercado). Os colisores deixam o vão aberto, então **você entra andando**
-  e não atravessa parede. Custo: geometria no mesmo desenho do setor (nenhuma
-  chamada nova), e a loja só existe no LOD detalhado — de longe o prédio fica
-  fechado.
+  e não atravessa parede. Dentro de uma loja há **balconista** (NPC parado atrás
+  do balcão, olhando para a rua) e, ao entrar, o HUD diz o **nome do comércio**.
+  Custo: geometria no mesmo desenho do setor (nenhuma chamada nova), e a loja só
+  existe no LOD detalhado — de longe o prédio fica fechado.
 - Calçada com meio-fio: o miolo da quadra fica 15 cm acima da rua, e o chão de
   quem anda acompanha (personagem e carro sobem no meio-fio).
 - Texturas no chão: asfalto, calçada, areia e o calçadão de pedra portuguesa

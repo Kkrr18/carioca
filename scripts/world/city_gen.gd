@@ -136,6 +136,7 @@ static func generate(sx: int, sz: int, world_seed: int, lod: int) -> Array:
 	var bld := TBuf.new(FACADE_W, FACADE_H)
 	var defs: Array = []
 	var colliders: Array = []
+	var shops: Array = []     # lojas do setor (balconista + nome na tela), B-66
 	var ox := float(sx) * Cfg.SECTOR_SIZE
 	var oz := float(sz) * Cfg.SECTOR_SIZE
 	var s := Cfg.SECTOR_SIZE
@@ -153,13 +154,13 @@ static func generate(sx: int, sz: int, world_seed: int, lod: int) -> Array:
 		if z_axis < Cfg.CITY_MIN_Z or z_axis > Cfg.CITY_MAX_Z:
 			continue
 		for i in range(i0, i1 + 1):
-			_block(gb, win, walk, road, calcadao, bld, defs, colliders, float(i) * BLOCK, z_axis,
-					world_seed, i, j, lod)
+			_block(gb, win, walk, road, calcadao, bld, defs, colliders, shops, float(i) * BLOCK,
+					z_axis, world_seed, i, j, lod)
 
 	return [gb.v, gb.n, gb.c, colliders, defs, win.v, win.n, win.c,
 			road.v, road.n, road.uv, walk.v, walk.n, walk.uv, sand.v, sand.n, sand.uv,
 			calcadao.v, calcadao.n, calcadao.uv,
-			bld.v, bld.n, bld.uv, bld.col]
+			bld.v, bld.n, bld.uv, bld.col, shops]
 
 
 # --- Terreno -----------------------------------------------------------------
@@ -256,7 +257,7 @@ static func _beach(walk: TBuf, road: TBuf, calcadao: TBuf, defs: Array, ox: floa
 # --- Quadras -----------------------------------------------------------------
 
 static func _block(gb: GBuf, win: GBuf, walk: TBuf, road: TBuf, calcadao: TBuf, bld: TBuf,
-		defs: Array, colliders: Array,
+		defs: Array, colliders: Array, shops: Array,
 		ax: float, az: float, world_seed: int, bi: int, bj: int, lod: int) -> void:
 	# Semente propria da quadra: o conteudo nao depende do setor que a desenha.
 	var rng := Rng.new(mix3(world_seed, bi * 4096 + 1, bj * 4096 + 7))
@@ -306,7 +307,7 @@ static func _block(gb: GBuf, win: GBuf, walk: TBuf, road: TBuf, calcadao: TBuf, 
 		for b in LOT_ROWS:
 			var lx := x0 + lot_w * 0.5 + float(a) * (lot_w + ALLEY)
 			var lz := z0 + lot_d * 0.5 + float(b) * (lot_d + ALLEY)
-			_lot(gb, win, bld, defs, colliders, rng, lx, lz, lot_w, lot_d, lod, ax, az)
+			_lot(gb, win, bld, defs, colliders, shops, rng, lx, lz, lot_w, lot_d, lod, ax, az)
 
 
 ## Um lote. Sorteia SEMPRE todos os valores (mesmo em LOD far), para o layout
@@ -319,8 +320,9 @@ static func _block(gb: GBuf, win: GBuf, walk: TBuf, road: TBuf, calcadao: TBuf, 
 ##     embasamento de dois/tres andares com torre recuada (as vezes chanfrada).
 ## O embasamento e a caixa reta ficam com a planta INTEIRA, entao o colisor
 ## retangular continua exato: todo recuo e chanfro acontece acima da rua.
-static func _lot(gb: GBuf, win: GBuf, bld: TBuf, defs: Array, colliders: Array, rng: Rng,
-		lx: float, lz: float, lot_w: float, lot_d: float, lod: int, ax: float, az: float) -> void:
+static func _lot(gb: GBuf, win: GBuf, bld: TBuf, defs: Array, colliders: Array, shops: Array,
+		rng: Rng, lx: float, lz: float, lot_w: float, lot_d: float, lod: int,
+		ax: float, az: float) -> void:
 	var empty := not rng.chance(0.92)
 	var floors := rng.range_i(1, 7)
 	if rng.chance(0.18):
@@ -437,6 +439,9 @@ static func _lot(gb: GBuf, win: GBuf, bld: TBuf, defs: Array, colliders: Array, 
 		_wall_with_hole(bld, fa, fb, base_y, ground_top, off, bw, ground_y,
 				ground_y + SHOP_H, ground_col)
 		_add_shop(gb, bx, bz, w, d, side, bw, bd, ground_y, shop_kind)
+		# Publica a loja: onde o balconista fica em pe, onde o jogador entra (e o
+		# que o HUD mostra) e para onde o balconista olha.
+		shops.append(_shop_spot(bx, bz, w, d, side, bw, bd, ground_y, shop_kind))
 
 	if lod == LOD_FULL:
 		# Cobertura: casa de maquinas, caixa d'agua ou antena. Vai para o
@@ -564,6 +569,38 @@ static func _wall_piece(tb: TBuf, a: Vector2, u: Vector2, nrm: Vector3,
 			Vector2(t1 / tb.tile, (yb - y_base) / tb.tile_v),
 			Vector2(t1 / tb.tile, (yt - y_base) / tb.tile_v),
 			Vector2(t0 / tb.tile, (yt - y_base) / tb.tile_v), col)
+
+
+## Onde fica a loja, em dados: o ponto do BALCONISTA (atras do balcao), o centro
+## do vao (onde o jogador entra e o HUD avisa o nome), para onde olhar e o nome.
+## Puro: o teste confere posicao, lado e nome sem GPU.
+static func _shop_spot(bx: float, bz: float, w: float, d: float, side: int,
+		bw: float, bd: float, ground_y: float, kind: int) -> Dictionary:
+	var face := Vector2.ZERO
+	var inward := Vector2.ZERO
+	match side:
+		0:
+			face = Vector2(bx - w * 0.5, bz)
+			inward = Vector2(1.0, 0.0)
+		1:
+			face = Vector2(bx + w * 0.5, bz)
+			inward = Vector2(-1.0, 0.0)
+		2:
+			face = Vector2(bx, bz - d * 0.5)
+			inward = Vector2(0.0, 1.0)
+		_:
+			face = Vector2(bx, bz + d * 0.5)
+			inward = Vector2(0.0, -1.0)
+	# Balconista atras do balcao (o balcao fica a 62% da profundidade).
+	var stand := face + inward * minf(bd * 0.62 + 0.9, bd - 0.5)
+	var front := face + inward * minf(bd * 0.35, 2.0)
+	return {
+		"stand": Vector3(stand.x, ground_y, stand.y),
+		"front": Vector3(front.x, ground_y, front.y),
+		"facing": -inward,
+		"name": String(SHOP_TYPES[kind][0]),
+		"kind": kind,
+	}
 
 
 ## Loja aberta para a calcada (B-65): interior com piso, forro, paredes de fundo

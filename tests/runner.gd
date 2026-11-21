@@ -1326,6 +1326,36 @@ func _test_shops() -> void:
 	check(gb.v.size() % 3 == 0, "geometria da loja em triangulos")
 	check(gb.n.size() == gb.v.size() and gb.c.size() == gb.v.size(),
 		"loja com 1 normal e 1 cor por vertice")
+	# B-66: cada loja publica balconista, entrada e nome, e o setor entrega isso
+	# ao streamer (que alimenta o balconista e o aviso do HUD).
+	var spot := CityGen._shop_spot(0.0, 0.0, 12.0, 12.0, 0, 5.0, 4.0, 1.0, 2)
+	check(spot.has("stand") and spot.has("front") and spot.has("facing") and spot.has("name"),
+		"loja publica stand/front/facing/name")
+	var names: Array = []
+	for st in CityGen.SHOP_TYPES:
+		names.append(String(st[0]))
+	check(names.has(String(spot["name"])), "nome da loja vem da tabela (%s)" % spot["name"])
+	var stand: Vector3 = spot["stand"]
+	var front: Vector3 = spot["front"]
+	check(stand.x > -6.0 and stand.x < 6.0 and stand.y > 0.9,
+		"balconista em pe dentro do vao (%.2f, %.2f)" % [stand.x, stand.y])
+	check(absf(front.x + 4.6) < 0.01, "entrada da loja na boca do vao (%.2f)" % front.x)
+	check(Vector2(spot["facing"]).is_equal_approx(Vector2(-1.0, 0.0)),
+		"balconista olha para a rua (oeste)")
+	var full := CityGen.generate(3, 0, 20260922, CityGen.LOD_FULL)
+	check(full.size() >= 25, "setor traz a lista de lojas (%d arrays)" % full.size())
+	if full.size() >= 25:
+		var shops: Array = full[24]
+		check(shops.size() > 0, "setor com %d lojas publicadas" % shops.size())
+		var ok_spots := true
+		for s in shops:
+			var d: Dictionary = s
+			if not (d.has("stand") and d.has("front") and d.has("name")):
+				ok_spots = false
+		check(ok_spots, "todas as lojas do setor com balconista, entrada e nome")
+		var far := CityGen.generate(3, 0, 20260922, CityGen.LOD_FAR)
+		check((far[24] as Array).is_empty(),
+			"LOD far sem lojas abertas (frente fechada, sem balconista)")
 
 
 ## O retangulo `p` cai dentro de algum dos Rect2 da lista?

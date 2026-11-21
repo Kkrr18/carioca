@@ -40,6 +40,7 @@ const KIND_WALK := 0     # indo para o proximo canto (ou ponto da praia)
 const KIND_WAIT := 1     # parado no canto esperando o sinal abrir
 const KIND_CROSS := 2    # atravessando a rua
 const KIND_IDLE := 3     # parado (celular, conversa, olhando o mar)
+const KIND_SHOP := 4     # balconista dentro de uma loja (B-66)
 
 const MODE_BLOCK := 0    # calcada em volta da quadra
 const MODE_BEACH := 1    # areia e calcadao
@@ -72,6 +73,8 @@ const HIT_SPEED := 3.0
 const HIT_RADIUS := 1.7
 const DOWN_TIME := 4.5          # s no chao antes de levantar
 const GESTURE_TIME := 1.6       # s de gesto de quem esta parado
+## Quantos pedestres viram BALCONISTAS (ficam atras do balcao, dentro da loja).
+const SHOPKEEPERS := 3
 
 # --- Modelos externos (B-57) -------------------------------------------------
 ## Corpos: adultos VESTIDOS da Quaternius ("Ultimate Modular Characters", CC0).
@@ -126,6 +129,9 @@ const HEAD_Y := 1.62
 
 var peds_total := 28
 var peds: Array = []
+## Streamer, para achar as lojas perto do jogador (balconista). Pode ser null nos
+## testes: sem ele, todos viram pedestre comum.
+var streamer = null
 var _clock := 0.0
 var _follow_t := 0.0
 var _visible := 0
@@ -270,6 +276,8 @@ static func spawn_ped(seed_value: int, index: int) -> Dictionary:
 		"down_until": -1.0,
 		"gesture_until": -1.0,
 		"gesture_next": rng.randf_range(4.0, 12.0),
+		# Os primeiros SHOPKEEPERS viram balconistas quando ha loja perto.
+		"shop": index < SHOPKEEPERS,
 		"scale": rng.randf_range(0.93, 1.07),
 		"skin": SKINS[rng.randi_range(0, SKINS.size() - 1)],
 		"shirt": SHIRTS[rng.randi_range(0, SHIRTS.size() - 1)],
@@ -435,7 +443,7 @@ func setup(base_seed: int, focus: Vector3 = Vector3.ZERO) -> void:
 		_build_boxes()
 	_build_shadows()
 	for i in peds.size():
-		place_ped(peds[i], focus, RESPAWN_NEAR, RESPAWN_FAR)
+		_place_one(peds[i], focus)
 
 	update(0.0, focus, focus, Vector3.ZERO, 0.0, 12.0)
 
@@ -939,7 +947,27 @@ func _follow(focus: Vector3, delta: float) -> void:
 	for p in peds:
 		var pos: Vector2 = p["pos"]
 		if Vector2(pos.x - focus.x, pos.y - focus.z).length() > RESPAWN_FAR:
-			place_ped(p, focus, RESPAWN_NEAR, RESPAWN_FAR)
+			_place_one(p, focus)
+
+
+## Poe o pedestre no lugar dele: BALCONISTA vai para dentro de uma loja (atras
+## do balcao, olhando para a rua); o resto vai para a calcada ou a praia. Sem
+## loja por perto, o balconista vira pedestre comum em vez de ficar perdido.
+func _place_one(p: Dictionary, focus: Vector3) -> void:
+	if bool(p.get("shop", false)) and streamer != null:
+		var spots: Array = streamer.shops_near(focus, RESPAWN_FAR)
+		if not spots.is_empty():
+			var d: Dictionary = spots[int(p["index"]) % spots.size()]
+			var c: Vector3 = d["stand"]
+			p["pos"] = Vector2(c.x, c.z)
+			p["target"] = p["pos"]
+			p["kind"] = KIND_SHOP
+			p["yaw"] = facing_yaw(d["facing"])
+			p["down_until"] = -1.0
+			p["gesture_until"] = -1.0
+			p["wait"] = 0.0
+			return
+	place_ped(p, focus, RESPAWN_NEAR, RESPAWN_FAR)
 
 
 func _step(p: Dictionary, dt: float, player_pos: Vector3, car_pos: Vector3,
@@ -956,6 +984,11 @@ func _step(p: Dictionary, dt: float, player_pos: Vector3, car_pos: Vector3,
 		p["wait"] = 0.0
 		return
 	var kind: int = p["kind"]
+	if kind == KIND_SHOP:
+		# Balconista (B-66): plantado atras do balcao, olhando para a rua, com
+		# gestos de tempos em tempos. Nao anda, nao atravessa, nao foge.
+		_shop_stand(p)
+		return
 	if kind == KIND_WAIT:
 		_dodge(p, player_pos)
 		_step_wait(p, dt)
@@ -993,6 +1026,16 @@ func _step(p: Dictionary, dt: float, player_pos: Vector3, car_pos: Vector3,
 	p["phase"] = float(p["phase"]) + speed * dt * 4.2
 	p["yaw"] = lerp_angle(float(p["yaw"]), facing_yaw(dir), minf(1.0, 8.0 * dt))
 	_dodge(p, player_pos)
+
+
+## Balconista parado atras do balcao: so o gesto de tempos em tempos (o mesmo
+## clipe de gesto dos que esperam na calcada).
+func _shop_stand(p: Dictionary) -> void:
+	if _clip_gesture == "" or _clock <= float(p["gesture_next"]):
+		return
+	var rng: RandomNumberGenerator = p["rng"]
+	p["gesture_until"] = _clock + GESTURE_TIME
+	p["gesture_next"] = _clock + rng.randf_range(8.0, 20.0)
 
 
 ## Sai da frente do jogador em vez de deixar ele atravessar a pessoa.
@@ -1193,9 +1236,13 @@ func _write_boxes() -> void:
 
 
 func describe() -> String:
+	var keepers := 0
+	for p in peds:
+		if int(p["kind"]) == KIND_SHOP:
+			keepers += 1
 	if _use_model:
-		return "pedestres: %d pessoas com corpo CC0 Quaternius (1 desenho cada) - clipes: %s" % [
-			_visible, _roles_text()]
+		return "pedestres: %d pessoas (%d balconistas) com corpo CC0 Quaternius (1 desenho cada) - clipes: %s" % [
+			_visible, keepers, _roles_text()]
 	return "pedestres: %d pessoas em caixas (3 desenhos por quadro) - modelo nao carregou" % _visible
 
 

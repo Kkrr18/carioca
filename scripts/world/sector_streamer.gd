@@ -319,6 +319,9 @@ func _install(sec: Vector2i, lod: int, res: Array) -> void:
 		node.add_child(_prop_multimesh(defs))
 
 	node.set_meta("colliders", colliders)
+	# Lojas do setor (B-66): o balconista e o aviso do nome da loja usam isto.
+	if res.size() >= 25:
+		node.set_meta("shops", res[24])
 	node.set_meta("verts", verts.size())
 	if _loaded.has(sec):
 		var old: Node3D = _loaded[sec]
@@ -412,6 +415,30 @@ func push_out(x: float, z: float, radius: float) -> Vector2:
 				else:
 					p += d.normalized() * (radius - d.length())
 	return p
+
+
+## Lojas dos setores carregados a menos de `radius` de `pos`. Cada uma vem do
+## city_gen com: stand (ponto do balconista), front (entrada), facing (para onde
+## olhar) e name. Vazio quando nada esta carregado perto.
+func shops_near(pos: Vector3, radius: float = 60.0) -> Array:
+	var out: Array = []
+	var sec := Cfg.sector_of(pos.x, pos.z)
+	for dz in range(-1, 2):
+		for dx in range(-1, 2):
+			var key := sec + Vector2i(dx, dz)
+			if not _loaded.has(key):
+				continue
+			var node: Node3D = _loaded[key]
+			if not node.has_meta("shops"):
+				continue
+			for s in node.get_meta("shops"):
+				var d: Dictionary = s
+				if not d.has("front"):
+					continue
+				var f: Vector3 = d["front"]
+				if Vector2(f.x - pos.x, f.z - pos.z).length() <= radius:
+					out.append(d)
+	return out
 
 
 func has_ready_at(pos: Vector3) -> bool:

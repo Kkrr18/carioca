@@ -38,6 +38,8 @@ var traffic = null
 var pedestrians = null
 var audio = null
 var _audio_note := ""
+## Nome da loja em que o jogador esta (vazio = na rua). B-66.
+var _shop_here := ""
 
 var _sun: DirectionalLight3D
 var _moon: DirectionalLight3D
@@ -156,6 +158,8 @@ func _ready() -> void:
 	# desvia de voce e corre de carro. Tres MultiMesh para todo mundo.
 	pedestrians = Pedestrians.new()
 	pedestrians.name = "Pedestrians"
+	# O streamer e quem sabe onde estao as lojas (balconistas, B-66).
+	pedestrians.streamer = streamer
 	add_child(pedestrians)
 	pedestrians.setup(world_seed, player.position)
 	hud.set_model_note(model_prop.describe() + "\n" + traffic.describe()
@@ -316,6 +320,22 @@ func _process(delta: float) -> void:
 	if sea != null and player != null:
 		# Mar "infinito": acompanha o foco no plano XZ.
 		sea.global_position = Vector3(focus.x, Cfg.SEA_LEVEL, focus.z)
+	# Loja (B-66): ao entrar no vao, o HUD diz o nome do comercio. A comparacao
+	# evita repetir o aviso a cada quadro; sair da loja so zera o estado.
+	if streamer != null and player != null and hud != null:
+		var here := ""
+		var best := 6.0
+		for s in streamer.shops_near(player.position, 6.0):
+			var d: Dictionary = s
+			var f: Vector3 = d["front"]
+			var dist := Vector2(f.x - player.position.x, f.z - player.position.z).length()
+			if dist < best:
+				best = dist
+				here = String(d.get("name", ""))
+		if here != _shop_here:
+			_shop_here = here
+			if here != "":
+				hud.toast(here)
 	# Carro: o TouchControls desenha e trata o botao ENTRAR/SAIR (B-38: no iPhone
 	# o toque em Button do Godot nao chegava ao jogo) e, dirigindo, troca
 	# PULAR/CORRER por ACEL/FREIO.

@@ -666,8 +666,24 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   parede fechada, 3 pedacos, nada cobrindo a porta). NAO validado no aparelho:
   falta entrar numa loja e ver se o interior le bem a luz do dia.
 
-## Proximas tarefas (Fase 1 -> Fase 2)
-1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
+- B-66: Fase 4 — LOJA COM GENTE E COM NOME. Sequencia do B-65: a loja agora
+  PUBLICA dados. O `city_gen` passou a devolver uma 25a lista com as lojas do
+  setor (`_shop_spot`: `stand` = ponto do balconista atras do balcao, `front` =
+  boca do vao, `facing` = para onde ele olha, `name` = Padaria/Farmacia/Bar/
+  Loja/Mercado). O streamer guarda isso em `meta["shops"]` e expoe
+  `shops_near(pos, raio)`; o modulo dos pedestres recebe o streamer e os 3
+  primeiros pedestres viram BALCONISTAS: ficam parados atras do balcao, olhando
+  para a rua, com o gesto de tempos em tempos, e nunca andam nem atravessam. Sem
+  loja por perto eles voltam a ser pedestre comum (nao ficam perdidos). O `main`
+  pergunta `shops_near` a cada quadro e, ao ENTRAR no vao, mostra o nome do
+  comercio no aviso do HUD (uma vez por loja, nao a cada quadro). No LOD far a
+  lista vem vazia: a frente esta fechada e nao ha balconista la dentro. Custo: 3
+  pedestres dos 12 viram balconistas (nenhum desenho novo). Testes: o spot tem
+  os 4 campos, o nome vem da tabela, o balconista esta dentro do vao e olha para
+  a rua, o setor publica as lojas e o LOD far nao. NAO validado no aparelho:
+  falta ver o balconista dentro da loja e o aviso do nome ao entrar.
+
+## Proximas tarefas (Fase 1 -> Fase 2)1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
 2. Medir FPS no iPhone jogando uma sessao real (B-09): o botao PERF grava CSV.
 3. Pedir ao usuario que toque em SALVAR e CARREGAR no jogo e confirme que o save volta (valida o B-08 no aparelho).
 4. Fase 4 (incremento minimo): testar no iPhone (ENTRAR, ACEL/FREIO, SAIR) e tocar MEDIR para o FPS real; se estiver liso, trafego basico (carros de passeio seguindo as ruas) e a meta "dirigir do Rio ate Niteroi".
