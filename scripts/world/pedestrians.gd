@@ -81,8 +81,12 @@ const SHOPKEEPERS := 3
 ## Tem esqueleto e roupa de gente normal, mas nenhuma animacao propria.
 const BODY_PATHS := [
 	"res://assets/models/ped-casual.glb",
+	"res://assets/models/ped-f-casual.glb",
 	"res://assets/models/ped-worker.glb",
+	"res://assets/models/ped-f-formal.glb",
 	"res://assets/models/ped-beach.glb",
+	"res://assets/models/ped-suit.glb",
+	"res://assets/models/ped-casual2.glb",
 ]
 ## Fonte das animacoes: Quaternius "Animated Human" (CC0, OpenGameArt). So os
 ## clipes sao usados; eles sao RETARGETADOS para o esqueleto dos corpos acima.

@@ -17,7 +17,8 @@ copyright de jogo comercial.
 | quaternius-suv.glb | Quaternius ([poly.pizza/m/xsMtZhBkxL](https://poly.pizza/m/xsMtZhBkxL)) | CC0 1.0 | 177 KB | tráfego |
 | quaternius-sports-car.glb | Quaternius (pack "Cars") | CC0 1.0 | 171 KB | tráfego (carro raro/mais rápido) |
 | quaternius-taxi.glb | Quaternius (pack "Cars") | CC0 1.0 | 177 KB | tráfego (taxi carioca) |
-| ped-casual.glb, ped-worker.glb, ped-beach.glb | Quaternius, "Ultimate Modular Characters" ([espelho no GitHub](https://github.com/trebeljahr/quaternius-showcase/tree/main/public/glb/modular_men)) | CC0 1.0 | 767 / 658 / 814 KB | pedestres (B-57): adultos vestidos com esqueleto, **sem animação** |
+| ped-casual.glb, ped-casual2.glb, ped-worker.glb, ped-beach.glb, ped-suit.glb | Quaternius, "Ultimate Modular Characters" — corpos de HOMEM ([espelho no GitHub](https://github.com/trebeljahr/quaternius-showcase/tree/main/public/glb/modular_men)) | CC0 1.0 | 767 / 742 / 658 / 814 / 838 KB | pedestres (B-57/B-79): adultos vestidos com esqueleto, **sem animação** |
+| ped-f-casual.glb, ped-f-formal.glb | idem — corpos de MULHER ([espelho no GitHub](https://github.com/trebeljahr/quaternius-showcase/tree/main/public/glb/modular_women)) | CC0 1.0 | 786 / 754 KB | pedestres (B-79): mulheres na rua, mesmo rig dos homens, **sem animação** |
 | ped-walk.glb | Quaternius, "Animated Human Low Poly" ([OpenGameArt](https://opengameart.org/content/animated-human-low-poly), [espelho](https://github.com/pengqianhan/campus-world-model)) | CC0 1.0 | 543 KB | só as animações (idle/walk/run), retargetadas para os corpos acima |
 | head.glb | Cabeça escaneada de **Lee Perry-Smith** (IR-LTD), do repositório do [three.js](https://github.com/mrdoob/three.js/tree/dev/examples/models/gltf/LeePerrySmith) | **CC-BY 3.0** (atribuição obrigatória) | 395 KB | cabeça 3D do protagonista (B-77), em `scripts/player/player.gd` |
 

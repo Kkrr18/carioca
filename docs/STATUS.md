@@ -1070,6 +1070,34 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   (o dano nao e salvo no save, entao recarregar zera) e o `FPS 18` e da mesma
   janela de navegador em 4K com rasterizacao por software, nao do iPhone.
 
+- B-79: Fase 3 — PEDESTRES: pesquisa por MODELOS PRONTOS mais realistas. Pedido:
+  "o que acha de esquecer isso e pegar modelos de npcs prontos? pesquise uns
+  mais realistas, modelos 3D bons". PESQUISA (verificada link por link, com
+  navegador e API): humano REALISTA (estilo fotografico) rigged e animado EXISTE
+  — Renderpeople (Eric/Claudia/Carla Rigged, ~20k tris, CC-BY 4.0, rig SEM
+  clipes) e "Realistic Old Russian Guy (animated)" no Sketchfab (CC-BY 4.0,
+  rig + 1 animacao) — mas NENHUM entra no projeto: (1) o download do Sketchfab
+  e por login e vem em .zip, e a API publica nao devolve URL de arquivo; (2) a
+  API de busca do Sketchfab com `licenses=cc0` + `downloadable` devolve ZERO
+  resultados para "realistic human"; (3) o poly.pizza nao tem humano realista
+  (e a biblioteca e low-poly por definicao) e o arquivo so sai por JavaScript —
+  `static.poly.pizza` responde 403 sem a chave `x-auth-token` da API. A regra do
+  projeto (CC0/CC-BY, sem zip, sem login, URL direta) fecha a porta do realista
+  fotografico HOJE. O QUE ENTROU no lugar: o espelho trebeljahr/quaternius-
+  showcase tem o pacote "Ultimate Modular Characters" COMPLETO com URL direta
+  (raw.githubusercontent.com) — 11 corpos de homem e 10 de mulher, e o jogo usava
+  so 3, todos homens. Entraram 4 corpos novos (CC0, mesmo rig, mesma pintura):
+  **duas MULHERES** (`ped-f-casual.glb`, `ped-f-formal.glb`) e dois homens
+  (`ped-suit.glb`, `ped-casual2.glb`). `BODY_PATHS` foi de 3 para 7; a
+  distribuicao por indice (`i % corpos`) reparte os 8 pedestres pesados entre os
+  7 tipos — 2 mulheres na media na rua. Custo: +3,1 MB no build Web e NENHUM
+  desenho novo (o corpo modular continua custando as mesmas superficies e o teto
+  de pessoas nao muda). As animacoes continuam as do `ped-walk.glb`
+  retargetadas; o CI mede o casamento de cada corpo novo (MATCH_MIN 0,60) — se
+  o rig da mulher nao casar, o corpo sai da rua silenciosamente e o log do CI
+  mostra o percentual, e o proximo passo e achar corpo feminino de rig igual ao
+  do walker.
+
 ## Proximas tarefas (Fase 1 -> Fase 2)1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
 2. Medir FPS no iPhone jogando uma sessao real (B-09): o botao PERF grava CSV.
 3. Pedir ao usuario que toque em SALVAR e CARREGAR no jogo e confirme que o save volta (valida o B-08 no aparelho).
@@ -1114,3 +1142,10 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
    tem de ficar baixo (senao o sono nao esta pegando no Web). Se os objetos
    afundarem no chao ou tremerem parados, o problema esta no `step()` de
    prop_body.gd (contato com o chao analitico), nao no desenho.
+
+
+
+14. B-79: olhar a rua e conferir a VARIEDADE: mulheres entre os pedestres e
+    roupa variada (terno, worker, praia). Se todo mundo continuar com a mesma
+    roupa e so homens, o log do CI ("info: corpo ...: casamento N%") diz qual
+    corpo foi reprovado — e o ajuste e trocar o corpo, nao o codigo.
