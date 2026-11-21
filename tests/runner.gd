@@ -15,6 +15,10 @@ const SaveManager = preload("res://scripts/autoload/save_manager.gd")
 const PropFactory = preload("res://scripts/world/prop_factory.gd")
 const Car = preload("res://scripts/vehicles/car.gd")
 const VehiclePhysics = preload("res://scripts/vehicles/vehicle_physics.gd")
+const Surf = preload("res://scripts/core/surface_db.gd")
+const PropBody = preload("res://scripts/physics/prop_body.gd")
+const Damage = preload("res://scripts/physics/damage.gd")
+const PropField = preload("res://scripts/physics/prop_field.gd")
 const ModelProp = preload("res://scripts/world/model_prop.gd")
 const Player = preload("res://scripts/player/player.gd")
 const TouchControls = preload("res://scripts/ui/touch_controls.gd")
@@ -51,6 +55,8 @@ func _initialize() -> void:
 	_test_heights()
 	_test_props()
 	_test_car_physics()
+	_test_surfaces()
+	_test_prop_physics()
 	_test_car_scene_enter_exit()
 	_test_car_model_wheels_in_place()
 	_test_model_prop()
@@ -437,16 +443,16 @@ func _test_car_physics() -> void:
 	var rear_outer := float(curve_loads[3]) > float(curve_loads[2])
 	check(front_outer and rear_outer, "curva carrega as rodas de fora")
 	# Circulo de aderencia: o pneu nunca passa de mu*carga (ABS/TCS de graca).
-	var tf := VehiclePhysics.tire_force(30000.0, 0.0, 5000.0, VehiclePhysics.MU_ASPHALT, 8.0)
+	var tf := VehiclePhysics.tire_force(30000.0, 0.0, 5000.0, Surf.MU_ASPHALT, 8.0)
 	check(absf(tf.length() - 5000.0) < 0.5, "pedido acima do limite e cortado em mu*carga")
-	var tf2 := VehiclePhysics.tire_force(1000.0, 0.0, 5000.0, VehiclePhysics.MU_ASPHALT, 8.0)
+	var tf2 := VehiclePhysics.tire_force(1000.0, 0.0, 5000.0, Surf.MU_ASPHALT, 8.0)
 	check(absf(tf2.x - 1000.0) < 0.5, "pedido abaixo do limite e atendido inteiro")
 	# 0-100 km/h com o step() do jogo: asfalto, plano, pedal em baixo.
 	var dt := 1.0 / 60.0
 	var run := {"speed": 0.0, "gear": 1, "shift_cool": 0.0}
 	var t100 := -1.0
 	for i in 2400:
-		run = VehiclePhysics.step(sp, run, 1.0, 0.0, VehiclePhysics.MU_ASPHALT, dt)
+		run = VehiclePhysics.step(sp, run, 1.0, 0.0, Surf.MU_ASPHALT, dt)
 		if t100 < 0.0 and float(run["speed"]) >= 100.0 / 3.6:
 			t100 = (i + 1) * dt
 	check(t100 > 4.0 and t100 < 16.0, "0-100 km/h em %.1f s" % t100)
@@ -455,36 +461,36 @@ func _test_car_physics() -> void:
 	var top := float(run["speed"]) * 3.6
 	check(top > 108.0, "passa de 108 km/h em 40 s (%.0f km/h)" % [top])
 	# Pisos: areia freia mais longe que asfalto (mu menor, ABS corta antes).
-	var brake_asp := _brake_frames(sp, 20.0, VehiclePhysics.MU_ASPHALT)
-	var brake_sand := _brake_frames(sp, 20.0, VehiclePhysics.MU_SAND)
+	var brake_asp := _brake_frames(sp, 20.0, Surf.MU_ASPHALT)
+	var brake_sand := _brake_frames(sp, 20.0, Surf.MU_SAND)
 	check(brake_asp > 0 and brake_sand > brake_asp + 20,
 		"areia freia mais longe que asfalto (%d x %d quadros)" % [brake_sand, brake_asp])
 	# O freio leva a velocidade a EXATAMENTE zero (nao engata a re sozinho).
 	var stop := {"speed": 5.0, "gear": 2, "shift_cool": 0.0}
 	var frames := 0
 	while frames < 300 and float(stop["speed"]) > 0.0:
-		stop = VehiclePhysics.step(sp, stop, -1.0, 0.0, VehiclePhysics.MU_ASPHALT, dt)
+		stop = VehiclePhysics.step(sp, stop, -1.0, 0.0, Surf.MU_ASPHALT, dt)
 		frames += 1
 	check(float(stop["speed"]) == 0.0 and frames > 1,
 		"freio para exatamente em zero (em %d quadros)" % frames)
 	# Acelerador solto perde velocidade (arrasto + rolamento).
 	var coast := {"speed": 10.0, "gear": 3, "shift_cool": 0.0}
 	for i in 60:
-		coast = VehiclePhysics.step(sp, coast, 0.0, 0.0, VehiclePhysics.MU_ASPHALT, dt)
+		coast = VehiclePhysics.step(sp, coast, 0.0, 0.0, Surf.MU_ASPHALT, dt)
 	check(float(coast["speed"]) < 9.9,
 		"acelerador solto perde velocidade (%.2f m/s em 1 s)" % float(coast["speed"]))
 	# Marcha a re satura em REVERSE_MAX.
 	var rev := {"speed": 0.0, "gear": 1, "shift_cool": 0.0}
 	for i in 1200:
-		rev = VehiclePhysics.step(sp, rev, -1.0, 0.0, VehiclePhysics.MU_ASPHALT, dt)
+		rev = VehiclePhysics.step(sp, rev, -1.0, 0.0, Surf.MU_ASPHALT, dt)
 	check(absf(float(rev["speed"]) + VehiclePhysics.REVERSE_MAX) < 0.05,
 		"marcha a re satura em REVERSE_MAX (%.2f m/s)" % float(rev["speed"]))
 	# Subida freia mais que o plano (gravidade no sentido do movimento).
 	var flat := {"speed": 12.0, "gear": 2, "shift_cool": 0.0}
 	var up := {"speed": 12.0, "gear": 2, "shift_cool": 0.0}
 	for i in 60:
-		flat = VehiclePhysics.step(sp, flat, 1.0, 0.0, VehiclePhysics.MU_ASPHALT, dt)
-		up = VehiclePhysics.step(sp, up, 1.0, 0.08, VehiclePhysics.MU_ASPHALT, dt)
+		flat = VehiclePhysics.step(sp, flat, 1.0, 0.0, Surf.MU_ASPHALT, dt)
+		up = VehiclePhysics.step(sp, up, 1.0, 0.08, Surf.MU_ASPHALT, dt)
 	var up_speed := float(up["speed"])
 	var flat_speed := float(flat["speed"])
 	var slope_note := "subida de 8 por cento freia mais que o plano (%.1f x %.1f m/s)" % [up_speed, flat_speed]
@@ -502,6 +508,112 @@ func _test_car_physics() -> void:
 	var turn_radius := Car.WHEELBASE / tan(Car.steer_limit(5.0))
 	check(turn_radius < 4.0,
 		"raio de curva abaixo de 4 m a 18 km/h (%.1f m)" % turn_radius)
+
+
+func _test_surfaces() -> void:
+	# B-69: UMA tabela de superficies para o jogo inteiro (carro, objetos, som).
+	check(Surf.kinds().size() >= 10, "%d superficies no banco" % Surf.kinds().size())
+	check(Surf.kind_at(1600.0, -5.0) == "water", "mar e agua")
+	check(Surf.kind_at(1600.0, 96.0) == "sand", "praia e areia")
+	check(Surf.kind_at(1600.0, 120.0) == "stone", "calcadao e pedra portuguesa")
+	check(Surf.kind_at(1600.0, 140.0) == "asphalt", "rua e asfalto")
+	check(Surf.kind_at(1608.0, 140.0) == "concrete", "calcada e concreto")
+	check(Surf.mu_at(1600.0, 96.0) < Surf.mu_at(1600.0, 140.0),
+		"areia agarra menos o PNEU que o asfalto (%.2f x %.2f)" % [
+			Surf.mu_at(1600.0, 96.0), Surf.mu_at(1600.0, 140.0)])
+	check(Surf.slide("sand") > Surf.slide("asphalt"),
+		"areia agarra mais uma CAIXA arrastada que o asfalto")
+	check(Surf.bounce("metal") > Surf.bounce("sand"), "metal quica mais que areia")
+	# O carro passou a ler ESTA tabela: uma fonte so, nenhum numero duplicado.
+	check(absf(VehiclePhysics.surface_mu(1600.0, 96.0) - Surf.mu_at(1600.0, 96.0)) < 0.0001,
+		"aderencia do carro vem do SurfaceDB")
+	var all_ok := true
+	for k in Surf.kinds():
+		var kind := String(k)
+		if Surf.mu(kind) <= 0.0 or Surf.slide(kind) <= 0.0 or Surf.hardness(kind) <= 0.0:
+			all_ok = false
+	check(all_ok, "toda superficie tem atrito e resistencia positivos")
+
+
+## Quadros ate a caixa parar deslizando, para comparar pisos (B-69).
+func _slide_time(mu: float) -> int:
+	var ground := Cfg.surface_at(1600.0, 140.0)
+	var b := PropBody.make("caixa",
+			Vector3(1600.0, ground + PropBody.half_height("caixa"), 140.0), 0.0)
+	b["vel"] = Vector3(6.0, 0.0, 0.0)
+	PropBody.wake(b)
+	for i in 900:
+		PropBody.step(b, 1.0 / 60.0, ground, mu, 0.1)
+		if bool(b["rest"]):
+			return i + 1
+	return 0
+
+
+func _test_prop_physics() -> void:
+	# B-69: objeto movel com massa, impulso, atrito, quique, sono e 3 estados de
+	# dano. E o MESMO codigo que o prop_field.gd roda no jogo.
+	var ground := Cfg.surface_at(100.0, 500.0)
+	var box := PropBody.make("caixa", Vector3(100.0, ground + 4.0, 500.0), 0.0)
+	for i in 300:
+		PropBody.step(box, 1.0 / 60.0, ground, Surf.slide("asphalt"), Surf.bounce("asphalt"))
+	var half := PropBody.half_height("caixa")
+	check(absf(float(box["pos"].y) - (ground + half)) < 0.02,
+		"caixa cai e pousa no chao analitico (y %.2f, esperado %.2f)" % [
+			float(box["pos"].y), ground + half])
+	check(bool(box["rest"]), "caixa parada DORME (fisica congelada no iPhone)")
+	# Impulso acorda o objeto e vira velocidade.
+	PropBody.impulse(box, Vector3(1.0, 0.0, 0.0), 140.0)
+	check(not bool(box["rest"]) and float(box["vel"].x) > 1.0,
+		"impulso acorda e empurra (%.1f m/s)" % float(box["vel"].x))
+	# Mesma forca, massas diferentes: a caixa leve sai mais que a lixeira pesada.
+	var bin := PropBody.make("lixeira", Vector3(100.0, ground, 500.0), 0.0)
+	PropBody.impulse(bin, Vector3(1.0, 0.0, 0.0), 140.0)
+	check(float(box["vel"].x) > float(bin["vel"].x) * 1.2,
+		"a mesma forca move mais a caixa (%.1f) que a lixeira (%.1f)" % [
+			float(box["vel"].x), float(bin["vel"].x)])
+	# Atrito por piso nos objetos (slide, nao o mu do pneu).
+	var on_asphalt := _slide_time(Surf.slide("asphalt"))
+	var on_sand := _slide_time(Surf.slide("sand"))
+	check(on_asphalt > 0 and on_sand > 0 and on_sand < on_asphalt,
+		"areia para a caixa antes do asfalto (%d x %d quadros)" % [on_sand, on_asphalt])
+	# Dano: 3 estados por material, e o que cada impacto quebra.
+	check(Damage.state_for(100.0, 100.0) == Damage.INTACT, "vida cheia = intacto")
+	check(Damage.state_for(30.0, 100.0) == Damage.DAMAGED, "menos da metade = danificado")
+	check(Damage.state_for(0.0, 100.0) == Damage.DESTROYED, "vida zero = destruido")
+	check(Damage.hit_power(1450.0, 10.0) > Damage.resistance("wood"),
+		"carro a 36 km/h quebra caixa de madeira")
+	check(Damage.hit_power(1450.0, 2.0) < Damage.resistance("metal"),
+		"carro a 7 km/h nao quebra lixeira de metal")
+	check(Damage.hit_power(80.0, 3.0) < Damage.resistance("glass"),
+		"pedestre andando nao quebra vidro")
+	check(Damage.debris_count("glass") > Damage.debris_count("stone"),
+		"vidro faz mais destrocos que pedra")
+	check(Damage.power_scale(0.0) == 1.0 and Damage.power_scale(1.0) < 0.6,
+		"avaria total tira mais da metade do motor")
+	var s0 := Damage.state_from_damage(0.2)
+	var s1 := Damage.state_from_damage(0.5)
+	var s2 := Damage.state_from_damage(0.9)
+	check(s0 == Damage.INTACT and s1 == Damage.DAMAGED and s2 == Damage.DESTROYED,
+		"avaria do carro em 3 estados")
+	var hit := PropBody.make("caixa", Vector3.ZERO, 0.0)
+	var st := PropBody.apply_damage(hit, Damage.hit_power(1450.0, 15.0))
+	check(st == Damage.DESTROYED and not bool(hit["alive"]),
+		"caixa atropelada a 54 km/h vira destroco")
+	var safe := PropBody.make("caixa", Vector3.ZERO, 0.0)
+	PropBody.apply_damage(safe, Damage.hit_power(80.0, 3.0))
+	check(bool(safe["alive"]) and int(safe["state"]) == Damage.INTACT,
+		"empurrao de pedestre nao destroi a caixa")
+	# Avaria do carro: o `power` que o car.gd passa ao step tira aceleracao.
+	var sp := VehiclePhysics.sedan()
+	var fresh := {"speed": 0.0, "gear": 1, "shift_cool": 0.0}
+	var wrecked := {"speed": 0.0, "gear": 1, "shift_cool": 0.0}
+	for i in 60:
+		fresh = VehiclePhysics.step(sp, fresh, 1.0, 0.0, Surf.MU_ASPHALT, 1.0 / 60.0)
+		wrecked = VehiclePhysics.step(sp, wrecked, 1.0, 0.0, Surf.MU_ASPHALT,
+				1.0 / 60.0, Damage.power_scale(1.0))
+	check(float(wrecked["speed"]) < float(fresh["speed"]) * 0.75,
+		"carro destruido acelera bem menos (%.1f x %.1f m/s)" % [
+			float(wrecked["speed"]), float(fresh["speed"])])
 
 
 func _test_car_scene_enter_exit() -> void:
@@ -1581,6 +1693,10 @@ func _test_scripts_compile() -> void:
 		"res://scripts/core/cfg.gd",
 		"res://scripts/core/geo.gd",
 		"res://scripts/core/perf_log.gd",
+		"res://scripts/core/surface_db.gd",
+		"res://scripts/physics/damage.gd",
+		"res://scripts/physics/prop_body.gd",
+		"res://scripts/physics/prop_field.gd",
 		"res://scripts/world/city_gen.gd",
 		"res://scripts/world/prop_factory.gd",
 		"res://scripts/world/model_prop.gd",

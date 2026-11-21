@@ -24,12 +24,16 @@ extends Node3D
 
 ## Emitido quando o carro bate em outro veiculo (o main liga ao som e ao HUD).
 signal crashed(strength: float)
+## Emitido quando o carro MUDA de estado de avaria (B-69): intacto/danificado/
+## destruido. O main usa para o aviso na tela.
+signal damaged(state: int)
 
 const Cfg = preload("res://scripts/core/cfg.gd")
 const TouchControls = preload("res://scripts/ui/touch_controls.gd")
 const PropFactory = preload("res://scripts/world/prop_factory.gd")
 const ModelProp = preload("res://scripts/world/model_prop.gd")
 const VehiclePhysics = preload("res://scripts/vehicles/vehicle_physics.gd")
+const Damage = preload("res://scripts/physics/damage.gd")
 const MODEL_LENGTH := 4.3      # comprimento do sedan CC0 (m); frente em -Z
 
 # Motor, freio, cambio e aderencia saíram daqui para vehicle_physics.gd (B-67).
@@ -62,6 +66,10 @@ var engine_ratio := 0.0
 var slip := 0.0
 var accel_long := 0.0
 var accel_lat := 0.0
+## Avaria acumulada: 0 = novo, 1 = destruido (B-69). Cai a potencia do motor,
+## o volante puxa para um lado e a telemetria mostra o estado.
+var damage := 0.0
+var damage_state := 0
 # Estado interno da fisica longitudinal (velocidade, marcha e espera de troca).
 var _st: Dictionary = {"speed": 0.0, "gear": 1, "shift_cool": 0.0}
 # Entrada do ultimo quadro, somente para a telemetria do HUD: e por ela que se
@@ -98,6 +106,22 @@ func spec() -> Dictionary:
 	if vehicle_spec.is_empty():
 		return VehiclePhysics.sedan()
 	return vehicle_spec
+
+
+## Avaria (B-69). Quem chama: colisao com o transito, com predio e com os
+## objetos moveis (prop_field). Satura em 1.0 e avisa quando o ESTADO muda.
+func add_damage(amount: float) -> void:
+	if amount <= 0.0:
+		return
+	damage = clampf(damage + amount, 0.0, 1.0)
+	var st: int = Damage.state_from_damage(damage)
+	if st != damage_state:
+		damage_state = st
+		damaged.emit(st)
+
+
+func damage_label() -> String:
+	return Damage.label(damage_state)
 
 
 ## Esterco maximo util: em alta velocidade o volante fica mais curto, senao o
@@ -396,9 +420,12 @@ func _drive(delta: float) -> void:
 	var h_back := Cfg.surface_at(position.x - fwd2.x * 1.6, position.z - fwd2.y * 1.6)
 	var slope := atan2(h_front - h_back, 3.2)
 	var mu := VehiclePhysics.surface_mu(position.x, position.z)
+	# Avaria tira potencia do motor (Damage.power_scale): carro destruido anda,
+	# mas mal. E o motorista sente na hora.
+	var power := Damage.power_scale(damage)
 	_st["speed"] = speed
 	_st["gear"] = gear
-	_st = VehiclePhysics.step(sp, _st, throttle, slope, mu, delta)
+	_st = VehiclePhysics.step(sp, _st, throttle, slope, mu, delta, power)
 	speed = float(_st["speed"])
 	gear = int(_st["gear"])
 	rpm = float(_st["rpm"])
@@ -406,6 +433,9 @@ func _drive(delta: float) -> void:
 	var redline := maxf(1.0, float(sp["redline"]))
 	engine_ratio = clampf((rpm - float(sp["idle"])) / maxf(1.0, redline - float(sp["idle"])),
 			0.0, 1.0)
+	# Roda torta: de carro avariado ele puxa para a direita mesmo de volante reto.
+	if damage > Damage.CAR_DAMAGED:
+		steer_in = clampf(steer_in + (damage - Damage.CAR_DAMAGED) * 0.6, -1.0, 1.0)
 	# Esterco e guinada: o volante pede uma curva, a ADERENCIA diz quanta cabe.
 	steer = move_toward(steer, -steer_in * steer_limit(speed), STEER_SPEED * delta)
 	var radius := WHEELBASE / maxf(0.02, tan(absf(steer)))
@@ -437,8 +467,10 @@ func _drive(delta: float) -> void:
 		if pushed != Vector2(next.x, next.z):
 			next.x = pushed.x
 			next.z = pushed.y
-			# Bateu num predio: mata a velocidade para frente (a re continua).
+			# Bateu num predio: mata a velocidade para frente (a re continua) e
+			# arranha o carro (B-69).
 			if speed > 0.0:
+				add_damage(clampf(speed * 0.010, 0.005, 0.06))
 				speed = 0.0
 	# Colisao com o transito: o carro nao atravessa outro carro. Empurra para
 	# fora e mata o embalo, com um pequeno recuo que da a sensacao de batida.
@@ -449,6 +481,10 @@ func _drive(delta: float) -> void:
 			next.x = pushed.x
 			next.z = pushed.z
 			var impact := clampf(absf(speed) / MAX_SPEED, 0.2, 1.0)
+			# B-69: batida acumula avaria (0,15 por batida forte: da para bater
+			# umas dez vezes antes de "destruido", senao o carro vira sucata na
+			# mao de quem esta aprendendo).
+			add_damage(clampf(impact * 0.15, 0.01, 0.15))
 			speed = -1.6 if speed > 0.0 else 0.0
 			# Encostado no outro carro, isto roda a cada quadro: o som e o
 			# tremor so valem a cada 0,35 s, senao vira metralhadora.

@@ -226,6 +226,9 @@ func _refresh_stats() -> void:
 		lines.append("marcha %d   %d rpm   aderencia %.0f%%" % [
 			int(car.gear), int(round(float(car.rpm))),
 			(1.0 - float(car.slip)) * 100.0])
+		# Avaria (B-69): fase do dano e quanto o motor ainda entrega.
+		lines.append("avaria %.0f%% (%s)" % [
+			float(car.damage) * 100.0, String(car.damage_label())])
 	if not _model_note.is_empty():
 		lines.append(_model_note)
 	if not _bench_result.is_empty():

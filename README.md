@@ -48,6 +48,15 @@ Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
   aderência; o som do motor acompanha o giro. Nada de `RigidBody3D`: a física
   roda sobre o chão analítico, sem nenhuma malha de colisão — é o que cabe no
   iPhone.
+- Física do mundo (props e dano): caixas, cadeiras, lixeiras e cones espalhados
+  pela rua com massa, impulso, atrito por piso, quique e sono automático. Você
+  empurra andando e o carro atropela — o que passa da resistência do material
+  (vidro, plástico, madeira, metal) quebra em destroços, com teto de fragmentos.
+  O carro acumula avaria: batida tira potência do motor e, acima de 35%, ele puxa
+  o volante; o HUD mostra `avaria N%`. Onze superfícies (asfalto, concreto, pedra,
+  areia, terra, grama, lama, madeira, metal, vidro, água) com atrito próprio para
+  pneu e para objeto. Tudo sobre o chão analítico, com LOD de 35/100 m, sono e
+  3 desenhos no total ([docs/FISICA.md](docs/FISICA.md)).
 - Tráfego: 12 carros de passeio (4 modelos CC0) pela grade de ruas, um desenho
   por modelo. Eles colidem com o seu carro, mantêm distância entre si e
   acompanham você pela cidade. O carro que você dirige é o sedã CC0, com rodas

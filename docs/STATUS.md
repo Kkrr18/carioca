@@ -24,6 +24,7 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
 | HUD e telemetria | Escrito | scripts/ui/hud.gd, scripts/core/perf_log.gd |
 | Luz do Rio (4 momentos de ceu) e clima (claro/nublado/chuva) | Escrito, nao validado | scripts/world/day_night.gd |
 | Veiculo dirigivel (fisica automotiva B-67) | Escrito | scripts/vehicles/car.gd, scripts/vehicles/vehicle_physics.gd |
+| Fisica ambiental: superficies, objetos moveis, dano e destrocos (B-69) | Escrito | scripts/core/surface_db.gd, scripts/physics/ |
 | Piloto de asset externo (.glb CC0 normalizado pelo AABB) | Escrito | scripts/world/model_prop.gd, assets/models/ |
 | Salvamento versionado (schema 1, sha256, gzip) | Escrito | scripts/autoload/save_manager.gd |
 | Testes headless | Escrito | tests/runner.gd |
@@ -739,6 +740,48 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   DESENHADA ganhou um teto proprio (`VISUAL_STEER` = 0,60 rad, 34 graus) para
   nao entrar no para-lama quando o volante esta todo virado. Testes novos: o
   volante vira 40+ graus parado e o raio a 18 km/h fica abaixo de 4 m.
+
+- B-69: Fase 4 — FISICA AMBIENTAL (caixas, lixeiras, cones, cadeiras, dano e
+  destrocos). O autor pediu o "Realistic World Physics 2.0" completo (RigidBody3D,
+  StaticBody3D, CharacterBody3D, Area3D, CollisionShape3D, PhysicsServer3D,
+  PhysicalBoneSimulator3D, Joint3D) e a auditoria esta em docs/FISICA.md, com o
+  mapa item por item da especificacao. A conclusao curta: esses recursos precisam
+  de GEOMETRIA de colisao, e este mundo nao tem nenhuma de proposito (chao
+  analitico + retangulos por `push_out`); dar colisao aos 9 setores de 512 m nao
+  cabe no iPhone 12 e criaria uma SEGUNDA representacao do mundo. Entao a fisica
+  entrou como modulos puros sobre o chao analitico, com as mesmas grandezas
+  (massa, impulso, atrito, restituicao, resistencia de material) — e o mesmo
+  codigo roda no jogo e no CI. ENTREGUE: (1) `surface_db.gd`, UM banco com 11
+  superficies (asfalto, concreto, pedra, areia, terra, grama, lama, madeira,
+  metal, vidro, agua), cada uma com atrito de PNEU (mu), atrito de OBJETO
+  deslizando (slide), quique, resistencia, cor de poeira e etiqueta de som — o
+  carro passou a ler daqui, acabando com o numero duplicado que existia dentro
+  de vehicle_physics.gd; (2) `prop_body.gd`, objeto movel puro: gravidade 9,81,
+  contato com o chao, quique, atrito do piso, arrasto, giro, SONO automatico e
+  impulso em N.s (a caixa de 14 kg voa, a lixeira de 22 kg so anda); (3)
+  `damage.gd`, 3 estados (intacto/danificado/destruido) por resistencia de
+  material e contagem de fragmentos; (4) `prop_field.gd`, o sistema vivo no
+  mundo: 20 objetos em volta do jogador, atropelamento pelo carro (empurrao com
+  1,15x a velocidade + dano pelo impulso de 1450 kg), empurrao a pe pela
+  velocidade do personagem, colisao com predio pelo `push_out`, destrocos com
+  teto de 30 e vida de 8..13 s, reciclagem a 150 m e LOD em 3 faixas (60 Hz ate
+  35 m, 20 Hz com tempo acumulado ate 100 m, estado guardado acima disso — nada
+  congela perdendo a trajetoria); custo de desenho: 3 MultiMesh no total (cubo,
+  cilindro, cone) com cor por instancia. O CARRO ganhou avaria: batida em
+  transito, predio e objeto somam dano; a potencia cai pelo `power` do `step()`
+  e, acima de 35%, ele puxa o volante para a direita. O HUD mostra
+  `avaria N% (intacto/danificado/destruido)` e a telemetria mostra `props N (N
+  acordados) + N destrocos`. O som usa o `impact.wav` CC0 que ja existia, com
+  espera de 0,12 s. Testes novos: piso certo em mar/praia/calcadao/rua/calcada,
+  pneu e objeto com atritos diferentes, carro lendo do banco, caixa caindo e
+  pousando, sono, impulso virando velocidade, caixa leve mais rapida que a
+  lixeira, areia parando antes do asfalto, 3 estados de dano, carro a 36 km/h
+  quebrando madeira e a 7 km/h nao quebrando metal, pedestre nao quebrando vidro,
+  caixa atropelada virando destroco e carro destruido acelerando menos.
+  NAO validado no aparelho. NAO ENTROU (e por que, em docs/FISICA.md): ragdoll
+  fisico (falta corpo com PhysicalBone3D), capotamento (precisa de corpo rigido),
+  vidro/retrovisor/para-choque como pecas (o sedan CC0 e uma malha so), portas
+  com Joint3D, ESP no carro e dano estrutural de predio.
 
 ## Proximas tarefas (Fase 1 -> Fase 2)1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
 2. Medir FPS no iPhone jogando uma sessao real (B-09): o botao PERF grava CSV.

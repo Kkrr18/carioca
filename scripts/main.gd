@@ -19,6 +19,7 @@ const Hud = preload("res://scripts/ui/hud.gd")
 const ModelProp = preload("res://scripts/world/model_prop.gd")
 const Traffic = preload("res://scripts/world/traffic.gd")
 const Pedestrians = preload("res://scripts/world/pedestrians.gd")
+const PropField = preload("res://scripts/physics/prop_field.gd")
 const VehicleAudio = preload("res://scripts/audio/vehicle_audio.gd")
 const PerfLog = preload("res://scripts/core/perf_log.gd")
 
@@ -37,6 +38,7 @@ var touch = null
 var model_prop = null
 var traffic = null
 var pedestrians = null
+var props = null
 var audio = null
 var _audio_note := ""
 ## Nome da loja em que o jogador esta (vazio = na rua). B-66.
@@ -167,8 +169,20 @@ func _ready() -> void:
 	pedestrians.streamer = streamer
 	add_child(pedestrians)
 	pedestrians.setup(world_seed, player.position)
+
+	# Fisica ambiental (B-69): caixas, cadeiras, lixeiras e cones com massa,
+	# impulso, atrito por piso, dano em 3 estados e destrocos — sobre o MESMO
+	# chao analitico do carro (sem RigidBody3D). O carro atropela, e andando a pe
+	# o personagem empurra. Ver docs/FISICA.md.
+	props = PropField.new()
+	props.name = "Props"
+	add_child(props)
+	props.setup(world_seed, streamer, player.position)
+	props.car = car
+
 	hud.set_model_note(model_prop.describe() + "\n" + traffic.describe()
-			+ "\n" + pedestrians.describe() + "\n" + player.describe())
+			+ "\n" + pedestrians.describe() + "\n" + props.describe()
+			+ "\n" + player.describe())
 
 	# Som (Fase 4): motor sintetizado que sobe de tom com o giro + impacto CC0.
 	_boot_step("som")
@@ -177,6 +191,8 @@ func _ready() -> void:
 	audio.car = car
 	add_child(audio)
 	car.crashed.connect(_on_car_crashed)
+	# Impacto nos objetos fisicos usa o MESMO som de batida (impact.wav, CC0).
+	props.bumped.connect(_on_prop_bumped)
 
 	_boot_step("toque")
 	var touch_layer := CanvasLayer.new()
@@ -363,6 +379,10 @@ func _process(delta: float) -> void:
 			car_speed = absf(car.speed) if car.occupied else 0.0
 		pedestrians.update(delta, focus, player.position, car_pos, car_speed,
 				day_night.hour if day_night != null else 12.0)
+	# Objetos fisicos (B-69): integracao, LOD 35/100 m, sono, atropelamento,
+	# destrocos e desenho (3 MultiMesh para tudo).
+	if props != null:
+		props.update(delta, focus)
 	# Estado do som na telemetria: e por esta linha que se sabe, no aparelho, se
 	# o Safari liberou o audio (B-42).
 	if audio != null and hud != null:
@@ -376,6 +396,8 @@ func _process(delta: float) -> void:
 				all += "\n" + traffic.describe()
 			if pedestrians != null:
 				all += "\n" + pedestrians.describe()
+			if props != null:
+				all += "\n" + props.describe()
 			if player != null:
 				all += "\n" + player.describe()
 			hud.set_model_note(all + "\n" + note)
@@ -409,6 +431,14 @@ func _on_hud_action(which: String) -> void:
 func _on_car_crashed(strength: float) -> void:
 	if audio != null:
 		audio.crash(strength)
+
+
+## Bateu em caixa/lixeira/cone (B-69): som de impacto mais leve que o de carro.
+## `surface` ja vem com a etiqueta do material do piso (asfalto/areia/pedra...) e
+## fica pronta para quando houver amostras por material.
+func _on_prop_bumped(strength: float, _surface: String) -> void:
+	if audio != null:
+		audio.crash(clampf(strength, 0.1, 1.0) * 0.7)
 
 
 func collect_state() -> Dictionary:

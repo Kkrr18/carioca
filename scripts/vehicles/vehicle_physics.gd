@@ -15,17 +15,15 @@ extends RefCounted
 ## Tudo aqui e PURO (sem no, sem cena, sem aleatoriedade) e testado no CI:
 ## `step()` e o mesmo codigo que o carro roda no jogo.
 
-const Cfg = preload("res://scripts/core/cfg.gd")
+const SurfaceDB = preload("res://scripts/core/surface_db.gd")
 
 const GRAVITY := 9.81
 const AIR_DENSITY := 1.225
 ## Trocas de marcha: acima disso sobe, abaixo desce (com histerese e espera).
 const SHIFT_UP_RPM := 5900.0
 const SHIFT_DOWN_RPM := 1700.0
-## Aderencia por piso: asfalto inteiro, areia murcha, calcadao de pedra escorrega.
-const MU_ASPHALT := 1.0
-const MU_SAND := 0.55
-const MU_STONE := 0.85
+## A aderencia por piso mora em scripts/core/surface_db.gd (B-69): o carro, os
+## objetos moveis e o som leem a MESMA tabela. Aqui so se pergunta por um ponto.
 ## Teto de seguranca (m/s) para nenhum passo maluco jogar o carro para o infinito.
 const MAX_FORWARD := 90.0
 ## Marcha a re: |velocidade| maxima (m/s). O pedal do freio e o mesmo da re.
@@ -100,13 +98,15 @@ static func rpm_for(spec: Dictionary, speed: float, gear: int) -> float:
 	return clampf(rpm, float(spec["idle"]), float(spec["redline"]))
 
 
-## Forca nas rodas (N) para uma marcha, acelerador (0..1) e rotacao.
-static func drive_force(spec: Dictionary, gear: int, throttle: float, rpm: float) -> float:
+## Forca nas rodas (N) para uma marcha, acelerador (0..1), rotacao e a potencia
+## que o motor ainda entrega (1 = novo; cai com a avaria, ver Damage.power_scale).
+static func drive_force(spec: Dictionary, gear: int, throttle: float, rpm: float,
+		power: float = 1.0) -> float:
 	var gears: Array = spec["gears"]
 	var g := float(gears[clampi(gear - 1, 0, gears.size() - 1)])
 	var torque := engine_torque(spec, rpm)
 	return torque * g * float(spec["final"]) / maxf(0.05, float(spec["wheel_radius"])) \
-			* clampf(throttle, 0.0, 1.0)
+			* clampf(throttle, 0.0, 1.0) * clampf(power, 0.0, 1.5)
 
 
 ## Arrasto aerodinamico (N): 1/2 rho Cd A v^2.
@@ -114,16 +114,10 @@ static func drag_force(spec: Dictionary, speed: float) -> float:
 	return 0.5 * AIR_DENSITY * float(spec["cd"]) * float(spec["area"]) * speed * speed
 
 
-## Aderencia do piso naquele ponto (asfalto, areia, pedra do calcadao).
+## Aderencia do piso naquele ponto (asfalto, areia, pedra do calcadao...).
+## A tabela e uma so para o jogo inteiro: scripts/core/surface_db.gd (B-69).
 static func surface_mu(x: float, z: float) -> float:
-	if z < 0.0:
-		return MU_SAND                       # mar/areia molhada
-	if z < Cfg.BEACH_EDGE_Z:
-		# Calcadao (112..126) e pedra; o resto e areia.
-		if z > 111.0 and z < 127.0:
-			return MU_STONE
-		return MU_SAND
-	return MU_ASPHALT
+	return SurfaceDB.mu_at(x, z)
 
 
 # --- Carga nos pneus e aderencia ---------------------------------------------
@@ -178,7 +172,7 @@ static func lateral_limit(spec: Dictionary, mu: float) -> float:
 ## Faz: motor com cambio automatico, freio com ABS, re, arrasto, rolamento,
 ## gravidade no declive e limite de aderencia (TCS/ABS).
 static func step(spec: Dictionary, state: Dictionary, throttle: float, slope: float,
-		mu: float, dt: float) -> Dictionary:
+		mu: float, dt: float, power: float = 1.0) -> Dictionary:
 	var speed := float(state.get("speed", 0.0))
 	var gear := int(state.get("gear", 1))
 	var cool := maxf(0.0, float(state.get("shift_cool", 0.0)) - dt)
@@ -197,7 +191,7 @@ static func step(spec: Dictionary, state: Dictionary, throttle: float, slope: fl
 			braking = true
 			force = minf(float(spec["brake"]) * throttle * 0.6, grip * 0.95)
 		else:
-			force = drive_force(spec, gear, throttle, rpm)
+			force = drive_force(spec, gear, throttle, rpm, power)
 			force = minf(force, grip * 0.95)          # TCS
 	elif throttle < 0.0:
 		if speed > 0.0:
@@ -207,7 +201,7 @@ static func step(spec: Dictionary, state: Dictionary, throttle: float, slope: fl
 		else:
 			# Re: marcha 1 com metade do acelerador. O mesmo pedal faz as duas
 			# coisas (como no GTA): parado, ele engata a re.
-			var rev := drive_force(spec, 1, absf(throttle) * 0.5, rpm) * 0.55
+			var rev := drive_force(spec, 1, absf(throttle) * 0.5, rpm, power) * 0.55
 			force = -minf(rev, grip * 0.85)
 
 	# Resistencias, sempre contra o movimento.
