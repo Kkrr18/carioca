@@ -74,8 +74,11 @@ const ANIM_PATH := "res://assets/models/ped-walk.glb"
 const MODEL_HEIGHT := 1.78
 ## Os ossos vao do pe ate a cabeca (nao ate o topo do cranio): ~88% da altura.
 const BONE_EXTENT := 0.88
-const MODEL_PEDS := 12          # quantas pessoas quando o modelo carrega
-const VIS_RANGE := 95.0         # m: alem disso o pedestre nem e desenhado
+const MODEL_PEDS := 8           # quantas pessoas quando o modelo carrega
+## Os corpos da Quaternius sao feitos de varias pecas (uma por superficie), e
+## cada peca e um desenho: por isso a turma e pequena e o corte de distancia e
+## curto. Aumentar isso exige juntar as superficies do corpo numa so.
+const VIS_RANGE := 80.0         # m: alem disso o pedestre nem e desenhado
 ## O glTF da Quaternius olha para +Z; o pedestre anda com o -Z do no na frente.
 const MODEL_YAW := PI
 

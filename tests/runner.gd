@@ -1073,8 +1073,14 @@ func _test_pedestrian_model() -> void:
 		var box := ModelProp.mesh_aabb(inst)
 		var tris := ModelProp.count_tris(inst)
 		var can := Pedestrians.can_retarget(inst, anim)
-		print("  info: corpo %s: %d tris, %.2f m de altura, rig %s, caminhada %s" % [
-			String(path).get_file(), tris, box.size.y,
+		var parts := ModelProp.collect_meshes(inst).size()
+		var surf := 0
+		for node in ModelProp.collect_meshes(inst):
+			var mm := node as MeshInstance3D
+			if mm != null and mm.mesh != null:
+				surf += mm.mesh.get_surface_count()
+		print("  info: corpo %s: %d tris, %.2f m de altura, %d malhas/%d superficies, rig %s, caminhada %s" % [
+			String(path).get_file(), tris, box.size.y, parts, surf,
 			"sim" if sk != null else "NAO", "sim" if can else "NAO"])
 		if sk != null and can and tris > 200:
 			ok_bodies += 1
