@@ -216,15 +216,20 @@ func _build_head() -> void:
 	_build_hair(box.size.x * k)
 
 
-## Medidas do cabelo (B-78) a partir da largura da cabeca, em metros: a calota e
-## um pouco mais larga que o cranio, mais baixa que larga, e o topo passa um tico
-## do topo da cabeca. Fracao da largura = acompanha o TAMANHO do personagem.
+## Medidas do cabelo (B-78) a partir da largura da cabeca, em metros. Tudo e
+## fracao da largura, entao acompanha o TAMANHO do personagem.
+## B-78a: na primeira versao a calota era MAIS LARGA que o cranio (1,08) e alta
+## demais; no print do autor ela virou uma ABA DE CHAPEU preta. Agora ela e um
+## tico mais estreita que a cabeca (0,96) e mais alta que meia (0,62), para
+## assentar no cranio, e leva uma inclinacao para a frente (tilt) que deixa a
+## linha da testa mais alta que a da nuca — cabelo, nao capacete.
 static func hair_layout(head_width: float, crown_y: float) -> Dictionary:
 	var w := maxf(0.05, head_width)
 	return {
-		"scale": Vector3(w * 1.08, w * 0.70, w * 1.10),
-		"top": crown_y + w * 0.05,
-		"z": -w * 0.03,
+		"scale": Vector3(w * 0.96, w * 0.62, w * 1.00),
+		"top": crown_y + w * 0.02,
+		"z": -w * 0.02,
+		"tilt": -0.10,
 	}
 
 
@@ -248,6 +253,7 @@ func _build_hair(head_width: float) -> void:
 	mi.material_override = _mat(HAIR_COL)
 	var s: Vector3 = lay["scale"]
 	mi.scale = s
+	mi.rotation.x = float(lay["tilt"])
 	# O AABB da calota resolve a convencao de origem do SphereMesh: o TOPO dela
 	# tem de ficar no topo calculado do cranio.
 	var ha := dome.get_aabb()

@@ -1057,6 +1057,19 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   `hair_layout` (hoje: 1,08 de largura, 0,70 de altura e topo em
   cranio + 0,05 da largura).
 
+- B-78a: Fase 3 — O CABELO VIROU CHAPEU (2o print). O autor mandou outro print,
+  agora com o B-78. O que ele mostrou: a cabeca 3D ESTA no lugar certo e virada
+  para a frente (da para ver o rosto sob a calota), o cabelo aparece e o console
+  segue limpo. O defeito: a calota saiu MAIS LARGA que o cranio (1,08 da largura)
+  e alta demais, entao a aba do hemisferio passava do osso e parecia um CHAPEU de
+  aba larga. Correcao: 0,96 da largura da cabeca (um tico mais estreita que o
+  cranio), 0,62 de altura (mais alta que meia) e uma inclinacao de -0,10 rad para
+  a frente, que sobe a linha da testa e desce a da nuca — cabelo em vez de
+  capacete. Sem custo novo (mesma calota, um desenho). Nada mais mudou; o
+  `avaria 74%` que aparece no print e o carro do autor depois de bater bastante
+  (o dano nao e salvo no save, entao recarregar zera) e o `FPS 18` e da mesma
+  janela de navegador em 4K com rasterizacao por software, nao do iPhone.
+
 ## Proximas tarefas (Fase 1 -> Fase 2)1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
 2. Medir FPS no iPhone jogando uma sessao real (B-09): o botao PERF grava CSV.
 3. Pedir ao usuario que toque em SALVAR e CARREGAR no jogo e confirme que o save volta (valida o B-08 no aparelho).
