@@ -1241,10 +1241,11 @@ func _test_audio_pure() -> void:
 		var frames := loop_bytes / 2
 		check(absi(loop.loop_end - frames) <= 1,
 			"loop cobre o buffer inteiro (%d de %d quadros)" % [loop.loop_end, frames])
-		var peak := 0
+		var wav_peak := 0
 		for i in mini(frames, 4000):
-			peak = maxi(peak, absi(loop.data.decode_s16(i * 2)))
-		check(peak > 8000 and peak < 32767, "loop audivel e sem estouro (pico %d)" % peak)
+			wav_peak = maxi(wav_peak, absi(loop.data.decode_s16(i * 2)))
+		check(wav_peak > 8000 and wav_peak < 32767,
+			"loop audivel e sem estouro (pico %d)" % wav_peak)
 	# B-42: o som nao pode comecar antes de um toque (o Safari recusa e o motor
 	# fica mudo). Antes do primeiro toque, o estado tem que dizer isso.
 	var av := VehicleAudio.new()
