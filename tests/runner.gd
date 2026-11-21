@@ -949,6 +949,13 @@ func _test_sky() -> void:
 		"meio-dia: horizonte muito mais claro que o zenite (nevoa marinha)")
 	check(noon_hor.b > noon_hor.r, "meio-dia: horizonte azulado (b %.2f > r %.2f)" % [noon_hor.b, noon_hor.r])
 	check(noon_top.b > 0.5 and noon_top.r < 0.2, "meio-dia: zenite azul tropical fundo")
+	# B-59: a nevoa tingia o ceu inteiro (0,65) e o azul do zenite virava um
+	# branco lavado as 9h45 na tela do autor.
+	check(float(noon["sky_affect"]) <= 0.25,
+		"a nevoa nao lava o ceu de dia (afeto %.2f)" % float(noon["sky_affect"]))
+	check(float(noon["sun_energy"]) <= 1.15 and float(noon["ambient_energy"]) <= 0.90,
+		"meio-dia sem estourar a areia (sol %.2f, ambiente %.2f)" % [
+			float(noon["sun_energy"]), float(noon["ambient_energy"])])
 	var gold_hor: Color = gold["horizon"]
 	var gold_top: Color = gold["top"]
 	check(float(gold["gold"]) > 0.5, "hora dourada detectada (%.2f)" % float(gold["gold"]))
@@ -1047,11 +1054,11 @@ func _test_pedestrians() -> void:
 
 
 func _test_pedestrian_model() -> void:
-	# B-57: corpos VESTIDOS da Quaternius (CC0) + animacoes retargetadas do
-	# "Animated Human" (CC0). O CI tem que provar o que o jogo usa: os corpos
-	# importam, tem esqueleto, e o clipe de caminhada casa com os ossos deles
-	# (se nao casar, o pedestre fica em T-pose parado no ar e o jogo cai para
-	# as caixas).
+	# B-57/B-58: corpos da Quaternius (CC0). A prova que faltava: nao basta o
+	# clipe "casar" com o esqueleto. Com POUCAS trilhas casando o clipe TOCA, o
+	# AnimationPlayer diz que esta rodando, e NENHUM osso se mexe — o pedestre
+	# fica em T-pose deslizando pela rua (era o bug que o autor via na tela).
+	# Por isso o CI mede o casamento E o movimento real dos ossos.
 	var clips := Pedestrians.load_clips(Pedestrians.ANIM_PATH)
 	var walk := Pedestrians.pick_clip(clips, "walk")
 	check(not clips.is_empty(), "animacoes do pedestre carregam (%d clipes)" % clips.size())
@@ -1062,8 +1069,11 @@ func _test_pedestrian_model() -> void:
 	var anim: Animation = clips[walk]
 	check(anim.get_track_count() > 10 and anim.length > 0.3,
 		"caminhada com %d trilhas e %.2f s" % [anim.get_track_count(), anim.length])
-	var ok_bodies := 0
-	for path in Pedestrians.BODY_PATHS:
+	var holder := Node3D.new()
+	root.add_child(holder)
+	var paths: Array = Pedestrians.BODY_PATHS.duplicate()
+	paths.append(Pedestrians.ANIM_PATH)
+	for path in paths:
 		var sc := Pedestrians.load_scene(path)
 		if sc == null:
 			check(false, "corpo do pedestre importou (%s)" % String(path).get_file())
@@ -1072,22 +1082,28 @@ func _test_pedestrian_model() -> void:
 		var sk := Pedestrians._find_skel(inst)
 		var box := ModelProp.mesh_aabb(inst)
 		var tris := ModelProp.count_tris(inst)
-		var can := Pedestrians.can_retarget(inst, anim)
-		var parts := ModelProp.collect_meshes(inst).size()
-		var surf := 0
-		for node in ModelProp.collect_meshes(inst):
-			var mm := node as MeshInstance3D
-			if mm != null and mm.mesh != null:
-				surf += mm.mesh.get_surface_count()
-		print("  info: corpo %s: %d tris, %.2f m de altura, %d malhas/%d superficies, rig %s, caminhada %s" % [
-			String(path).get_file(), tris, box.size.y, parts, surf,
-			"sim" if sk != null else "NAO", "sim" if can else "NAO"])
-		if sk != null and can and tris > 200:
-			ok_bodies += 1
+		var ratio := 0.0
+		if sk != null:
+			ratio = Pedestrians.match_ratio(anim, Pedestrians._bone_names(sk))
 		inst.free()
-	check(ok_bodies == Pedestrians.BODY_PATHS.size(),
-		"os %d corpos tem esqueleto e aceitam a caminhada (%d ok)" % [
-			Pedestrians.BODY_PATHS.size(), ok_bodies])
+		var embedded: bool = String(path) == Pedestrians.ANIM_PATH
+		var motion := Pedestrians.probe_motion(sc, holder, walk, anim, embedded)
+		print("  info: corpo %s: %d tris, %.2f m, casamento %.0f%%, movimento %.2f rad, %d superficies" % [
+			String(path).get_file(), tris, box.size.y, ratio * 100.0, motion,
+			Pedestrians.scene_surfaces(sc)])
+	var kinds := Pedestrians.choose_bodies(clips, walk, holder)
+	check(not kinds.is_empty(), "pelo menos um corpo animado disponivel (%d)" % kinds.size())
+	var has_walker := false
+	var all_move := true
+	for kd in kinds:
+		if String(kd["path"]) == Pedestrians.ANIM_PATH:
+			has_walker = true
+		if Pedestrians.probe_motion(kd["scene"], holder, walk, anim,
+				bool(kd["embedded"])) < Pedestrians.MOTION_MIN:
+			all_move = false
+	check(has_walker, "o corpo com animacao no proprio arquivo entra sempre (sem T-pose)")
+	check(all_move, "todo corpo escolhido mexe o esqueleto de verdade")
+	holder.free()
 
 
 func _test_windows() -> void:

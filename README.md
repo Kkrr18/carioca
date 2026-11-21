@@ -41,8 +41,11 @@ Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
   que giram e esterçam. As ruas têm sinalização pintada: eixo amarelo, faixa de
   pedestres e linha de retenção.
 - Pedestres com rotina: pessoas andando na calçada em volta das quadras e na
-  praia, com modelo de verdade — três adultos vestidos da Quaternius (CC0) e as
-  animações de andar/parar/correr retargetadas para eles. Cada um tem destino,
+  praia, com modelo de verdade — corpos adultos da Quaternius (CC0) e as
+  animações de andar/parar/correr. Um corpo só entra na rua se o CI provar que a
+  animação mexe o esqueleto dele (mede o giro dos ossos, não só "o clipe toca"),
+  e o corpo que traz as animações no próprio arquivo entra sempre, então não
+  existe mais pedestre em T-pose deslizando. Cada um tem destino,
   pressa e tom próprios, para no canto, espera o sinal abrir para atravessar (a
   mesma fase dos semáforos dos carros), desiste e segue se demorar, sai da sua
   frente quando você chega perto e corre se um carro aparece em cima dele na

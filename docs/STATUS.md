@@ -550,6 +550,37 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   (se nao casasse, o pedestre ficaria em T-pose e o teste falharia). Custo:
   4 arquivos, ~2,7 MB; cada pessoa continua 1 desenho. NAO validado no aparelho
   ainda.
+- B-58: Fase 4 — PEDESTRE EM T-POSE. O autor: "ta bem bugado os modelos. Joga e
+  veja voce mesmo". Joguei o build do Pages pelo inspetor de navegador: console
+  LIMPO (nenhum erro de script) e, nas capturas, os pedestres de bracos
+  horizontais, PARADOS na pose, DESLIZANDO pela areia e sem sombra nenhuma.
+  CAUSA: `can_retarget` aceitava UMA trilha casando com um osso. Os corpos
+  modulares ("Ultimate Modular Characters") e o walker ("Animated Human") sao
+  packs diferentes: poucos nomes de osso coincidem, o retarget descartava quase
+  tudo e o clipe "tocava" (o AnimationPlayer dizia que sim) sem mover um osso. O
+  teste do CI usava a MESMA funcao fraca, entao passava verde em cima do bug.
+  CORRECAO: (1) `match_ratio` mede a fracao de trilhas que acham osso e exige
+  `MATCH_MIN` (60%); (2) `probe_motion` posa o esqueleto no inicio e no meio do
+  clipe e mede o GIRO REAL dos ossos — abaixo de 0,05 rad o corpo nao serve;
+  (3) `choose_bodies` so entrega corpo que passa nas duas provas; (4) o corpo que
+  traz as animacoes no PROPRIO arquivo (o walker) usa o AnimationPlayer dele, sem
+  retarget nenhum, e entra SEMPRE — o jogo nunca mais fica sem gente que anda
+  (sem modelo, cai para as caixas); (5) sombra de contato maior e mais escura
+  (1,30 m, 40%). O CI agora imprime casamento e movimento por corpo e falha se o
+  corpo escolhido nao mexer o esqueleto.
+- B-59: Fase 1.5 — CEU LAVADO, CHAO ESTOURADO E FAIXA NA CALCADA. Nas capturas
+  do build: ceu branco-acinzentado as 09h45 com o sol a 60 graus, areia sem
+  textura (branco puro) e uma faixa reta e mais clara cortando o calcadao em
+  diagonal. CAUSA: `fog_sky_affect` = 0,65 jogava a cor da nevoa em cima do ceu
+  INTEIRO e o azul do zenite virava branco; sol 1,30 + ambiente 1,05 + exposicao
+  1,02 estouravam areia e calcada (albedo ~0,9); a faixa diagonal era a emenda
+  entre os splits da sombra direcional, que caiam a ~11 m da camera.
+  CORRECAO: nevoa tinge o ceu em 0,15 de dia (0,30 de noite), horizonte mais
+  saturado, sol 1,12, ambiente 0,86, exposicao 0,96 de dia; splits da sombra em
+  45% e 75% dos 120 m (a emenda sai do primeiro plano e a resolucao perto do
+  jogador continua alta). O CI ganhou 2 checagens: `sky_affect` <= 0,25 e
+  meio-dia sem estourar. TAMBEM: o painel de console do build Web cobria o
+  joystick no canto esquerdo; foi para o centro de baixo.
 
 ## Proximas tarefas (Fase 1 -> Fase 2)
 
@@ -571,4 +602,14 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
    das 9h30 do nascimento), ir para a areia e olhar o por do sol sobre o
    continente de frente para o mar; depois conferir a noite (janelas acesas,
    rua legivel). Se o sol baixo encandear na camera, abaixar `SUN_ENERGY`.
+10. B-58: olhar de perto um pedestre andando e dizer se as pernas mexem de
+   verdade e se ele anda DE FRENTE (se estiver de costas, trocar `MODEL_YAW` de
+   `PI` para 0,0). O log do CI diz, por corpo, o "casamento" e o "movimento": se
+   os corpos modulares passarem, a rua volta a ter tres tipos de gente; se nao,
+   quem anda e o walker, e o proximo passo e procurar corpos com rig igual ao
+   dele ou juntar as superficies do corpo numa so (B-57).
+11. B-59: se a faixa diagonal no calcadao continuar existindo com a sombra
+   ajustada, ela e geometria (dois quads de calcada com brilho diferente) e nao
+   sombra: precisa de uma captura com a posicao do HUD (`pos x, y, z`) para eu
+   achar o par de quads.
 

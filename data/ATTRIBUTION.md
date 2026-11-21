@@ -56,8 +56,10 @@
   (https://opengameart.org/content/animated-human-low-poly, 2017), licenca
   **CC0 1.0**. Copia em .glb do espelho **pengqianhan/campus-world-model**
   (https://github.com/pengqianhan/campus-world-model, `public/models/walker.glb`).
-  So os clipes sao usados: sao RETARGETADOS para o esqueleto dos corpos acima
-  (mesmo rig da Quaternius) por `scripts/world/pedestrians.gd`.
+  Serve de duas formas: como CORPO de pedestre (as animacoes vem no proprio
+  arquivo, sem retarget) e como fonte dos clipes idle/walk/run que
+  `scripts/world/pedestrians.gd` retargeta para os corpos modulares — e so
+  quando a maioria das trilhas acha osso no esqueleto do corpo.
 
 ## Texturas
 

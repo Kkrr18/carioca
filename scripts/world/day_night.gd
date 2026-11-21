@@ -29,7 +29,7 @@ const SUN_AZIMUTH_RISE := 112.0
 const SUN_AZIMUTH_SET := -68.0
 ## Altura maxima do sol no verao carioca, em graus (quase em cima da cabeca).
 const SUN_MAX_ELEVATION := 72.0
-const SUN_ENERGY := 1.30
+const SUN_ENERGY := 1.12
 const MOON_COL := Color(0.62, 0.72, 1.00)
 
 # --- Paleta dos momentos de luz ----------------------------------------------
@@ -39,7 +39,7 @@ const ZENITH_DAY := Color(0.09, 0.31, 0.74)        # azul tropical fundo
 const ZENITH_GOLD := Color(0.15, 0.33, 0.66)       # o azul que resiste no alto
 const ZENITH_BLUE := Color(0.09, 0.15, 0.42)       # hora azul
 const ZENITH_NIGHT := Color(0.020, 0.031, 0.074)
-const HORIZON_DAY := Color(0.74, 0.85, 0.93)       # nevoa marinha umida
+const HORIZON_DAY := Color(0.66, 0.80, 0.92)       # nevoa marinha umida
 const HORIZON_GOLD := Color(0.99, 0.60, 0.36)      # coral/ambar
 const HORIZON_BLUE := Color(0.84, 0.44, 0.42)      # rosa-ambar da hora azul
 const HORIZON_NIGHT := Color(0.125, 0.104, 0.104)  # brilho de cidade no horizonte
@@ -158,7 +158,7 @@ static func look(h: float, sky_weather: String) -> Dictionary:
 
 	# Nevoa: um tico mais clara que o horizonte (ar umido em suspensao) e mais
 	# densa de madrugada, quando a umidade do mar fecha o tempo.
-	var fog := horizon.lerp(Color(0.94, 0.96, 0.98), 0.10 + 0.10 * daylight)
+	var fog := horizon.lerp(Color(0.94, 0.96, 0.98), 0.06 + 0.05 * daylight)
 	var maritime := 1.0 - smoothstep(0.10, 0.65, sin_e)
 	var fog_density := lerpf(0.0009, 0.0016, maritime)
 
@@ -177,7 +177,7 @@ static func look(h: float, sky_weather: String) -> Dictionary:
 		horizon = horizon.lerp(Color(0.44, 0.47, 0.52), 0.50)
 
 	# Gradiente do ceu: curto de dia (ceu limpo) e bem longo na hora dourada.
-	var sky_curve := lerpf(0.18, 0.11, daylight)
+	var sky_curve := lerpf(0.18, 0.14, daylight)
 	sky_curve = lerpf(sky_curve, 0.05, maxf(gold, blue))
 
 	return {
@@ -188,17 +188,20 @@ static func look(h: float, sky_weather: String) -> Dictionary:
 		"fog": fog,
 		"fog_density": fog_density,
 		"ambient": ambient,
-		"ambient_energy": lerpf(0.65, 1.05, daylight),
+		"ambient_energy": lerpf(0.65, 0.86, daylight),
 		"sky_contribution": lerpf(0.30, 0.80, daylight),
 		"sun_color": SUN_GOLD.lerp(SUN_DAY, smoothstep(0.04, 0.45, sin_e)),
 		"sun_energy": SUN_ENERGY * smoothstep(-0.03, 0.18, sin_e) * dim,
 		"moon_energy": lerpf(0.22, 0.0, daylight),
 		# Glow/bloom baixos de proposito (B-52): o buffer de glow e de meia
 		# resolucao e, alto, vira granulado em volta de tudo que e claro.
-		"exposure": lerpf(1.16, 1.02, daylight),
+		"exposure": lerpf(1.16, 0.96, daylight),
 		"glow": lerpf(0.38, 0.18, daylight),
 		"bloom": lerpf(0.08, 0.0, daylight),
 		"sky_curve": sky_curve,
+		# Quanto a nevoa tinge o ceu. Alto, ela lava o azul do zenite e sobram
+		# aqueles 9h45 brancos de dia nublado que o autor viu na tela (B-59).
+		"sky_affect": lerpf(0.30, 0.15, daylight),
 		# Disco do sol: 4,5 a 7 graus. Antes eram 13 a 20 graus, o que fazia um
 		# BOLO branco no ceu em vez de sol.
 		"sun_angle": lerpf(7.0, 4.5, daylight),
@@ -274,7 +277,7 @@ func _apply_env(l: Dictionary) -> void:
 		return
 	_write(env, "fog_light_color", l["fog"])
 	_write(env, "fog_density", l["fog_density"])
-	_write(env, "fog_sky_affect", 0.65)
+	_write(env, "fog_sky_affect", l["sky_affect"])
 	_write(env, "ambient_light_color", l["ambient"])
 	_write(env, "ambient_light_energy", l["ambient_energy"])
 	# De dia a luz do ambiente vem do ceu; a noite, boa parte e a cor da cidade

@@ -74,11 +74,18 @@ const ANIM_PATH := "res://assets/models/ped-walk.glb"
 const MODEL_HEIGHT := 1.78
 ## Os ossos vao do pe ate a cabeca (nao ate o topo do cranio): ~88% da altura.
 const BONE_EXTENT := 0.88
-const MODEL_PEDS := 8           # quantas pessoas quando o modelo carrega
-## Os corpos da Quaternius sao feitos de varias pecas (uma por superficie), e
-## cada peca e um desenho: por isso a turma e pequena e o corte de distancia e
-## curto. Aumentar isso exige juntar as superficies do corpo numa so.
-const VIS_RANGE := 80.0         # m: alem disso o pedestre nem e desenhado
+const MODEL_PEDS := 12          # teto de pessoas com corpo leve (1-2 superficies)
+const MODEL_PEDS_HEAVY := 8     # teto com corpo modular (10+ superficies)
+## Os corpos modulares sao feitos de varias pecas (uma por superficie), e cada
+## peca e um desenho: o corpo leve aguenta mais gente na rua e enxerga mais longe.
+const VIS_RANGE_LIGHT := 100.0  # m
+const VIS_RANGE_HEAVY := 80.0   # m: alem disso o pedestre nem e desenhado
+## Uma animacao so serve se a MAIORIA das trilhas de osso achar um osso no
+## esqueleto do corpo. Com uma trilha so (o "Root") o clipe TOCA e nao mexe
+## nada, e o pedestre fica em T-pose deslizando pela rua (B-58).
+const MATCH_MIN := 0.60
+## Abaixo disso (radianos) a animacao nao dirige o esqueleto de verdade.
+const MOTION_MIN := 0.05
 ## O glTF da Quaternius olha para +Z; o pedestre anda com o -Z do no na frente.
 const MODEL_YAW := PI
 
@@ -107,7 +114,8 @@ var _clock := 0.0
 var _follow_t := 0.0
 var _visible := 0
 var _use_model := false
-var _body_scenes: Array = []    # PackedScene dos corpos (Casual/Worker/Beach)
+var _body_kinds: Array = []     # corpos aprovados em choose_bodies()
+var _vis_range := VIS_RANGE_HEAVY
 var _clips: Dictionary = {}     # nome do clipe -> Animation (de ped-walk.glb)
 var _walk_anim := ""
 var _idle_anim := ""
@@ -362,18 +370,15 @@ func setup(base_seed: int, focus: Vector3 = Vector3.ZERO) -> void:
 	_clips = load_clips(ANIM_PATH)
 	_walk_anim = pick_clip(_clips, "walk")
 	_idle_anim = pick_clip(_clips, "idle")
-	_body_scenes.clear()
-	for path in BODY_PATHS:
-		var sc := load_scene(path)
-		if sc != null:
-			_body_scenes.append(sc)
-	_use_model = false
-	if not _body_scenes.is_empty() and _walk_anim != "":
-		var probe: Node3D = _body_scenes[0].instantiate()
-		_use_model = can_retarget(probe, _clips[_walk_anim])
-		probe.free()
+	_body_kinds = choose_bodies(_clips, _walk_anim, self)
+	_use_model = not _body_kinds.is_empty()
 	if _use_model:
-		peds_total = mini(peds_total, MODEL_PEDS)
+		var heaviest := 0
+		for kd in _body_kinds:
+			heaviest = maxi(heaviest, int(kd.get("surf", MODEL_PEDS_HEAVY)))
+		# Corpo de 1-2 superficies custa 1 ou 2 desenhos; corpo modular custa 10.
+		_vis_range = VIS_RANGE_LIGHT if heaviest <= 2 else VIS_RANGE_HEAVY
+		peds_total = mini(peds_total, MODEL_PEDS if heaviest <= 2 else MODEL_PEDS_HEAVY)
 
 	peds.clear()
 	for k in peds_total:
@@ -395,12 +400,12 @@ func setup(base_seed: int, focus: Vector3 = Vector3.ZERO) -> void:
 ## branca a sombra do sol, com o sol alto, fica pequena demais para ancorar.
 func _build_shadows() -> void:
 	var quad := QuadMesh.new()
-	quad.size = Vector2(1.15, 1.15)
+	quad.size = Vector2(1.30, 1.30)
 	quad.orientation = PlaneMesh.FACE_Y
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	m.albedo_color = Color(0.0, 0.0, 0.0, 0.32)
+	m.albedo_color = Color(0.0, 0.0, 0.0, 0.40)
 	quad.material = m
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -447,17 +452,127 @@ static func pick_clip(clips: Dictionary, want: String) -> String:
 	return ""
 
 
-## O corpo consegue receber essa animacao? Basta UMA trilha apontar para um osso
-## que existe nele (o rig da Quaternius e o mesmo nos corpos e no walker).
+## Fracao das trilhas de osso que apontam para um osso que EXISTE neste
+## esqueleto. 1.0 = mesmo rig; perto de 0 = rigs diferentes, e o retarget nao
+## teria efeito nenhum (o corpo fica em T-pose).
+static func match_ratio(anim: Animation, bones: Dictionary) -> float:
+	if anim == null:
+		return 0.0
+	var total := 0
+	var hit := 0
+	for ti in anim.get_track_count():
+		var ty := anim.track_get_type(ti)
+		if ty != Animation.TYPE_ROTATION_3D and ty != Animation.TYPE_POSITION_3D:
+			continue
+		total += 1
+		if bones.has(_track_bone(anim, ti)):
+			hit += 1
+	return float(hit) / float(maxi(1, total))
+
+
+## O corpo consegue receber essa animacao? Agora exige a MAIORIA das trilhas:
+## antes bastava UMA (o "Root") e o corpo ia para a rua em T-pose (B-58).
 static func can_retarget(body: Node3D, anim: Animation) -> bool:
 	var sk := _find_skel(body)
 	if sk == null or anim == null:
 		return false
-	var bones := _bone_names(sk)
-	for ti in anim.get_track_count():
-		if bones.has(_track_bone(anim, ti)):
-			return true
-	return false
+	return match_ratio(anim, _bone_names(sk)) >= MATCH_MIN
+
+
+## Quanto os ossos se mexem entre o inicio e o meio do clipe, em radianos.
+## E a prova que faltava: com poucas trilhas casando, o clipe TOCA (o
+## AnimationPlayer diz que esta rodando) e nao dirige nenhum osso. 0 = a
+## animacao nao mexe neste esqueleto, e o corpo nao serve para a rua.
+## `embedded` = o clipe vem do proprio arquivo do corpo (caminho ja correto).
+static func probe_motion(scene: PackedScene, host: Node, clip_name: String,
+		anim: Animation, embedded: bool) -> float:
+	if scene == null or host == null or clip_name == "" or not host.is_inside_tree():
+		return 0.0
+	var holder := Node3D.new()
+	host.add_child(holder)
+	var inst: Node3D = scene.instantiate()
+	holder.add_child(inst)
+	var out := 0.0
+	var sk := _find_skel(inst)
+	if sk != null:
+		var ap: AnimationPlayer = null
+		var play_name := StringName(clip_name)
+		if embedded:
+			ap = _find_anim(inst)
+		else:
+			ap = AnimationPlayer.new()
+			ap.name = "ProbeAnim"
+			inst.add_child(ap)
+			play_name = StringName("probe")
+			var r := retarget(anim, String(inst.get_path_to(sk)), _bone_names(sk))
+			if r.get_track_count() > 0:
+				ap.add_animation(play_name, r)
+		if ap != null and ap.has_animation(play_name):
+			ap.play(play_name)
+			ap.seek(0.0, true)
+			var a0 := _pose_rotations(sk)
+			ap.seek(ap.get_animation(play_name).length * 0.5, true)
+			var a1 := _pose_rotations(sk)
+			for b in mini(a0.size(), a1.size()):
+				out = maxf(out, absf((a0[b] as Quaternion).angle_to(a1[b])))
+	holder.free()
+	return out
+
+
+## Giro de cada osso na pose ATUAL (o que a animacao acabou de escrever).
+static func _pose_rotations(sk: Skeleton3D) -> Array:
+	var out: Array = []
+	for b in sk.get_bone_count():
+		out.append(sk.get_bone_pose_rotation(b))
+	return out
+
+
+## Corpos que VALEM para a rua, em ordem de preferencia. Cada um passa por duas
+## provas antes de entrar: a caminhada casa com os ossos dele (MATCH_MIN) e,
+## animado, o esqueleto REALMENTE se mexe (MOTION_MIN). O walker entra sempre
+## que ande, porque traz as animacoes no proprio arquivo: e por ele que o jogo
+## nunca fica sem gente que anda.
+## Item: {path, scene, embedded, surf}
+static func choose_bodies(clips: Dictionary, walk_name: String, host: Node) -> Array:
+	var kinds: Array = []
+	if walk_name == "" or not clips.has(walk_name):
+		return kinds
+	var anim: Animation = clips[walk_name]
+	for path in BODY_PATHS:
+		var sc := load_scene(path)
+		if sc == null:
+			continue
+		var probe: Node3D = sc.instantiate()
+		var sk := _find_skel(probe)
+		var ratio := 0.0
+		if sk != null:
+			ratio = match_ratio(anim, _bone_names(sk))
+		probe.free()
+		if ratio < MATCH_MIN:
+			continue
+		if probe_motion(sc, host, walk_name, anim, false) < MOTION_MIN:
+			continue
+		kinds.append({"path": path, "scene": sc, "embedded": false,
+				"surf": scene_surfaces(sc)})
+	var wsc := load_scene(ANIM_PATH)
+	if wsc != null and probe_motion(wsc, host, walk_name, anim, true) >= MOTION_MIN:
+		kinds.append({"path": ANIM_PATH, "scene": wsc, "embedded": true,
+				"surf": scene_surfaces(wsc)})
+	return kinds
+
+
+## Quantas superficies (desenhos por quadro) um corpo custa por pessoa.
+static func scene_surfaces(scene: PackedScene) -> int:
+	if scene == null:
+		return 0
+	var inst: Node = scene.instantiate()
+	var n := 0
+	for node in ModelProp.collect_meshes(inst):
+		var mi := node as MeshInstance3D
+		if mi != null and mi.mesh != null:
+			n += mi.mesh.get_surface_count()
+	inst.free()
+	return n
 
 
 ## Copia a animacao trocando o caminho das trilhas pelo caminho do esqueleto
@@ -506,15 +621,18 @@ static func posed_height(sk: Skeleton3D) -> float:
 	return maxf(0.0, (hi - lo) * sc)
 
 
-## Um pedestre de verdade: corpo vestido (Casual/Worker/Beach) + as animacoes
-## retargetadas de ped-walk.glb. Escala pela altura POSADA, apoio no chao pelo
-## AABB e um tom leve por pessoa (sem tingir a pele).
+## Um pedestre de verdade: corpo aprovado em choose_bodies() (a maioria e o
+## corpo modular vestido; o que nao anda fica de fora) com as animacoes do
+## ped-walk.glb quando o corpo nao traz as suas. Escala pela altura POSADA,
+## apoio no chao pelo AABB e um tom leve por pessoa (sem tingir a pele).
 func _build_models() -> void:
 	_holders.clear()
 	_anims.clear()
 	for i in peds.size():
 		var p: Dictionary = peds[i]
-		var scene: PackedScene = _body_scenes[i % _body_scenes.size()]
+		var kd: Dictionary = _body_kinds[i % _body_kinds.size()]
+		var scene: PackedScene = kd["scene"]
+		var embedded: bool = bool(kd["embedded"])
 		var root := Node3D.new()
 		root.name = "Ped%d" % i
 		# Na arvore ANTES de montar os caminhos de osso (precisa de pai).
@@ -522,9 +640,9 @@ func _build_models() -> void:
 		var inst: Node3D = scene.instantiate()
 		root.add_child(inst)
 		var sk := _find_skel(inst)
-		# O corpo da Quaternius e feito de VARIAS malhas (tronco, cabeca, bracos,
-		# pernas): todo ajuste tem que valer para todas, senao sobra pedaco
-		# flutuando a distancia (a visibilidade e por malha).
+		# O corpo e feito de VARIAS malhas (tronco, cabeca, bracos, pernas): todo
+		# ajuste tem que valer para todas, senao sobra pedaco flutuando a distancia
+		# (a visibilidade e por malha).
 		var box: AABB = ModelProp.mesh_aabb(inst)
 		var tone := 0.90 + 0.12 * float(i % 5) / 4.0
 		for node in ModelProp.collect_meshes(inst):
@@ -537,27 +655,35 @@ func _build_models() -> void:
 				if tint != null:
 					tint.albedo_color = Color(tone, tone, tone).lerp(p["shirt"], 0.16)
 					mi.material_override = tint
-			mi.visibility_range_end = VIS_RANGE
+			mi.visibility_range_end = _vis_range
 			mi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-		# Animacao: copia os clipes para um AnimationPlayer deste corpo.
-		var ap := AnimationPlayer.new()
-		ap.name = "PedAnim"
-		inst.add_child(ap)
-		if sk != null:
-			var skel_path := String(inst.get_path_to(sk))
-			var bones := _bone_names(sk)
-			for cname in _clips.keys():
-				var a := retarget(_clips[cname], skel_path, bones)
-				if a.get_track_count() > 0:
-					ap.add_animation(StringName(cname), a)
+		# Animacao (B-58). Corpo que ja traz as animacoes no PROPRIO arquivo usa o
+		# AnimationPlayer dele: nenhum retarget, nenhuma chance de T-pose. Corpo
+		# modular (sem animacao) recebe uma copia retargetada dos clipes.
+		var ap: AnimationPlayer = null
+		if embedded:
+			ap = _find_anim(inst)
+		else:
+			ap = AnimationPlayer.new()
+			ap.name = "PedAnim"
+			inst.add_child(ap)
+			if sk != null:
+				var skel_path := String(inst.get_path_to(sk))
+				var bones := _bone_names(sk)
+				for cname in _clips.keys():
+					var a := retarget(_clips[cname], skel_path, bones)
+					if a.get_track_count() > 0:
+						ap.add_animation(StringName(cname), a)
 		var k := 1.0
 		if not box.has_volume():
 			box = AABB(Vector3(-0.3, 0.0, -0.3), Vector3(0.6, 1.8, 0.6))
+		var walk_nm := StringName(_walk_anim)
+		var plays: bool = ap != null and ap.has_animation(walk_nm)
 		# Escala: 1) posa a caminhada, 2) mede o esqueleto posado, 3) aplica.
-		var length := maxf(0.2, ap.get_animation(_walk_anim).length if ap.has_animation(_walk_anim) else 1.0)
-		if ap.has_animation(_walk_anim):
-			ap.play(_walk_anim)
+		if plays:
+			var length := maxf(0.2, ap.get_animation(walk_nm).length)
+			ap.play(walk_nm)
 			ap.seek(fposmod(float(i) * 0.13, length), true)
 			ap.speed_scale = 1.0
 		var posed := posed_height(sk)
@@ -566,7 +692,7 @@ func _build_models() -> void:
 		inst.scale = Vector3.ONE * k
 		# Apoio no chao: o ponto mais baixo da malha vai para y = 0.
 		inst.position = Vector3(-box.get_center().x, -box.position.y, -box.get_center().z) * k
-		_anims.append(ap if ap.has_animation(_walk_anim) else null)
+		_anims.append(ap if plays else null)
 		_holders.append(root)
 
 
@@ -855,5 +981,6 @@ func _write_boxes() -> void:
 
 func describe() -> String:
 	if _use_model:
-		return "pedestres: %d pessoas com modelo CC0 Quaternius (3 corpos vestidos), 1 desenho cada" % _visible
+		return "pedestres: %d pessoas, %d corpo(s) animado(s) CC0 Quaternius, 1 desenho cada" % [
+			_visible, _body_kinds.size()]
 	return "pedestres: %d pessoas em caixas (3 desenhos por quadro) - modelo nao carregou" % _visible

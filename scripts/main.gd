@@ -240,7 +240,12 @@ func _build_environment() -> void:
 	_sun.light_color = Color(1.0, 0.97, 0.92)
 	_sun.shadow_enabled = true
 	_sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
-	_sun.directional_shadow_max_distance = 110.0
+	# As emendas entre os splits apareciam como uma faixa reta, mais clara,
+	# cortando o calcadao em diagonal (B-59). Com os splits longe da camera a
+	# emenda sai do primeiro plano e a resolucao perto do jogador continua alta.
+	_sun.directional_shadow_split_1 = 0.45
+	_sun.directional_shadow_split_2 = 0.75
+	_sun.directional_shadow_max_distance = 120.0
 	_sun.directional_shadow_blend_splits = true
 	add_child(_sun)
 
