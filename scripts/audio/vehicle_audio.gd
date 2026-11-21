@@ -140,10 +140,19 @@ func _start_stream() -> void:
 		return
 	_started = true
 	_tries += 1
-	if _stream.playing:
-		_stream.stop()
-	_stream.play()
-	_playback = _stream.get_stream_playback() as AudioStreamGeneratorPlayback
+	# Nao reinicia o player se ele ja esta tocando: cada play() num gerador
+	# vazio repete o aviso "cannot be sampled" (B-42).
+	if not _stream.playing:
+		_stream.play()
+	var pb := _stream.get_stream_playback() as AudioStreamGeneratorPlayback
+	if pb == null:
+		return
+	_playback = pb
+	# Enche o buffer AQUI, ainda neste quadro: o mixer pode rodar antes do
+	# _process, e um gerador vazio na hora da mistura faz o Godot imprimir
+	# "trying to play a sample from a stream that cannot be sampled" e o motor
+	# fica mudo (B-42). Era o erro que aparecia no painel ao entrar no carro.
+	_push(int(MIX_RATE * 0.08))
 
 
 ## Batida (ligada ao signal crashed do carro).
@@ -153,6 +162,34 @@ func crash(strength: float) -> void:
 	_impact.pitch_scale = impact_pitch(strength)
 	_impact.volume_db = lerpf(-10.0, -2.0, clampf(strength, 0.0, 1.0))
 	_impact.play()
+
+
+## Enche o buffer do gerador com `n` amostras (motor + ruido de cidade).
+func _push(n: int) -> void:
+	if _playback == null or n <= 0:
+		return
+	var ratio := 0.0
+	var gas := 0.0
+	var driving := false
+	if car != null:
+		driving = bool(car.occupied)
+		ratio = clampf(absf(float(car.speed)) / MAX_SPEED, 0.0, 1.0)
+		gas = clampf(absf(float(car.input_throttle)), 0.0, 1.0)
+	var inc := engine_hz(ratio) / MIX_RATE
+	var amp := (0.10 + 0.20 * ratio + 0.08 * gas) if driving else 0.0
+	var buf := PackedVector2Array()
+	buf.resize(n)
+	for i in n:
+		_phase = fmod(_phase + inc, 1.0)
+		var sample := 0.0
+		if amp > 0.0:
+			sample += _table[int(_phase * float(TABLE_SIZE)) & (TABLE_SIZE - 1)] * amp
+		# Ruido filtrado: cidade e vento atras do motor.
+		_noise = lerpf(_noise, _rng.randf_range(-1.0, 1.0), 0.03)
+		sample += _noise * 0.06
+		sample = clampf(sample, -0.9, 0.9)
+		buf[i] = Vector2(sample, sample)
+	_playback.push_buffer(buf)
 
 
 func _process(_delta: float) -> void:
@@ -167,27 +204,5 @@ func _process(_delta: float) -> void:
 			_start_stream()
 		return
 	var frames := _playback.get_frames_available()
-	if frames <= 0:
-		return
-	var ratio := 0.0
-	var gas := 0.0
-	var driving := false
-	if car != null:
-		driving = bool(car.occupied)
-		ratio = clampf(absf(float(car.speed)) / MAX_SPEED, 0.0, 1.0)
-		gas = clampf(absf(float(car.input_throttle)), 0.0, 1.0)
-	var inc := engine_hz(ratio) / MIX_RATE
-	var amp := (0.10 + 0.20 * ratio + 0.08 * gas) if driving else 0.0
-	var buf := PackedVector2Array()
-	buf.resize(frames)
-	for i in frames:
-		_phase = fmod(_phase + inc, 1.0)
-		var sample := 0.0
-		if amp > 0.0:
-			sample += _table[int(_phase * float(TABLE_SIZE)) & (TABLE_SIZE - 1)] * amp
-		# Ruido filtrado: cidade e vento atras do motor.
-		_noise = lerpf(_noise, _rng.randf_range(-1.0, 1.0), 0.03)
-		sample += _noise * 0.06
-		sample = clampf(sample, -0.9, 0.9)
-		buf[i] = Vector2(sample, sample)
-	_playback.push_buffer(buf)
+	if frames > 0:
+		_push(frames)

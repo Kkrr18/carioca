@@ -600,6 +600,13 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   modulares continuam fora da rua (rig diferente: 11% de casamento) — o
   caminho para usa-los e remapear os ossos por posicao na hierarquia.
 
+- B-61: Fase 4 — MOTOR MUDO E AVISO NO PAINEL. Ao entrar no carro aparecia no
+  painel "is trying to play a sample from a stream that cannot be sampled":
+  `_start_stream` chamava `play()` e so enchia o buffer no `_process` seguinte,
+  e o mixer pegava o gerador VAZIO. Agora `_push()` enche 80 ms na hora do play e
+  o player nao e reiniciado se ja esta tocando (cada `play()` num gerador vazio
+  repetia o aviso). Fecha o B-42 no build Web; falta confirmar ouvindo no iPhone.
+
 ## Proximas tarefas (Fase 1 -> Fase 2)
 
 1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
