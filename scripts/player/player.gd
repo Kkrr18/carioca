@@ -131,12 +131,27 @@ func _build_avatar() -> void:
 func _build_contact_shadow() -> void:
 	contact_shadow = MeshInstance3D.new()
 	var quad := QuadMesh.new()
-	quad.size = Vector2(1.15, 1.15)
+	quad.size = Vector2(1.35, 1.35)
 	quad.orientation = PlaneMesh.FACE_Y
+	# Mancha REDONDA e macia (gradiente radial). Sem textura o quad virava um
+	# retangulo cinza duro embaixo do personagem (B-60).
+	var g := Gradient.new()
+	g.offsets = PackedFloat32Array([0.0, 0.45, 1.0])
+	g.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.50),
+			Color(1, 1, 1, 0.0)])
+	var tex := GradientTexture2D.new()
+	tex.gradient = g
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(0.98, 0.5)
+	tex.width = 64
+	tex.height = 64
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	m.albedo_color = Color(0.0, 0.0, 0.0, 0.3)
+	m.albedo_texture = tex
+	m.albedo_color = Color(0.0, 0.0, 0.0, 0.42)
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	quad.material = m
 	contact_shadow.mesh = quad
 	contact_shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF

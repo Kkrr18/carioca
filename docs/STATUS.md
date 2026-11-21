@@ -582,6 +582,24 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   meio-dia sem estourar. TAMBEM: o painel de console do build Web cobria o
   joystick no canto esquerdo; foi para o centro de baixo.
 
+- B-60: Fase 4 — MANEQUIM BRANCO E SOMBRA QUADRADA. Joguei o build de novo pelo
+  inspetor depois de B-58: os pedestres ANDAM (bracos embaixo, passada
+  completa) — o T-pose morreu. Mas o corpo aprovado (o walker) vem SEM textura e
+  aparecia um MANEQUIM BRANCO NU, igual em todo mundo, e a sombra de contato era
+  um RETANGULO cinza duro do tamanho da pessoa, embaixo de cada um (e do
+  jogador tambem).
+  CORRECAO: (1) `paint_body` pinta o corpo pela ALTURA do vertice — calca
+  embaixo, camisa no meio, pele em cima — por cor de vertice, com o material
+  usando a cor de vertice como albedo. Nao precisa de textura nem de arquivo
+  novo, e cada pessoa usa a propria paleta (a rua volta a ter camisa vermelha,
+  azul, branca...); (2) sombra de contato virou mancha REDONDA com gradiente
+  radial (`GradientTexture2D`), no pedestre e no jogador. O CI ganhou 3
+  checagens: corpo pintado tem cor de vertice, sombra tem textura e continua
+  transparente, e a animacao toca em todos. FALTA: o personagem do jogador
+  ainda e de caixas (os "bracos" sao duas tabuas horizontais), e os 3 corpos
+  modulares continuam fora da rua (rig diferente: 11% de casamento) — o
+  caminho para usa-los e remapear os ossos por posicao na hierarquia.
+
 ## Proximas tarefas (Fase 1 -> Fase 2)
 
 1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).

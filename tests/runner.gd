@@ -1115,6 +1115,29 @@ func _test_pedestrian_model() -> void:
 	check(playing > 0 and playing == peds._anims.size(),
 		"todo pedestre com a animacao tocando (%d de %d)" % [playing, peds._anims.size()])
 	peds.free()
+	# B-60: o corpo sem textura tem que sair VESTIDO (cor por vertice pela
+	# altura) e a sombra de contato tem que ser uma mancha redonda, nao o
+	# retangulo cinza do tamanho da pessoa que apareceu na tela.
+	var body := Pedestrians.load_scene(Pedestrians.ANIM_PATH)
+	check(body != null, "corpo do pedestre carregou para o teste de pintura")
+	if body != null:
+		var inst: Node3D = body.instantiate()
+		var ok := false
+		for node in ModelProp.collect_meshes(inst):
+			var mi := node as MeshInstance3D
+			if mi == null:
+				continue
+			if Pedestrians.paint_body(mi, Color(0.9, 0.7, 0.6), Color(0.8, 0.1, 0.1),
+					Color(0.1, 0.1, 0.2)):
+				var arr := mi.mesh.surface_get_arrays(0)
+				if arr.size() > Mesh.ARRAY_COLOR and arr[Mesh.ARRAY_COLOR] != null:
+					var cols: PackedColorArray = arr[Mesh.ARRAY_COLOR]
+					ok = cols.size() > 0
+		inst.free()
+		check(ok, "corpo sem textura sai vestido (cor de vertice por altura)")
+	var sm := Pedestrians.soft_shadow_material(0.45)
+	check(sm.albedo_texture != null and sm.albedo_color.a > 0.2,
+		"sombra de contato redonda (gradiente), nao um quadrado cinza")
 
 
 func _test_windows() -> void:

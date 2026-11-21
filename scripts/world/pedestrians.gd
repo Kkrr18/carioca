@@ -397,18 +397,38 @@ func setup(base_seed: int, focus: Vector3 = Vector3.ZERO) -> void:
 	update(0.0, focus, focus, Vector3.ZERO, 0.0, 12.0)
 
 
+## Material da sombra de contato: mancha REDONDA e macia, feita com um gradiente
+## radial. Com `albedo_color` sozinho (sem textura) o quad virava um retangulo
+## cinza duro no chao, do tamanho de uma pessoa (B-60).
+static func soft_shadow_material(alpha: float = 0.45) -> StandardMaterial3D:
+	var g := Gradient.new()
+	g.offsets = PackedFloat32Array([0.0, 0.45, 1.0])
+	g.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.50),
+			Color(1, 1, 1, 0.0)])
+	var tex := GradientTexture2D.new()
+	tex.gradient = g
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(0.98, 0.5)
+	tex.width = 64
+	tex.height = 64
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.albedo_texture = tex
+	m.albedo_color = Color(0.0, 0.0, 0.0, alpha)
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	return m
+
+
 ## Sombra de contato: UM MultiMesh de quad escuro para todas as pessoas (1
 ## desenho). Sem ela o pedestre le como adesivo colado no chao — na areia
 ## branca a sombra do sol, com o sol alto, fica pequena demais para ancorar.
 func _build_shadows() -> void:
 	var quad := QuadMesh.new()
-	quad.size = Vector2(1.30, 1.30)
+	quad.size = Vector2(1.55, 1.55)
 	quad.orientation = PlaneMesh.FACE_Y
-	var m := StandardMaterial3D.new()
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	m.albedo_color = Color(0.0, 0.0, 0.0, 0.40)
-	quad.material = m
+	quad.material = soft_shadow_material(0.45)
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.mesh = quad
@@ -601,6 +621,50 @@ static func posed_height(sk: Skeleton3D) -> float:
 	return maxf(0.0, (hi - lo) * sc)
 
 
+## Pinta o corpo pela ALTURA do vertice: calca embaixo, camisa no meio, pele em
+## cima. O corpo da Quaternius vem SEM textura (um material branco so), entao sem
+## isso o pedestre e um manequim branco nu (B-60). Devolve true se pintou.
+## Nao usa textura nem arquivo novo: a cor vai por vertice e o material usa a
+## cor de vertice como albedo.
+static func paint_body(mi: MeshInstance3D, skin_c: Color, shirt_c: Color,
+		pants_c: Color) -> bool:
+	if mi == null or mi.mesh == null:
+		return false
+	var src := mi.mesh
+	var out := ArrayMesh.new()
+	var painted := false
+	for s in src.get_surface_count():
+		var arr := src.surface_get_arrays(s)
+		if arr.size() < Mesh.ARRAY_MAX:
+			continue
+		var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		if verts.is_empty():
+			continue
+		var lo := INF
+		var hi := -INF
+		for v in verts:
+			lo = minf(lo, v.y)
+			hi = maxf(hi, v.y)
+		var span := maxf(0.01, hi - lo)
+		var cols := PackedColorArray()
+		cols.resize(verts.size())
+		for i in verts.size():
+			var t := (verts[i].y - lo) / span
+			var c := pants_c
+			if t > 0.84:
+				c = skin_c
+			elif t > 0.52:
+				c = shirt_c
+			cols[i] = c
+		arr[Mesh.ARRAY_COLOR] = cols
+		out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+		painted = true
+	if not painted:
+		return false
+	mi.mesh = out
+	return true
+
+
 ## Um pedestre de verdade: corpo aprovado em choose_bodies() (a maioria e o
 ## corpo modular vestido; o que nao anda fica de fora) com as animacoes do
 ## ped-walk.glb quando o corpo nao traz as suas. Escala pela altura POSADA,
@@ -630,7 +694,19 @@ func _build_models() -> void:
 			if mi == null:
 				continue
 			var base := mi.get_active_material(0) as BaseMaterial3D
-			if base != null:
+			# Corpo SEM textura (o walker da Quaternius): pinta por altura — pele,
+			# camisa e calca por pessoa. Sem isso ele sai um manequim branco nu.
+			var paint := base == null or base.albedo_texture == null
+			if paint:
+				if paint_body(mi, p["skin"], p["shirt"], p["pants"]):
+					var mat := StandardMaterial3D.new()
+					mat.vertex_color_use_as_albedo = true
+					mat.vertex_color_is_srgb = false
+					mat.albedo_color = Color(tone, tone, tone)
+					mat.roughness = 0.92
+					mat.metallic_specular = 0.1
+					mi.material_override = mat
+			elif base != null:
 				var tint := base.duplicate() as BaseMaterial3D
 				if tint != null:
 					tint.albedo_color = Color(tone, tone, tone).lerp(p["shirt"], 0.16)
