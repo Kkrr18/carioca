@@ -83,7 +83,9 @@ static func face_image(w: int = 64, h: int = 96) -> Image:
 	var mouth_y := int(round(float(ih) * 0.76))
 	img.fill_rect(Rect2i(iw / 2 - mouth_w / 2, mouth_y, mouth_w, mouth_h), MOUTH_COL)
 	for side in [-1, 1]:
-		var mx := iw / 2 + side * (mouth_w / 2 - maxi(1, iw / 32))
+		# Tipo explicito de proposito: `side` vem de um Array (Variant) e o `:=`
+		# nao consegue inferir (o CI pegou isso na B-76, igual ao B-65).
+		var mx: int = iw / 2 + int(side) * (mouth_w / 2 - maxi(1, iw / 32))
 		img.fill_rect(Rect2i(mx, mouth_y - mouth_h, maxi(1, iw / 32), mouth_h), MOUTH_COL)
 	return img
 
