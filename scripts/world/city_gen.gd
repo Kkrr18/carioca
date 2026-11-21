@@ -373,7 +373,10 @@ static func _lot(gb: GBuf, win: GBuf, bld: TBuf, defs: Array, colliders: Array, 
 	# Planta do vao: frente de ate SHOP_BAY_MAX e ate SHOP_DEPTH_MAX para dentro.
 	var bw := minf(w * 0.62, SHOP_BAY_MAX)
 	var bd := minf(d * 0.45, SHOP_DEPTH_MAX)
-	var skip_edge := SHOP_EDGE[side] if shop_open else -1
+	# `SHOP_EDGE` e um Array sem tipo: sem o `: int` o GDScript nao consegue
+	# inferir o tipo do ternario e o arquivo inteiro deixa de compilar (o CI
+	# pegou isso antes do jogador).
+	var skip_edge: int = SHOP_EDGE[side] if shop_open else -1
 	var ground_top := 0.0
 	var ground_col := col
 
