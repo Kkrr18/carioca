@@ -1197,6 +1197,12 @@ func _test_pedestrian_life() -> void:
 	check(not Pedestrians.car_hit(Vector3(10.0, 0.0, 20.0), 1.0, ped), "carro devagar nao atropela")
 	check(Pedestrians.car_hit(Vector3(10.5, 0.0, 20.5), 6.0, ped), "carro rapido e perto atropela")
 	check(not Pedestrians.car_hit(Vector3(15.0, 0.0, 20.0), 6.0, ped), "carro longe nao atropela")
+	# Queda por codigo (o arquivo nao traz clipe de morte): 0 no comeco, deitado
+	# (-90 graus) depois de 0,25 s.
+	check(absf(Pedestrians.fall_pitch(Pedestrians.DOWN_TIME)) < 0.01, "queda comeca em pe")
+	check(absf(Pedestrians.fall_pitch(Pedestrians.DOWN_TIME - 0.5) + PI * 0.5) < 0.01,
+		"queda termina deitado (-90 graus)")
+	check(absf(Pedestrians.fall_pitch(0.0) + PI * 0.5) < 0.01, "continua deitado ate levantar")
 
 
 func _test_player_model() -> void:

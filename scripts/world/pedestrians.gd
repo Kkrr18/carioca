@@ -684,6 +684,15 @@ static func clip_pace(role: String, sp: float) -> float:
 	return 1.0
 
 
+## Quanto o corpo TOMBA ao ser atropelado (radianos no eixo do corpo). O arquivo
+## dos pedestres so traz idle/walk/run — nao tem clipe de queda (o espelho do
+## GitHub perdeu pulo/punch/work/death), entao a queda e feita por codigo: em
+## 0,25 s o corpo vira de brucos e fica no chao ate levantar (B-64).
+static func fall_pitch(down_left: float) -> float:
+	var t := clampf((DOWN_TIME - down_left) / 0.25, 0.0, 1.0)
+	return -PI * 0.5 * t
+
+
 ## Altura do esqueleto POSADO (pe ate a cabeca), no mundo. E a medida certa para
 ## escalar: o AABB da malha e o do bind pose e mente quando a animacao encolhe.
 static func posed_height(sk: Skeleton3D) -> float:
@@ -1085,22 +1094,35 @@ func _write_models() -> void:
 		var p: Dictionary = peds[i]
 		var pos: Vector2 = p["pos"]
 		root.position = Vector3(pos.x, Cfg.surface_at(pos.x, pos.y), pos.y)
-		root.rotation.y = float(p["yaw"])
+		var down := float(p["down_until"]) > _clock
+		var kind: int = p["kind"]
+		var moving := kind == KIND_WALK or kind == KIND_CROSS
+		# Quem espera OLHA em volta: um giro lento de +/-12 graus no corpo. Sem
+		# isso o pedestre parado parece um poste, mesmo com o clipe de parado.
+		var look := 0.0
+		if not moving and not down:
+			look = sin(_clock * 0.55 + float(i) * 2.1) * 0.21
+		root.rotation = Vector3(0.0, float(p["yaw"]) + look, 0.0)
+		# Atropelado: tomba de brucos (o arquivo nao tem clipe de queda).
+		if down:
+			root.rotate_object_local(Vector3.RIGHT, fall_pitch(float(p["down_until"]) - _clock))
 		root.scale = Vector3.ONE * float(p["scale"])
 		var ap: AnimationPlayer = _anims[i]
 		if ap == null:
 			continue
-		var kind: int = p["kind"]
-		var moving := kind == KIND_WALK or kind == KIND_CROSS
 		# Vida (B-64): atropelado, gesticulando, correndo ou andando — quem decide
 		# e uma funcao pura, e a troca de clipe e SUAVE (blend), nao um corte seco.
-		var role := clip_for(float(p["down_until"]) > _clock,
-				float(p["gesture_until"]) > _clock, moving, float(p["speed"]),
-				_clip_down != "", _clip_gesture != "", _clip_run != "", _walk_anim != "")
+		var role := clip_for(down, float(p["gesture_until"]) > _clock, moving,
+				float(p["speed"]), _clip_down != "", _clip_gesture != "",
+				_clip_run != "", _walk_anim != "")
 		var nm := _clip_name(role)
 		if nm == "":
 			continue
-		var once := role == "down" or role == "gesture"
+		if down:
+			# No chao: congela o passo (o corpo deitado nao pode marchar).
+			ap.speed_scale = 0.0
+			continue
+		var once := role == "gesture"
 		_play_on(ap, nm, clip_pace(role, float(p["speed"])),
 				BLEND_ONCE if once else BLEND_WALK)
 
