@@ -94,6 +94,12 @@ jobs:
               console[k] = function () {
                 var t = '[' + k + '] ';
                 for (var i = 0; i < arguments.length; i++) t += String(arguments[i]) + ' ';
+                // Ruido do carregador do proprio Godot, em vermelho, que nao e
+                // erro do jogo: tira da tela para nao assustar quem joga.
+                if (t.indexOf('run dependencies') >= 0 || t.indexOf('dependency:') >= 0) {
+                  orig.apply(null, arguments);
+                  return;
+                }
                 box.textContent += t + '\\n';
                 box.scrollTop = box.scrollHeight;
                 orig.apply(null, arguments);
