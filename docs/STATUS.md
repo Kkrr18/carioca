@@ -819,3 +819,11 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
    em curva rapida, e na areia ele sai mais devagar que no asfalto. Se estiver
    "mole", aumentar torque/massas em `VehiclePhysics.sedan()`; se estiver duro,
    diminuir `brake`.
+
+13. B-69: no iPhone, esbarrar numa caixa (ela tomba), passar de carro por cima de
+   cones/caixas (voam, quebram em destrocos, o HUD muda para "avaria N%") e bater
+   num predio ou carro para ver a avaria subir e o motor perder forca. Ler na
+   telemetria "props N (N acordados) + N destrocos": com tudo parado, "acordados"
+   tem de ficar baixo (senao o sono nao esta pegando no Web). Se os objetos
+   afundarem no chao ou tremerem parados, o problema esta no `step()` de
+   prop_body.gd (contato com o chao analitico), nao no desenho.
