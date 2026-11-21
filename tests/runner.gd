@@ -1055,10 +1055,11 @@ func _test_pedestrians() -> void:
 
 func _test_pedestrian_model() -> void:
 	# B-57/B-58: corpos da Quaternius (CC0). A prova que faltava: nao basta o
-	# clipe "casar" com o esqueleto. Com POUCAS trilhas casando o clipe TOCA, o
-	# AnimationPlayer diz que esta rodando, e NENHUM osso se mexe — o pedestre
-	# fica em T-pose deslizando pela rua (era o bug que o autor via na tela).
-	# Por isso o CI mede o casamento E o movimento real dos ossos.
+	# clipe "casar" com o esqueleto. Os corpos modulares e o walker sao packs
+	# DIFERENTES (o CI mediu 11% de casamento), e retargetar um no outro deixava
+	# o pedestre em T-pose deslizando pela rua. Aqui se mede o casamento de cada
+	# corpo, o movimento do clipe e, no fim, monta-se o modulo de verdade para
+	# ver a caminhada tocando em cada pessoa.
 	var clips := Pedestrians.load_clips(Pedestrians.ANIM_PATH)
 	var walk := Pedestrians.pick_clip(clips, "walk")
 	check(not clips.is_empty(), "animacoes do pedestre carregam (%d clipes)" % clips.size())
@@ -1069,10 +1070,12 @@ func _test_pedestrian_model() -> void:
 	var anim: Animation = clips[walk]
 	check(anim.get_track_count() > 10 and anim.length > 0.3,
 		"caminhada com %d trilhas e %.2f s" % [anim.get_track_count(), anim.length])
-	var holder := Node3D.new()
-	root.add_child(holder)
+	var motion := Pedestrians.clip_motion(anim)
+	check(motion >= Pedestrians.MOTION_MIN,
+		"o clipe de caminhada se mexe (%.2f)" % motion)
 	var paths: Array = Pedestrians.BODY_PATHS.duplicate()
 	paths.append(Pedestrians.ANIM_PATH)
+	var usable := 0
 	for path in paths:
 		var sc := Pedestrians.load_scene(path)
 		if sc == null:
@@ -1086,24 +1089,32 @@ func _test_pedestrian_model() -> void:
 		if sk != null:
 			ratio = Pedestrians.match_ratio(anim, Pedestrians._bone_names(sk))
 		inst.free()
-		var embedded: bool = String(path) == Pedestrians.ANIM_PATH
-		var motion := Pedestrians.probe_motion(sc, holder, walk, anim, embedded)
-		print("  info: corpo %s: %d tris, %.2f m, casamento %.0f%%, movimento %.2f rad, %d superficies" % [
-			String(path).get_file(), tris, box.size.y, ratio * 100.0, motion,
+		if ratio >= Pedestrians.MATCH_MIN:
+			usable += 1
+		print("  info: corpo %s: %d tris, %.2f m, casamento %.0f%%, %d superficies" % [
+			String(path).get_file(), tris, box.size.y, ratio * 100.0,
 			Pedestrians.scene_surfaces(sc)])
-	var kinds := Pedestrians.choose_bodies(clips, walk, holder)
-	check(not kinds.is_empty(), "pelo menos um corpo animado disponivel (%d)" % kinds.size())
+	check(usable >= 1, "pelo menos um corpo casa com a caminhada (%d de %d)" % [
+		usable, paths.size()])
+	var kinds := Pedestrians.choose_bodies(clips, walk)
+	check(not kinds.is_empty(), "corpos aprovados para a rua (%d)" % kinds.size())
 	var has_walker := false
-	var all_move := true
 	for kd in kinds:
 		if String(kd["path"]) == Pedestrians.ANIM_PATH:
 			has_walker = true
-		if Pedestrians.probe_motion(kd["scene"], holder, walk, anim,
-				bool(kd["embedded"])) < Pedestrians.MOTION_MIN:
-			all_move = false
 	check(has_walker, "o corpo com animacao no proprio arquivo entra sempre (sem T-pose)")
-	check(all_move, "todo corpo escolhido mexe o esqueleto de verdade")
-	holder.free()
+	# Integracao: o modulo montado de verdade, com a caminhada tocando em cada um.
+	var peds := Pedestrians.new()
+	root.add_child(peds)
+	peds.setup(4242, Vector3(1600.0, 1.2, 100.0))
+	check(peds._use_model, "o modulo monta pedestres com modelo (%s)" % peds.describe())
+	var playing := 0
+	for ap in peds._anims:
+		if ap != null and ap.is_playing():
+			playing += 1
+	check(playing > 0 and playing == peds._anims.size(),
+		"todo pedestre com a animacao tocando (%d de %d)" % [playing, peds._anims.size()])
+	peds.free()
 
 
 func _test_windows() -> void:

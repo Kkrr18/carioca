@@ -17,9 +17,11 @@ extends Node3D
 ##     pessoa, mesma roupa, sempre);
 ##   - de madrugada sobram poucas pessoas na rua; de dia a calcada enche.
 ##
-## Custo com o modelo (B-54): um modelo animado por pessoa, 18 pessoas, com
-## corte de visibilidade a 110 m. Sem o modelo, cai para 3 MultiMesh (caixas)
-## com as pernas girando no quadril — nenhum esqueleto, nenhuma animacao.
+## Custo com o modelo (B-58): um modelo animado por pessoa, com corte de
+## visibilidade curto. O corpo que passa nas provas tem 1 superficie, entao cada
+## pessoa custa 1 desenho e a turma pode ser maior; corpo modular (10+) encolhe a
+## turma e o alcance. Sem modelo, cai para 3 MultiMesh (caixas) com as pernas
+## girando no quadril — nenhum esqueleto, nenhuma animacao.
 ## A logica e PURA (funcoes estaticas) e testada no CI sem cena.
 
 const Cfg = preload("res://scripts/core/cfg.gd")
@@ -370,7 +372,7 @@ func setup(base_seed: int, focus: Vector3 = Vector3.ZERO) -> void:
 	_clips = load_clips(ANIM_PATH)
 	_walk_anim = pick_clip(_clips, "walk")
 	_idle_anim = pick_clip(_clips, "idle")
-	_body_kinds = choose_bodies(_clips, _walk_anim, self)
+	_body_kinds = choose_bodies(_clips, _walk_anim)
 	_use_model = not _body_kinds.is_empty()
 	if _use_model:
 		var heaviest := 0
@@ -479,65 +481,44 @@ static func can_retarget(body: Node3D, anim: Animation) -> bool:
 	return match_ratio(anim, _bone_names(sk)) >= MATCH_MIN
 
 
-## Quanto os ossos se mexem entre o inicio e o meio do clipe, em radianos.
-## E a prova que faltava: com poucas trilhas casando, o clipe TOCA (o
-## AnimationPlayer diz que esta rodando) e nao dirige nenhum osso. 0 = a
-## animacao nao mexe neste esqueleto, e o corpo nao serve para a rua.
-## `embedded` = o clipe vem do proprio arquivo do corpo (caminho ja correto).
-static func probe_motion(scene: PackedScene, host: Node, clip_name: String,
-		anim: Animation, embedded: bool) -> float:
-	if scene == null or host == null or clip_name == "" or not host.is_inside_tree():
+## Quanto o clipe MUDA entre o primeiro key e o meio/fim dele: giro (radianos)
+## ou deslocamento (metros). E a prova que faltava junto com `match_ratio`:
+## um clipe "parado" (keys iguais) tocaria para sempre sem mover ninguem, e o
+## pedestre ficaria em T-pose deslizando pela rua (B-58).
+## (Medir a pose no AnimationPlayer fora do laco principal nao funciona:
+## `seek` nao aplica a pose antes do mixer ser processado, e da 0 sempre.)
+static func clip_motion(anim: Animation) -> float:
+	if anim == null:
 		return 0.0
-	var holder := Node3D.new()
-	host.add_child(holder)
-	var inst: Node3D = scene.instantiate()
-	holder.add_child(inst)
 	var out := 0.0
-	var sk := _find_skel(inst)
-	if sk != null:
-		var ap: AnimationPlayer = null
-		var play_name := StringName(clip_name)
-		if embedded:
-			ap = _find_anim(inst)
-		else:
-			ap = AnimationPlayer.new()
-			ap.name = "ProbeAnim"
-			inst.add_child(ap)
-			play_name = StringName("probe")
-			var r := retarget(anim, String(inst.get_path_to(sk)), _bone_names(sk))
-			if r.get_track_count() > 0:
-				ap.add_animation(play_name, r)
-		if ap != null and ap.has_animation(play_name):
-			ap.play(play_name)
-			ap.seek(0.0, true)
-			var a0 := _pose_rotations(sk)
-			ap.seek(ap.get_animation(play_name).length * 0.5, true)
-			var a1 := _pose_rotations(sk)
-			for b in mini(a0.size(), a1.size()):
-				out = maxf(out, absf((a0[b] as Quaternion).angle_to(a1[b])))
-	holder.free()
-	return out
-
-
-## Giro de cada osso na pose ATUAL (o que a animacao acabou de escrever).
-static func _pose_rotations(sk: Skeleton3D) -> Array:
-	var out: Array = []
-	for b in sk.get_bone_count():
-		out.append(sk.get_bone_pose_rotation(b))
+	for ti in anim.get_track_count():
+		var ty := anim.track_get_type(ti)
+		var n := anim.track_get_key_count(ti)
+		if n < 2:
+			continue
+		var a: Variant = anim.track_get_key_value(ti, 0)
+		for k in [int(n * 0.5), n - 1]:
+			var b: Variant = anim.track_get_key_value(ti, k)
+			if ty == Animation.TYPE_ROTATION_3D:
+				out = maxf(out, absf((a as Quaternion).angle_to(b as Quaternion)))
+			elif ty == Animation.TYPE_POSITION_3D:
+				out = maxf(out, (a as Vector3).distance_to(b as Vector3) * 2.0)
 	return out
 
 
 ## Corpos que VALEM para a rua, em ordem de preferencia. Cada um passa por duas
-## provas antes de entrar: a caminhada casa com os ossos dele (MATCH_MIN) e,
-## animado, o esqueleto REALMENTE se mexe (MOTION_MIN). O walker entra sempre
-## que ande, porque traz as animacoes no proprio arquivo: e por ele que o jogo
-## nunca fica sem gente que anda.
+## provas antes de entrar: a caminhada casa com os ossos dele (MATCH_MIN) e o
+## clipe tem movimento de verdade (MOTION_MIN). O walker entra sempre, porque as
+## animacoes vem no PROPRIO arquivo e casam 100%: e por ele que o jogo nunca
+## fica sem gente que anda.
 ## Item: {path, scene, embedded, surf}
-static func choose_bodies(clips: Dictionary, walk_name: String, host: Node) -> Array:
+static func choose_bodies(clips: Dictionary, walk_name: String) -> Array:
 	var kinds: Array = []
 	if walk_name == "" or not clips.has(walk_name):
 		return kinds
 	var anim: Animation = clips[walk_name]
+	if clip_motion(anim) < MOTION_MIN:
+		return kinds
 	for path in BODY_PATHS:
 		var sc := load_scene(path)
 		if sc == null:
@@ -548,14 +529,13 @@ static func choose_bodies(clips: Dictionary, walk_name: String, host: Node) -> A
 		if sk != null:
 			ratio = match_ratio(anim, _bone_names(sk))
 		probe.free()
+		# Corpo de rig diferente nao recebe esta caminhada: entraria em T-pose.
 		if ratio < MATCH_MIN:
-			continue
-		if probe_motion(sc, host, walk_name, anim, false) < MOTION_MIN:
 			continue
 		kinds.append({"path": path, "scene": sc, "embedded": false,
 				"surf": scene_surfaces(sc)})
 	var wsc := load_scene(ANIM_PATH)
-	if wsc != null and probe_motion(wsc, host, walk_name, anim, true) >= MOTION_MIN:
+	if wsc != null:
 		kinds.append({"path": ANIM_PATH, "scene": wsc, "embedded": true,
 				"surf": scene_surfaces(wsc)})
 	return kinds
