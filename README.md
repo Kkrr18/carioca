@@ -148,6 +148,8 @@ Passo a passo completo em [docs/EXPORTACAO_IOS.md](docs/EXPORTACAO_IOS.md).
 - [docs/TESTAR.md](docs/TESTAR.md) — como rodar e testar, com e sem computador.
 - [docs/AUDITORIA.md](docs/AUDITORIA.md) — diagnóstico do que foi encontrado.
 - [docs/ARQUITETURA.md](docs/ARQUITETURA.md) — decisões técnicas e por quê.
+- [docs/FISICA.md](docs/FISICA.md) — auditoria da física, o que foi implementado,
+  limites e o que falta (ragdoll, capotamento, dano estrutural).
 - [docs/ESTILO.md](docs/ESTILO.md) — caderno de estilo visual (paleta, render, animação).
 - [docs/ROADMAP.md](docs/ROADMAP.md) — as 9 fases com critério de saída.
 - [docs/DETALHES_VISUAIS.md](docs/DETALHES_VISUAIS.md) — pesquisa e plano de
