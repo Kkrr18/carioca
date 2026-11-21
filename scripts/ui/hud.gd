@@ -58,9 +58,13 @@ func setup(p: Node, s: Node, dn: Node) -> void:
 func _ready() -> void:
 	layer = 2
 	# Escala da interface (B-35): derivada da altura logica do viewport, que no
-	# iPhone esticado pode chegar a ~2770 px em retrato.
+	# iPhone esticado pode chegar a ~2770 px em retrato. B-75: multiplicada pelo
+	# `content_scale_factor` porque a resolucao de render passou a ser dividida
+	# por ele — sem isso a HUD ficaria 1,4x maior na tela so porque o jogo
+	# passou a desenhar menos pixels.
 	var vs := get_viewport().get_visible_rect().size
-	_ui = clampf(vs.y / 640.0, 1.15, 2.2)
+	var logico := vs.y * get_tree().root.content_scale_factor
+	_ui = clampf(logico / 640.0, 1.15, 2.2)
 	_btn_w = 96.0 * _ui
 	_btn_h = 46.0 * _ui
 	var root := Control.new()
@@ -199,6 +203,14 @@ func _refresh_stats() -> void:
 		int(Engine.get_frames_per_second()),
 		1000.0 / maxf(1.0, Engine.get_frames_per_second()),
 		_percentile(95)])
+	# B-75: o que o GPU rasteriza x o que a tela tem, e a escala do viewport. Em
+	# retrato o "expand" estica a altura logica; sem esta linha o custo de pixel
+	# fica invisivel na telemetria.
+	var render_size := get_viewport().get_visible_rect().size
+	var screen := get_window().size
+	lines.append("render %.0f x %.0f   escala %.2f   tela %.0f x %.0f" % [
+		render_size.x, render_size.y, get_tree().root.content_scale_factor,
+		float(screen.x), float(screen.y)])
 	if _metric_ok():
 		lines.append("draw calls %d   primitivas %d   objetos %d" % [
 			int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),

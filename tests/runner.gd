@@ -1329,6 +1329,17 @@ func _test_render_budget() -> void:
 		"distancia de sombra em %.0f m (teto 80)" % Cfg.SUN_SHADOW_DISTANCE)
 	check(DayNight.AIM_EPSILON >= 0.002,
 		"sol nao e re-apontado a cada quadro (%.3f rad)" % DayNight.AIM_EPSILON)
+	# B-75: em retrato a resolucao de render tem de cair (o iPhone desenhava
+	# 1280x2770 para uma tela de ~0,3 MP e ficava limitado por pixel).
+	var portrait_scale := Cfg.render_scale(Vector2i(1170, 2532))
+	var landscape_scale := Cfg.render_scale(Vector2i(2532, 1170))
+	check(portrait_scale > 1.2,
+		"retrato divide a resolucao por %.2f" % portrait_scale)
+	check(landscape_scale == 1.0,
+		"paisagem mantem a resolucao cheia (%.2f)" % landscape_scale)
+	var ratio := 1.0 / (portrait_scale * portrait_scale)
+	check(ratio < 0.55,
+		"retrato corta mais de 45%% dos pixels (fica %.0f%%)" % (ratio * 100.0))
 
 
 func _test_pedestrians() -> void:

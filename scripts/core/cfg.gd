@@ -45,6 +45,21 @@ const HILL_START_Z := 2000.0
 ## Web. 80 m mantem sombra onde o jogador ve e corta o custo.
 const SUN_SHADOW_DISTANCE := 80.0
 
+
+## Fator de escala do viewport (Stretch Scale) para um tamanho de tela. B-75: no
+## telefone em retrato o modo "viewport + expand" desenha 1280x2770 (~3,5 MP)
+## para uma tela de ~0,3 MP de CSS, e o print do aparelho mostrou o jogo
+## limitado por PIXEL (19 FPS na praia com 147 draw calls, contra 30 FPS na
+## cidade com 327). Em modo viewport, o `content_scale_factor` DIVIDE a
+## resolucao de render (documentado em "Multiple resolutions"): 1,4 corta ~51%
+## dos pixels. O viewport logico continua com a mesma proporcao, entao a HUD nao
+## muda de tamanho nem de posicao — so deixa de ser desenhada com 3x mais pixels
+## do que a tela tem. Em paisagem (desktop, mesa) fica 1,0.
+static func render_scale(screen: Vector2i) -> float:
+	if screen.y > screen.x:
+		return 1.4
+	return 1.0
+
 # --- Agua --------------------------------------------------------------------
 const SEA_LEVEL := 0.0
 const MIN_WADE_DEPTH := -0.6           # terreno mais fundo que isso: intransponivel

@@ -221,6 +221,12 @@ func _ready() -> void:
 
 
 func _build_environment() -> void:
+	# B-75: no iPhone em retrato o "viewport + expand" desenha 1280x2770 (~3,5 MP)
+	# para uma tela de ~0,3 MP de CSS. O print do aparelho mostrou o jogo
+	# limitado por PIXEL: 19 FPS na praia com 147 draw calls, contra 30 FPS na
+	# cidade com 327. No modo viewport o `content_scale_factor` divide a
+	# resolucao de render (ver Cfg.render_scale), e o layout nao muda.
+	get_tree().root.content_scale_factor = Cfg.render_scale(get_window().size)
 	environment = Environment.new()
 	var sky := Sky.new()
 	var sm := ProceduralSkyMaterial.new()

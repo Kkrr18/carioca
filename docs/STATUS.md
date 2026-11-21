@@ -952,6 +952,29 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   que diz a FOLGA real acima de 30 FPS (com o limite ligado, 30 FPS so prova
   que ele cumpre o limite).
 
+- B-75: Fase 4 — O LIMITE ERA O NUMERO DE PIXELS. Segundo print do iPhone, agora
+  com o build do B-74: `som: motor sintetizado ligado` e o painel de console com
+  SO as duas linhas `[log]` do Godot — ou seja, o som do motor voltou e o aviso
+  "cannot be sampled" sumiu no aparelho (correcao do B-74 confirmada). Mas o
+  numero que chamou atencao: `FPS 19 frame 52.6 ms` na PRAIA com `draw calls 147`
+  e `primitivas 81.799`, enquanto o print anterior (cidade, build velho) tinha
+  `30 FPS` com `327` draw calls e `228.136` primitivas. Cena mais LEVE rodando
+  mais devagar = o gargalo nao e geometria nem draw call: e PIXEL. O modo de
+  esticar e "viewport + expand" com base 1280x720, entao em retrato (1170x2532)
+  o Godot desenha um viewport de 1280x2770 = ~3,5 MP para uma tela de ~0,3 MP de
+  CSS. CORRECAO: `Cfg.render_scale()` devolve 1,4 em retrato e 1,0 em paisagem e
+  o main aplica em `get_tree().root.content_scale_factor` — em modo viewport
+  esse fator DIVIDE a resolucao de render (documentado em "Multiple
+  resolutions"), cortando ~51% dos pixels sem mexer no layout: a HUD divide a
+  propria escala (`_ui`) pelo mesmo fator, entao botoes e texto ficam do mesmo
+  tamanho na tela. Em paisagem nada muda. A telemetria ganhou a linha
+  `render W x H   escala X   tela W x H`, que torna o custo de pixel visivel:
+  era o unico numero que faltava para provar o gargalo. Testes novos no CI:
+  retrato divide a resolucao (>1,2), paisagem fica em 1,0 e o retrato corta mais
+  de 45% dos pixels. NAO medido ainda: o FPS no aparelho depois disso — o
+  proximo print tem de mostrar `escala 1.40` e o FPS de volta aos 30, ou o
+  gargalo e outro e eu ataco pelo proximo numero da telemetria.
+
 ## Proximas tarefas (Fase 1 -> Fase 2)1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
 2. Medir FPS no iPhone jogando uma sessao real (B-09): o botao PERF grava CSV.
 3. Pedir ao usuario que toque em SALVAR e CARREGAR no jogo e confirme que o save volta (valida o B-08 no aparelho).
