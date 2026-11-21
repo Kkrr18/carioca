@@ -18,7 +18,7 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
 | Medidor de area (Python) | Escrito | tools/geo/polygon_area.py |
 | Geracao de setor (predios, ruas, orla, props) | Escrito | scripts/world/city_gen.gd |
 | Streaming por setores (threads) | Escrito | scripts/world/sector_streamer.gd |
-| Props (MultiMesh) | Escrito | scripts/world/prop_factory.gd |
+| Props com malha própria (B-80/B-81) | Escrito | scripts/world/prop_mesh.gd, scripts/world/prop_factory.gd |
 | Personagem em terceira pessoa + colisao simples | Escrito | scripts/player/player.gd |
 | Controles por toque | Escrito | scripts/ui/touch_controls.gd |
 | HUD e telemetria | Escrito | scripts/ui/hud.gd, scripts/core/perf_log.gd |
@@ -1098,6 +1098,84 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   mostra o percentual, e o proximo passo e achar corpo feminino de rig igual ao
   do walker.
 
+- B-80: Fase 1.5 — GRAFICOS E MODELOS DO MUNDO. Pedido: "melhore os graficos e
+  use modelos melhores para o mundo. Eu quero mudancas reais". Diagnostico: o
+  mundo era feito de CUBOS. Todo prop do `city_gen` virava uma instancia de um
+  cubo unitario em `MultiMesh` com cor de instancia — palmeira era caixa verde em
+  cima de caixa marrom, banco e lixeira eram caixas, poste de luz era caixa (sem
+  luz), carro estacionado era caixa com caixa em cima, e o predio terminava num
+  corte seco de papelao, sem platibanda, sem porta e sem nada na fachada.
+  O QUE ENTROU:
+  1. `scripts/world/prop_mesh.gd` (novo, puro): malha LOW-POLY de verdade para
+     os 16 tipos de prop — tronco que afina e inclina, folha de palmeira em fita
+     dupla-face, copa em blobs, poste com braco e luminaria, banco com encosto e
+     pes, lixeira, quiosque com toldo, guarda-sol de 8 lados visivel por baixo,
+     carro com cabine/vidro/quatro rodas, caixa d'agua de 6 lados, casa de
+     maquinas e antena. Todas as normais saem do winding e sao corrigidas por uma
+     direcao desejada (`tri3`/`face4`), entao nao existe face invisivel.
+  2. O setor passou a devolver GEOMETRIA (arrays 25..30 de `CityGen.generate`),
+     gerada na WorkerThreadPool: a malha de cada (tipo, altura, tom) e
+     construida UMA vez e instanciada por transformacao. Custo de desenho: 1
+     chamada de sombra + 1 de luminaria por setor (`sector_streamer.gd`), com
+     `PROP_RANGE` de 480 m e as luminarias em buffer emissivo separado que nao
+     entra no passe de sombra.
+  3. Rua: platibanda coroando a laje (`_add_prism_tx(..., parapet)`), porta de
+     entrada com moldura e vidro na fachada que olha para a rua, ar-condicionado
+     de split preso na parede (o detalhe mais carioca de todos), toldo de loja em
+     lona inclinada de tres faces, e arvore em cada calcada que a quadra desenha.
+  4. Praia e mar: faixa de **areia molhada** com material proprio (mais escura,
+     mais brilhante) entre a praia e o mar, e o mar ganhou um mapa de normais de
+     ondas gerado em codigo e animado — sem shader custom (B-25 continua valendo).
+  Custo medido no CI (sem GPU): ~28 mil triangulos de props por setor no LOD
+  cheio e ZERO no LOD far; as checagens novas (`_test_prop_mesh`,
+  `_test_prop_sector_budget`) travam o orcamento e conferem que a base de cada
+  prop fica no chao e que a normal de cada face aponta para fora.
+  NAO MEDIDO: FPS no iPhone com a camada nova. Se o aparelho sofrer, o primeiro
+  botao a girar e `SectorStreamer.PROP_RANGE` (480 -> 300) e depois as arvores de
+  calcada (`_block`, o `tree_crown` de 2 blobs).
+
+- B-81: Fase 1.5 — SEGUNDA PASSADA DE GRAFICOS E MODELOS. Pedido: "melhore os
+  graficos e use modelos melhores para o mundo. Eu quero mudancas reais, use
+  total esforco". O B-80 tinha tirado os props dos cubos, mas ainda faltava
+  forma: palmeira de dois trechos e folhas retas, arvore de duas bolas, banco de
+  caixa, carro parado de duas caixas, fachada lisa e piso sem relevo.
+  O QUE ENTROU:
+  1. `prop_mesh.gd` reescrito: palmeira com tronco de 5 trechos (anel de resto
+     de folha + colar no topo), coroa de 9 folhas em 3 trechos pelo `ribbon()`
+     (a folha sobe, abre e cai na ponta) e cacho de cocos; arvore com copa de 3
+     camadas de cor; banco de ripas com encosto inclinado e estrutura de ferro;
+     lixeira de 8 lados com aro e tampa; quiosque com piso, balcao, quatro
+     montantes, vitrine de vidro, toldo e placa; guarda-sol com duas abas e 6
+     varas; carro parado com soleira, capo, porta-malas, cabine de vidro, teto,
+     para-brisa inclinado, grade, farois, lanternas e rodas de 8 lados com
+     calota.
+  2. CINCO tipos novos de prop: `planta` (canteiro), `pedra` (arrebentacao),
+     `placa` (nome de rua), `hidrante` e `cadeira` (praia). Ligados no
+     `city_gen`: canteiro/hidrante/placa na calcada, pedra e cadeira na praia.
+  3. `PropMesh.ao_shade()`: oclusao ambiente assada na COR DO VERTICE (base
+     escura, topo inteiro). Sem textura, sem shader e sem custo de pixel — e o
+     que faz o prop "pesar" no chao.
+  4. `city_gen._add_balconies()` e `_add_base_band()`: varanda (laje +
+     guarda-corpo na frente e nos lados, a cada dois andares) e embasamento de
+     pedra no pe do predio. Tudo no buffer de cor por vertice (`gb`), so no LOD
+     full e so em predio residencial de 4 a 9 andares. As cores novas
+     (`BALCONY_SLAB`, `PLINTH`) sao conferidas pelo `_test_facade_details`.
+  5. `sector_streamer.gd`: mapa de normais de grao gerado em codigo (senoides
+     com frequencia inteira, sem emenda) aplicado a asfalto, calcada, areia,
+     calcadao e areia molhada, com escala propria por piso; rim light sutil no
+     material dos props.
+  6. `main.gd`: ajuste de contraste/saturacao no tonemap e faixa de espuma da
+     arrebentacao (plano fino, textura de espuma gerada, UV animado) na linha
+     da agua.
+  Custo: mais geometria de props por setor — o teto de 130k vertices de
+  `_test_prop_sector_budget` continua valendo — e ~4 mil vertices a mais no
+  buffer da cidade (varandas + embasamento, contra os 40k do
+  `_test_vertex_budget`). Nada disso foi medido no aparelho: se o FPS cair, o
+  primeiro botao e `SectorStreamer.PROP_RANGE` (480 -> 300). Se o sintoma for
+  geometria SUMINDO em vista larga, olhar antes
+  `rendering/limits/opengl/max_renderable_elements` no project.godot
+  (131072 hoje): e o teto de elementos por quadro do renderer Compatibility.
+
 ## Proximas tarefas (Fase 1 -> Fase 2)1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
 2. Medir FPS no iPhone jogando uma sessao real (B-09): o botao PERF grava CSV.
 3. Pedir ao usuario que toque em SALVAR e CARREGAR no jogo e confirme que o save volta (valida o B-08 no aparelho).
@@ -1149,3 +1227,12 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
     roupa variada (terno, worker, praia). Se todo mundo continuar com a mesma
     roupa e so homens, o log do CI ("info: corpo ...: casamento N%") diz qual
     corpo foi reprovado — e o ajuste e trocar o corpo, nao o codigo.
+15. B-80: olhar a rua e a praia de perto no iPhone: palmeira, arvore de calcada,
+    poste aceso a noite, carro parado, toldo de loja e a faixa de areia molhada.
+    O que conferir: (a) FPS com MEDIR na praia e no meio da quadra — a camada de
+    props e a maior adicao de triangulos desde a fundacao; (b) se a luminaria
+    acende quando o relogio passa das 18h e apaga de dia; (c) se algum prop
+    "flutua" ou afunda (a base de todos e y = 0 do def, entao um erro aqui e de
+    posicao no `city_gen`, nao de malha); (d) se o mar tem ondulacao visivel de
+    perto e nao vira granulado no horizonte. Se o FPS cair, `PROP_RANGE` de 480
+    para 300 em `sector_streamer.gd` corta metade dos setores com props.

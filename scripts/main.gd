@@ -22,12 +22,23 @@ const Pedestrians = preload("res://scripts/world/pedestrians.gd")
 const PropField = preload("res://scripts/physics/prop_field.gd")
 const VehicleAudio = preload("res://scripts/audio/vehicle_audio.gd")
 const PerfLog = preload("res://scripts/core/perf_log.gd")
+const Police = preload("res://scripts/world/police.gd")
+const MissionRunner = preload("res://scripts/game/mission_runner.gd")
+const GtaHud = preload("res://scripts/ui/gta_hud.gd")
+const Ipanema = preload("res://scripts/game/ipanema.gd")
+const Wanted = preload("res://scripts/game/wanted.gd")
 
 const SPAWN := Vector3(1600.0, 1.2, 100.0)
 
 var world_seed: int = 20260922
 var environment: Environment
 var sea: MeshInstance3D
+## Faixa de espuma da arrebentacao (B-81), logo acima do nivel do mar.
+var surf: MeshInstance3D
+## Material do mar: o offset de UV das ondas e animado em _process.
+var _sea_mat: StandardMaterial3D
+var _surf_mat: StandardMaterial3D
+var _wave_t := 0.0
 var streamer = null
 var player = null
 var car = null
@@ -43,6 +54,16 @@ var audio = null
 var _audio_note := ""
 ## Nome da loja em que o jogador esta (vazio = na rua). B-66.
 var _shop_here := ""
+
+# --- O "jogo" (policia, missoes e HUD do GTA) --------------------------------
+var police = null
+var missions = null
+var gta = null
+## Posicao do foco do mundo (o carro quando dirigindo, senao o personagem).
+var _focus := Vector3.ZERO
+## Tempo restante da tela de WASTED/BUSTED (0 = jogando).
+var _respawn_t := 0.0
+var _pending := ""
 
 var _sun: DirectionalLight3D
 var _moon: DirectionalLight3D
@@ -184,6 +205,47 @@ func _ready() -> void:
 			+ "\n" + pedestrians.describe() + "\n" + props.describe()
 			+ "\n" + player.describe())
 
+	# --- Policia (estrelas), missoes e o HUD do jogo --------------------------
+	# A ordem importa: o HUD le player, police e missions; o roteiro das missoes
+	# le a policia (para acender estrelas no meio do servico).
+	_boot_step("policia")
+	police = Police.new()
+	police.name = "Police"
+	police.player = player
+	police.streamer = streamer
+	police.car = car
+	add_child(police)
+
+	_boot_step("missoes")
+	missions = MissionRunner.new()
+	missions.name = "Missions"
+	missions.player = player
+	missions.police = police
+	add_child(missions)
+
+	_boot_step("hud do jogo")
+	var gta_layer := CanvasLayer.new()
+	gta_layer.name = "GtaLayer"
+	gta_layer.layer = 3
+	add_child(gta_layer)
+	gta = GtaHud.new()
+	gta.name = "GtaHud"
+	gta_layer.add_child(gta)
+	gta.setup(player, police, missions)
+	missions.hud = gta
+	gta.debug_toggled.connect(_on_debug_toggled)
+	# A telemetria comeca escondida: a tela e a do jogo. Volta no botao DEV.
+	hud.set_debug_visible(false)
+
+	player.damaged.connect(_on_player_damaged)
+	player.died.connect(_on_player_died)
+	police.shot_fired.connect(_on_cop_shot)
+	police.busted.connect(_on_busted)
+	police.heat_changed.connect(_on_heat_changed)
+	police.cop_down.connect(_on_cop_down)
+	missions.started.connect(_on_mission_started)
+	missions.finished.connect(_on_mission_finished)
+
 	# Som (Fase 4): motor sintetizado que sobe de tom com o giro + impacto CC0.
 	_boot_step("som")
 	audio = VehicleAudio.new()
@@ -217,7 +279,9 @@ func _ready() -> void:
 
 	_boot_step("pronto")
 	_boot_log.text = ""
-	hud.toast("Joystick anda, arraste na direita para olhar. O carro esta a sua frente.")
+	if gta != null:
+		gta.banner("CARIOCA\nIPANEMA", 3.2)
+	_notify("Ipanema. O marcador amarelo e a proxima missao.")
 
 
 func _build_environment() -> void:
@@ -255,6 +319,13 @@ func _build_environment() -> void:
 	# deixa so o que realmente brilha (sol, lampada, janela) pegar halo.
 	environment.tonemap_mode = Environment.TONE_MAPPER_ACES
 	environment.tonemap_exposure = 1.02
+	# Ajuste de cor (B-81): um tico de contraste e de saturacao tira o "cinza de
+	# motor" das fachadas e da areia. E o mesmo passe de tonemap, sem custo de
+	# geometria.
+	environment.adjustment_enabled = true
+	environment.adjustment_contrast = 1.06
+	environment.adjustment_saturation = 1.10
+	environment.adjustment_brightness = 1.0
 	environment.glow_enabled = true
 	environment.glow_intensity = 0.18
 	environment.glow_bloom = 0.0
@@ -317,13 +388,106 @@ func _build_sea() -> void:
 	m.metallic = 0.0
 	m.metallic_specular = 0.45
 	m.disable_receive_shadows = true
+	# Ondas (B-80): mapa de normais gerado em codigo — shader custom no mar
+	# congelou o render no Safari/WebGL (B-25), entao a ondulacao vem de um
+	# normal map num StandardMaterial3D. Sem ele o mar era um espelho perfeito e
+	# o horizonte parecia uma chapa de metal azul.
+	m.normal_enabled = true
+	m.normal_texture = _wave_normal_texture(96)
+	m.normal_scale = 0.45
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	m.uv1_scale = Vector3(1600.0, 1600.0, 1.0)
+	m.uv1_offset = Vector3.ZERO
+	_sea_mat = m
 	sea.material_override = m
 	sea.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(sea)
+	# Espuma da arrebentacao (B-81): uma faixa fina na linha da agua, com
+	# textura de espuma gerada em codigo e offset de UV animado. Sem ela a praia
+	# termina numa emenda reta entre areia e mar.
+	var foam := PlaneMesh.new()
+	foam.size = Vector2(30000.0, 18.0)
+	foam.subdivide_width = 1
+	foam.subdivide_depth = 1
+	surf = MeshInstance3D.new()
+	surf.name = "Surf"
+	surf.mesh = foam
+	var fm := StandardMaterial3D.new()
+	fm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	fm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	fm.albedo_texture = _foam_texture(128, 64)
+	fm.albedo_color = Color(1.0, 1.0, 1.0, 0.85)
+	fm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	fm.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	fm.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	fm.uv1_scale = Vector3(300.0, 1.0, 1.0)
+	fm.disable_receive_shadows = true
+	_surf_mat = fm
+	surf.material_override = fm
+	surf.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(surf)
+	surf.global_position = Vector3(SPAWN.x, Cfg.SEA_LEVEL + 0.05, 30.0)
+
+
+## Textura de espuma do mar (B-81), gerada em codigo: duas faixas que se
+## quebram em bolhas, com alfa que some nas duas bordas da faixa. Repete sem
+## emenda (as senoides tem periodo inteiro na textura).
+static func _foam_texture(size: int, h: int) -> ImageTexture:
+	var img := Image.create(size, h, true, Image.FORMAT_RGBA8)
+	for y in h:
+		var v := float(y) / float(maxi(1, h - 1))
+		# A espuma vive no meio da faixa: nas bordas o alfa morre, senao a
+		# emenda aparece como uma linha branca reta no mar.
+		var edge := smoothstep(0.0, 0.30, v) * (1.0 - smoothstep(0.62, 1.0, v))
+		for x in size:
+			var u := float(x) / float(size)
+			var band := sin((u * 3.0 + v * 1.0) * TAU) * 0.5 + 0.5
+			var streaks := sin((u * 11.0 - v * 2.0) * TAU) * 0.5 + 0.5
+			var a := edge * (0.30 + 0.70 * band * streaks)
+			img.set_pixel(x, y, Color(1.0, 1.0, 1.0, a * a))
+	img.generate_mipmaps()
+	return ImageTexture.create_from_image(img)
+
+
+## Mapa de normais das ondas, gerado em codigo: tres senoides em alturas e a
+## diferenca entre vizinhos virada em normal (escala de cinza -> RGB). Repete
+## sem emenda porque as senoides tem periodo inteiro na textura.
+static func _wave_normal_texture(size: int) -> ImageTexture:
+	var heights := PackedFloat32Array()
+	heights.resize(size * size)
+	for y in size:
+		for x in size:
+			var u := float(x) / float(size)
+			var v := float(y) / float(size)
+			var hh := sin((u * 2.0 + v * 1.0) * TAU) * 0.55
+			hh += sin((u * 5.0 - v * 4.0) * TAU) * 0.28
+			hh += sin((u * 11.0 + v * 9.0) * TAU) * 0.12
+			heights[y * size + x] = hh
+	var img := Image.create(size, size, true, Image.FORMAT_RGBA8)
+	var strength := 2.6
+	for y in size:
+		for x in size:
+			var hl := heights[y * size + posmod(x - 1, size)]
+			var hr := heights[y * size + posmod(x + 1, size)]
+			var hd := heights[posmod(y - 1, size) * size + x]
+			var hu := heights[posmod(y + 1, size) * size + x]
+			var nx := (hl - hr) * strength
+			var ny := (hd - hu) * strength
+			var nz := 1.0
+			var inv := 1.0 / sqrt(nx * nx + ny * ny + nz * nz)
+			img.set_pixel(x, y, Color(nx * inv * 0.5 + 0.5, ny * inv * 0.5 + 0.5,
+					nz * inv * 0.5 + 0.5, 1.0))
+	img.generate_mipmaps()
+	return ImageTexture.create_from_image(img)
 
 
 func _process(delta: float) -> void:
 	_play_time += delta
+	# WASTED/BUSTED: a tela manda, o controle volta no fim da contagem.
+	if _respawn_t > 0.0:
+		_respawn_t -= delta
+		if _respawn_t <= 0.0:
+			_finish_respawn()
 	if day_night != null:
 		day_night.process_frame(delta)
 		if streamer != null:
@@ -336,6 +500,7 @@ func _process(delta: float) -> void:
 		focus = player.position
 	if car != null and car.occupied:
 		focus = car.global_position
+	_focus = focus
 	if streamer != null and player != null:
 		streamer.update_stream(focus, delta)
 		if _loading and streamer.has_ready_at(focus):
@@ -347,6 +512,18 @@ func _process(delta: float) -> void:
 	if sea != null and player != null:
 		# Mar "infinito": acompanha o foco no plano XZ.
 		sea.global_position = Vector3(focus.x, Cfg.SEA_LEVEL, focus.z)
+		# Ondas andando devagar (B-80): 1 tile a cada ~4 min. Nao e correnteza,
+		# e o minimo para o mar nao parecer uma foto.
+		if _sea_mat != null:
+			_wave_t += delta
+			_sea_mat.uv1_offset = Vector3(_wave_t * 0.004, _wave_t * 0.0025, 0.0)
+		# Espuma: acompanha o jogador no eixo X (a praia corre de leste a oeste)
+		# e sobe/desce na faixa, como a agua lavando a areia.
+		if surf != null:
+			surf.global_position = Vector3(focus.x, Cfg.SEA_LEVEL + 0.05, 30.0)
+			if _surf_mat != null:
+				_surf_mat.uv1_offset = Vector3(-_wave_t * 0.012,
+						sin(_wave_t * 0.35) * 0.18, 0.0)
 	# Loja (B-66): ao entrar no vao, o HUD diz o nome do comercio. A comparacao
 	# evita repetir o aviso a cada quadro; sair da loja so zera o estado.
 	if streamer != null and player != null and hud != null:
@@ -362,7 +539,7 @@ func _process(delta: float) -> void:
 		if here != _shop_here:
 			_shop_here = here
 			if here != "":
-				hud.toast(here)
+				_notify(here)
 	# Carro: o TouchControls desenha e trata o botao ENTRAR/SAIR (B-38: no iPhone
 	# o toque em Button do Godot nao chegava ao jogo) e, dirigindo, troca
 	# PULAR/CORRER por ACEL/FREIO.
@@ -370,9 +547,21 @@ func _process(delta: float) -> void:
 		if touch.is_driving() != car.occupied:
 			touch.set_driving(car.occupied)
 		var near: bool = player.position.distance_to(car.global_position) < Car.PROXIMITY
+		# Roubo de carro: o botao ENTRAR tambem aparece perto de carro de rua.
+		if not near and not car.occupied and traffic != null:
+			near = not traffic.car_near(player.position, 7.0).is_empty()
 		touch.set_car_state(near or car.occupied, car.occupied)
 		if touch.take_car_press():
 			_on_hud_action("car")
+		# Combate a pe: TROCAR troca a arma, BATER/ATIRAR ataca na direcao da
+		# camera. Segurar o botao mantem o fogo no ritmo da arma (cooldown nela).
+		touch.set_armed(player.armed())
+		if touch.take_weapon_press():
+			player.swap_weapon()
+			_notify("Arma: %s" % player.weapon_label())
+		var want_fire: bool = touch.take_fire_press() or TouchControls.fire_held()
+		if want_fire and not car.occupied:
+			_player_fire()
 	if traffic != null:
 		traffic.update(delta, focus)
 	if pedestrians != null and player != null:
@@ -389,6 +578,17 @@ func _process(delta: float) -> void:
 	# destrocos e desenho (3 MultiMesh para tudo).
 	if props != null:
 		props.update(delta, focus)
+	# Policia, missoes e HUD do jogo: o procurado esfria longe dos olhos, as
+	# viaturas perseguem, o roteiro avanca e o radar aponta o alvo.
+	if police != null:
+		police.update(delta, focus)
+	if missions != null:
+		missions.update(delta, focus)
+	if gta != null and player != null:
+		var view_yaw: float = player.cam_yaw
+		if car != null and car.occupied:
+			view_yaw = car.rotation.y
+		gta.update_focus(focus, view_yaw)
 	# Estado do som na telemetria: e por esta linha que se sabe, no aparelho, se
 	# o Safari liberou o audio (B-42).
 	if audio != null and hud != null:
@@ -421,17 +621,28 @@ func _on_hud_action(which: String) -> void:
 				return
 			if car.occupied:
 				car.toggle_occupant()
-				hud.toast("Voce saiu do carro.")
-			else:
-				# Rede de seguranca: o botao de contexto so aparece dentro de
-				# Car.PROXIMITY, mas a distancia pode mudar entre o desenho do
-				# botao e o toque. Se estiver longe, o jogador vai para o lado do
-				# carro antes de entrar (B-36).
-				if player.position.distance_to(car.global_position) > Car.PROXIMITY:
-					var side := Vector3(cos(car.rotation.y), 0.0, -sin(car.rotation.y))
-					player.teleport(car.global_position + side * 2.4)
-				car.toggle_occupant()
-				hud.toast("Volante no joystick, ACEL acelera, FREIO freia/da re (ou W A S D).")
+				_notify("Voce saiu do carro.")
+				return
+			# Roubo de carro: se um carro de RUA esta mais perto que o seu, e ele
+			# que voce leva (o "carjack" do GTA). A cidade nao fica com buraco:
+			# o carro tomado volta a circular longe, 30 s depois.
+			var own_d: float = player.position.distance_to(car.global_position)
+			if traffic != null:
+				var stolen: Dictionary = traffic.car_near(player.position, 7.0)
+				if not stolen.is_empty():
+					var sd: float = player.position.distance_to(stolen["pos"])
+					if sd < own_d:
+						_steal_car(stolen)
+						return
+			# Rede de seguranca: o botao de contexto so aparece dentro de
+			# Car.PROXIMITY, mas a distancia pode mudar entre o desenho do
+			# botao e o toque. Se estiver longe, o jogador vai para o lado do
+			# carro antes de entrar (B-36).
+			if own_d > Car.PROXIMITY:
+				var side := Vector3(cos(car.rotation.y), 0.0, -sin(car.rotation.y))
+				player.teleport(car.global_position + side * 2.4)
+			car.toggle_occupant()
+			_notify("Volante no joystick, ACEL acelera, FREIO freia/da re.")
 
 
 func _on_car_crashed(strength: float) -> void:
@@ -447,12 +658,164 @@ func _on_prop_bumped(strength: float, _surface: String) -> void:
 		audio.crash(clampf(strength, 0.1, 1.0) * 0.7)
 
 
+# --- Jogo: policia, missoes, combate e WASTED/BUSTED --------------------------
+
+## Aviso curto na tela do jogo (o toast da telemetria fica escondido).
+func _notify(msg: String) -> void:
+	if gta != null:
+		gta.toast(msg)
+	elif hud != null:
+		hud.toast(msg)
+
+
+## BATER/ATIRAR na direcao da camera. O alvo e a policia: e ela que persegue o
+## jogador, e acertar viatura e o que aperta o cerco.
+func _player_fire() -> void:
+	if player == null or police == null or not player.alive():
+		return
+	if car != null and car.occupied:
+		return
+	if not player.can_fire():
+		return
+	var data: Dictionary = player.weapon_data()
+	var from := player.global_position + Vector3(0.0, 1.25, 0.0)
+	var dir: Vector3 = player.aim_dir()
+	player.consume_fire()
+	var hit: Dictionary = police.damage_nearest(from, dir, float(data["range"]),
+			float(data["cone"]), float(data["damage"]))
+	if hit.is_empty():
+		return
+	police.report_crime("tiro" if player.armed() else "agressao")
+
+
+## Toma o carro de rua: o carro do jogador passa a ser aquele (modelo, ficha e
+## posicao), como no GTA.
+func _steal_car(info: Dictionary) -> void:
+	if car == null or traffic == null or player == null:
+		return
+	var taken: Dictionary = traffic.take_car(int(info.get("index", -1)))
+	if taken.is_empty():
+		return
+	var mi := clampi(int(taken.get("model", 0)), 0, Traffic.MODEL_PATHS.size() - 1)
+	var spec: Dictionary = taken.get("spec", {})
+	var length := float(taken.get("length", 4.2))
+	var pos: Vector3 = taken["pos"]
+	var yaw := float(taken.get("yaw", 0.0))
+	car.global_position = Vector3(pos.x, Cfg.surface_at(pos.x, pos.z), pos.z)
+	car.rotation = Vector3(0.0, yaw, 0.0)
+	car.set_vehicle(String(Traffic.MODEL_PATHS[mi]), spec, length)
+	if police != null:
+		police.report_crime("carro_tomado")
+	car.toggle_occupant()
+	_notify("Carro tomado: %s" % String(spec.get("name", "carro")))
+
+
+func _on_player_damaged(amount: float) -> void:
+	if gta != null:
+		gta.flinch(amount * 0.02)
+
+
+func _on_cop_shot(_from: Vector3) -> void:
+	if gta != null:
+		gta.flinch(0.12)
+
+
+func _on_player_died() -> void:
+	if _respawn_t > 0.0:
+		return
+	_pending = "wasted"
+	_respawn_t = 2.8
+	if car != null and car.occupied:
+		car.toggle_occupant()
+	if player != null:
+		player.enabled = false
+	if gta != null:
+		gta.show_state("WASTED", 2.8)
+
+
+func _on_busted() -> void:
+	if _respawn_t > 0.0:
+		return
+	_pending = "busted"
+	_respawn_t = 2.8
+	if car != null and car.occupied:
+		car.toggle_occupant()
+	if player != null:
+		player.enabled = false
+	if gta != null:
+		gta.show_state("BUSTED", 2.8)
+
+
+## Fim da contagem: volta na delegacia (preso) ou no hospital (morto), com
+## multa proporcional ao dinheiro. A cidade esquece o crime.
+func _finish_respawn() -> void:
+	var busted := _pending == "busted"
+	_pending = ""
+	if police != null:
+		police.clear()
+	if missions != null:
+		missions.abort()
+	if player == null:
+		return
+	var loss := 0
+	if busted:
+		loss = Wanted.busted_fine(player.money)
+		player.revive(60.0)
+	else:
+		loss = int(float(player.money) * 0.15)
+		player.revive(100.0)
+	player.add_money(-loss)
+	player.enabled = true
+	player.visible = true
+	var where := "delegacia" if busted else "hospital"
+	player.teleport(Ipanema.place(where) + Vector3(6.0, 0.0, 6.0))
+	if player.camera != null:
+		player.camera.current = true
+	if gta != null:
+		if loss > 0:
+			gta.toast("Voce perdeu R$ %d" % loss)
+		else:
+			gta.toast("De volta a rua.")
+
+
+func _on_heat_changed(_heat: float, stars: int) -> void:
+	if gta == null or stars <= 0:
+		return
+	gta.banner(Wanted.wanted_line(stars), 1.8)
+
+
+func _on_cop_down() -> void:
+	if police != null:
+		police.report_crime("policial_morto")
+	if gta != null:
+		gta.toast("Viatura fora de combate.")
+
+
+func _on_mission_started(title: String) -> void:
+	if gta != null:
+		gta.banner("MISSAO\n" + title, 2.4)
+
+
+func _on_mission_finished(title: String, reward: int) -> void:
+	if player != null:
+		player.add_money(reward)
+	if gta != null:
+		gta.banner("%s CUMPRIDA\n+ R$ %d" % [title, reward], 3.0)
+
+
+func _on_debug_toggled(on: bool) -> void:
+	if hud != null:
+		hud.set_debug_visible(on)
+
+
 func collect_state() -> Dictionary:
 	var state := {
 		"world_seed": world_seed,
 		"player": player.state(),
 		"clock": day_night.state(),
 		"play_time": _play_time,
+		"missions": {"index": missions.mission_index} if missions != null else {},
+		"wanted": {"heat": police.heat} if police != null else {},
 	}
 	return state
 
@@ -460,22 +823,28 @@ func collect_state() -> Dictionary:
 func save_game() -> void:
 	var ok: bool = SaveManager.save_state(collect_state())
 	if ok:
-		hud.toast("Jogo salvo (%s)" % SaveManager.save_path())
+		_notify("Jogo salvo.")
 	else:
-		hud.toast("Falha ao salvar: %s" % SaveManager.last_error)
+		_notify("Falha ao salvar: %s" % SaveManager.last_error)
 
 
 func load_game() -> void:
 	var state: Dictionary = SaveManager.load_state()
 	if state.is_empty():
-		hud.toast("Falha ao carregar: %s" % SaveManager.last_error)
+		_notify("Falha ao carregar: %s" % SaveManager.last_error)
 		return
 	var p: Dictionary = state.get("player", {})
 	player.restore(p)
 	var clock: Dictionary = state.get("clock", {})
 	day_night.restore(clock)
 	_play_time = float(state.get("play_time", 0.0))
-	hud.toast("Jogo carregado (schema %d)" % int(state.get("schema", 0)))
+	if missions != null:
+		var m: Dictionary = state.get("missions", {})
+		missions.mission_index = maxi(0, int(m.get("index", 0)))
+		missions.abort()
+	if police != null:
+		police.clear()
+	_notify("Jogo carregado (schema %d)" % int(state.get("schema", 0)))
 
 
 ## Teletransporte (usado por testes manuais e pela Fase 6).

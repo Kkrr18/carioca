@@ -10,7 +10,6 @@ extends Node3D
 
 const Cfg = preload("res://scripts/core/cfg.gd")
 const CityGen = preload("res://scripts/world/city_gen.gd")
-const PropFactory = preload("res://scripts/world/prop_factory.gd")
 
 # Texturas CC0 (Poly Haven, 1K) das superficies do chao. Se faltar o arquivo, a
 # superficie sai com a cor de reserva — o jogo nao quebra por causa de textura.
@@ -19,6 +18,13 @@ const TEX_WALK := "res://assets/textures/pavement.jpg"
 const TEX_SAND := "res://assets/textures/sand.jpg"
 const TEX_CALCADA := "res://assets/textures/calcada.jpg"
 const TEX_FACADE := "res://assets/textures/facade.jpg"
+
+## Alcance dos props (B-80). Um poste de 5 m aparece a centenas de metros; o
+## detalhe dele (braco, luminaria) nao. 480 m deixa o props do setor vizinho em
+## cena e evita pagar 15 mil triangulos por setor a 1,5 km de distancia.
+const PROP_RANGE := 480.0
+## As luminarias acendem a noite e o brilho delas e visto de longe.
+const LAMP_RANGE := 900.0
 
 var world_seed: int = 20260922
 var full_ring: int = 1
@@ -39,8 +45,11 @@ var _win_mat: StandardMaterial3D
 var _mat_road: StandardMaterial3D
 var _mat_walk: StandardMaterial3D
 var _mat_sand: StandardMaterial3D
-var _mat_calcadao: StandardMaterial3D
+var _mat_caladao: StandardMaterial3D
+var _mat_wet: StandardMaterial3D
 var _mat_facade: StandardMaterial3D
+var _mat_prop: StandardMaterial3D
+var _mat_lamp: StandardMaterial3D
 var _requests_this_frame := 0
 
 var generated_total: int = 0
@@ -63,22 +72,61 @@ func _ready() -> void:
 	_win_mat.emission_energy_multiplier = 0.0
 	# Superficies texturadas do chao (asfalto, calcada, areia). UV em escala de
 	# mundo ja vem pronto do city_gen; aqui so entra a textura e o material.
-	_mat_road = _tex_material(TEX_ROAD, Color(0.21, 0.22, 0.24))
-	_mat_walk = _tex_material(TEX_WALK, Color(0.63, 0.62, 0.59))
-	_mat_sand = _tex_material(TEX_SAND, Color(0.86, 0.79, 0.64))
+	# B-81: um unico mapa de normais de grao gerado em codigo da RELEVO a todas
+	# as superficies (asfalto, pedra e areia deixam de ser chapas lisas), com
+	# escala propria por piso. Sem shader custom e sem textura extra no build.
+	var grain := _grain_normal_texture(128)
+	_mat_road = _tex_material(TEX_ROAD, Color(0.21, 0.22, 0.24), grain, 0.55)
+	_mat_walk = _tex_material(TEX_WALK, Color(0.63, 0.62, 0.59), grain, 0.42)
+	_mat_sand = _tex_material(TEX_SAND, Color(0.86, 0.79, 0.64), grain, 0.50)
 	# Calcadao: pedra portuguesa de verdade (textura CC0 do OpenGameArt). O
 	# padrao de ondas gerado antes ficou ruim na tela e foi trocado por pedra.
-	_mat_calcadao = _tex_material(TEX_CALCADA, Color(0.72, 0.70, 0.66))
+	_mat_caladao = _tex_material(TEX_CALCADA, Color(0.72, 0.70, 0.66), grain, 0.38)
+	# Areia molhada (B-80): a mesma textura de areia, escurecida e com brilho de
+	# agua — a faixa que o mar lava separa a praia do mar na tela.
+	_mat_wet = _tex_material(TEX_SAND, Color(0.56, 0.54, 0.48), grain, 0.26)
+	_mat_wet.albedo_color = Color(0.70, 0.70, 0.74)
+	_mat_wet.roughness = 0.42
+	_mat_wet.metallic_specular = 0.55
 	# Fachada dos predios: parede + janela e mapa de emissao, gerados em codigo.
 	_mat_facade = _facade_material()
+	# Props com geometria de verdade (B-80). Um material so para todos: a cor
+	# vem por vertice (PropMesh) e o brilho e de material pintado.
+	_mat_prop = StandardMaterial3D.new()
+	_mat_prop.vertex_color_use_as_albedo = true
+	_mat_prop.vertex_color_is_srgb = false
+	_mat_prop.roughness = 0.80
+	_mat_prop.metallic_specular = 0.30
+	# Rim light sutil (B-81): a borda dos props pega um fio de luz e a silhueta
+	# de palmeira/poste/banco se le contra o ceu e contra a parede. E uma
+	# propriedade do StandardMaterial3D, nao um shader novo.
+	_mat_prop.rim_enabled = true
+	_mat_prop.rim = 0.30
+	_mat_prop.rim_tint = 0.20
+	# O que acende a noite: luminarias de rua. A cor (quente) vem por vertice e a
+	# EMISSAO e do material, com energia vinda de set_window_glow().
+	_mat_lamp = StandardMaterial3D.new()
+	_mat_lamp.vertex_color_use_as_albedo = true
+	_mat_lamp.vertex_color_is_srgb = false
+	_mat_lamp.roughness = 0.6
+	_mat_lamp.emission_enabled = true
+	_mat_lamp.emission = Color(1.0, 0.84, 0.58)
+	_mat_lamp.emission_energy_multiplier = 0.0
 
 
 ## Material de superficie texturada. Sem a textura, cai na cor de reserva.
-func _tex_material(path: String, fallback: Color) -> StandardMaterial3D:
+## `grain` e o mapa de normais de grao (B-81): quando existe, ele da relevo ao
+## piso com `grain_scale` de intensidade (asfalto mais forte, areia mais suave).
+func _tex_material(path: String, fallback: Color, grain: Texture2D = null,
+		grain_scale: float = 0.45) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = fallback
 	m.roughness = 0.95
 	m.metallic_specular = 0.05
+	if grain != null:
+		m.normal_enabled = true
+		m.normal_texture = grain
+		m.normal_scale = grain_scale
 	if ResourceLoader.exists(path):
 		var res: Resource = load(path)
 		if res is Texture2D:
@@ -87,6 +135,38 @@ func _tex_material(path: String, fallback: Color) -> StandardMaterial3D:
 			m.albedo_color = Color.WHITE
 			m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	return m
+
+
+## Mapa de normais de GRAO, gerado em codigo: soma de senoides com frequencias
+## inteiras (repete sem emenda) virada em normal. Da relevo a asfalto, calcada,
+## areia e calçadao sem normal map fotografado e sem ShaderMaterial — a regra
+## do B-25 (shader custom congelou o WebGL no Safari) continua valendo.
+static func _grain_normal_texture(size: int) -> ImageTexture:
+	var heights := PackedFloat32Array()
+	heights.resize(size * size)
+	for y in size:
+		for x in size:
+			var u := float(x) / float(size)
+			var v := float(y) / float(size)
+			var hh := sin((u * 7.0 + v * 4.0) * TAU) * 0.50
+			hh += sin((u * 13.0 - v * 11.0) * TAU) * 0.28
+			hh += sin((u * 23.0 + v * 19.0) * TAU) * 0.14
+			heights[y * size + x] = hh
+	var img := Image.create(size, size, true, Image.FORMAT_RGBA8)
+	var strength := 1.7
+	for y in size:
+		for x in size:
+			var hl := heights[y * size + posmod(x - 1, size)]
+			var hr := heights[y * size + posmod(x + 1, size)]
+			var hd := heights[posmod(y - 1, size) * size + x]
+			var hu := heights[posmod(y + 1, size) * size + x]
+			var nx := (hl - hr) * strength
+			var ny := (hd - hu) * strength
+			var inv := 1.0 / sqrt(nx * nx + ny * ny + 1.0)
+			img.set_pixel(x, y, Color(nx * inv * 0.5 + 0.5, ny * inv * 0.5 + 0.5,
+					inv * 0.5 + 0.5, 1.0))
+	img.generate_mipmaps()
+	return ImageTexture.create_from_image(img)
 
 
 ## Fachada em coordenadas de textura: devolve Vector2(tom da parede, brilho da
@@ -152,9 +232,66 @@ func _tex_surface(mesh: ArrayMesh, si: int, v: PackedVector3Array, n: PackedVect
 	arr[Mesh.ARRAY_TEX_UV] = uv
 	if cols.size() == v.size():
 		arr[Mesh.ARRAY_COLOR] = cols
+	# B-81: o normal map de grao so funciona com TANGENTES. Sem ARRAY_TANGENT
+	# o StandardMaterial3D nao tem base para o relevo e a superficie sai lisa
+	# (ou com o relevo errado). A conta e a classica, por triangulo, acumulada
+	# por vertice — e roda uma vez por setor, junto com a montagem da malha.
+	var base_mat := mat as BaseMaterial3D
+	if base_mat != null and base_mat.normal_enabled:
+		arr[Mesh.ARRAY_TANGENT] = _tangents(v, n, uv)
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 	mesh.surface_set_material(si, mat)
 	return si + 1
+
+
+## Tangentes (4 floats por vertice: x, y, z e o sinal da binormal) a partir das
+## posicoes e dos UVs. Puro, sem dependencia de SurfaceTool: os arrays do setor
+## chegam prontos da worker thread e a surface e criada aqui.
+static func _tangents(v: PackedVector3Array, n: PackedVector3Array,
+		uv: PackedVector2Array) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	out.resize(v.size() * 4)
+	var i := 0
+	while i + 2 < v.size():
+		var p0 := v[i]
+		var p1 := v[i + 1]
+		var p2 := v[i + 2]
+		var w0 := uv[i]
+		var w1 := uv[i + 1]
+		var w2 := uv[i + 2]
+		var e1 := p1 - p0
+		var e2 := p2 - p0
+		var d1 := w1 - w0
+		var d2 := w2 - w0
+		var det := d1.x * d2.y - d2.x * d1.y
+		var t := Vector3(1.0, 0.0, 0.0)
+		var b := Vector3(0.0, 0.0, 1.0)
+		if absf(det) > 0.000001:
+			var r := 1.0 / det
+			t = (e1 * d2.y - e2 * d1.y) * r
+			b = (e2 * d1.x - e1 * d2.x) * r
+		for k in 3:
+			var j := i + k
+			out[j * 4 + 0] += t.x
+			out[j * 4 + 1] += t.y
+			out[j * 4 + 2] += t.z
+			var cr := n[j].cross(t)
+			var bitangent_sign := 1.0 if cr.dot(b) >= 0.0 else -1.0
+			out[j * 4 + 3] += bitangent_sign
+		i += 3
+	# Normaliza, tira a componente da normal e fecha o sinal da binormal.
+	for j in v.size():
+		var t := Vector3(out[j * 4], out[j * 4 + 1], out[j * 4 + 2])
+		var nrm := n[j]
+		t -= nrm * nrm.dot(t)
+		if t.length_squared() < 0.000001:
+			t = Vector3(1.0, 0.0, 0.0) - nrm * nrm.x
+		t = t.normalized()
+		out[j * 4 + 0] = t.x
+		out[j * 4 + 1] = t.y
+		out[j * 4 + 2] = t.z
+		out[j * 4 + 3] = 1.0 if out[j * 4 + 3] >= 0.0 else -1.0
+	return out
 
 
 ## Intensidade da iluminacao das janelas (0 = dia, 1 = noite).
@@ -168,6 +305,11 @@ func set_window_glow(f: float) -> void:
 	# As janelas que acendem agora sao as da textura de fachada.
 	if _mat_facade != null:
 		_mat_facade.emission_energy_multiplier = e
+	# Luminarias de rua (B-80): de dia o disco e so uma lente apagada; a noite
+	# ele passa do limiar do glow (1,35) e a rua ganha os pontos de luz que
+	# fazem a cidade parecer acesa em vez de so escura.
+	if _mat_lamp != null:
+		_mat_lamp.emission_energy_multiplier = 0.05 + clampf(f, 0.0, 1.0) * 1.85
 
 
 func update_stream(focus: Vector3, delta: float) -> void:
@@ -262,7 +404,6 @@ func _install(sec: Vector2i, lod: int, res: Array) -> void:
 	var norms: PackedVector3Array = res[1]
 	var cols: PackedColorArray = res[2]
 	var colliders: Array = res[3]
-	var defs: Array = res[4]
 	# O tempo de geracao vem como ULTIMO elemento (a worker anexa depois das
 	# superficies): le pelo tipo, nao por indice fixo.
 	var last: Variant = res[res.size() - 1]
@@ -302,6 +443,9 @@ func _install(sec: Vector2i, lod: int, res: Array) -> void:
 	# Fachada dos predios (com cor por vertice: a paleta tinge a textura).
 	if res.size() >= 24:
 		si = _tex_surface(mesh, si, res[20], res[21], res[22], _mat_facade, res[23])
+	# Areia molhada (B-80): faixa propria, mais escura e mais brilhante.
+	if res.size() >= 34:
+		si = _tex_surface(mesh, si, res[31], res[32], res[33], _mat_wet)
 
 	var node := Node3D.new()
 	node.name = "S%d_%d" % [sec.x, sec.y]
@@ -315,8 +459,10 @@ func _install(sec: Vector2i, lod: int, res: Array) -> void:
 	mi.visibility_range_end = 1500.0 if lod == CityGen.LOD_FULL else 2400.0
 	mi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
 	node.add_child(mi)
-	if not defs.is_empty():
-		node.add_child(_prop_multimesh(defs))
+	# Props com geometria de verdade (B-80): o worker do setor ja devolveu os
+	# vertices transformados. Duas instancias — o solido (que projeta sombra) e
+	# o que ACENDE a noite (que nao entra no passe de sombra).
+	_install_props(node, res)
 
 	node.set_meta("colliders", colliders)
 	# Lojas do setor (B-66): o balconista e o aviso do nome da loja usam isto.
@@ -331,42 +477,49 @@ func _install(sec: Vector2i, lod: int, res: Array) -> void:
 	generated_total += 1
 
 
-## Props instanciados (palmeiras, arvores, quiosques): 1 MultiMesh por setor.
-func _prop_multimesh(defs: Array) -> MultiMeshInstance3D:
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = true
-	mm.mesh = CityGen.unit_cube_mesh()
-	mm.instance_count = defs.size()
-	for i in defs.size():
-		var d: Dictionary = defs[i]
-		var c: Vector3 = d["c"]
-		c += Vector3(
-			float(d.get("dx", 0.0)),
-			float(d.get("dy", 0.0)),
-			float(d.get("dz", 0.0)))
-		var kind := String(d.get("kind", "tree"))
-		var hue := float(d.get("hue", 0.5))
-		var h := float(d.get("h", 6.0))
-		var shape := PropFactory.shape_for(kind, h)
-		var basis := Basis.from_scale(shape[1])
-		# Giro em Y (B-52): copa de arvore e arbusto girados leem como volume,
-		# nao como caixa alinhada a grade da cidade.
-		var rot := float(d.get("rot", 0.0))
-		if rot != 0.0:
-			basis = Basis(Vector3.UP, rot) * basis
-		mm.set_instance_transform(i, Transform3D(basis, c + Vector3(0.0, float(shape[0]), 0.0)))
-		mm.set_instance_color(i, PropFactory.color_for(kind, hue))
-	var mmi := MultiMeshInstance3D.new()
-	mmi.multimesh = mm
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.vertex_color_is_srgb = false
-	mat.roughness = 1.0
-	mmi.material_override = mat
-	mmi.visibility_range_end = 700.0
-	mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
-	return mmi
+## Props do setor: geometria de verdade gerada na worker (B-80). O array res
+## traz os vertices ja transformados, com cor por vertice, em duas listas:
+##   25..27 prop solido (tronco, banco, poste, carro parado, caixa d'agua...)
+##   28..30 prop que acende a noite (disco da luminaria)
+## Duas MeshInstance3D em vez de um MultiMesh de cubos: o solido projeta sombra
+## e o buffer emissivo nao. Sem isso, a sombra de um poste custava o mesmo que a
+## malha inteira dele no passe de sombra.
+func _install_props(node: Node3D, res: Array) -> void:
+	if res.size() < 31:
+		return
+	var solid := ArrayMesh.new()
+	if _vtx_surface(solid, 0, res[25], res[26], res[27], _mat_prop) > 0:
+		var mi := MeshInstance3D.new()
+		mi.name = "Props"
+		mi.mesh = solid
+		mi.visibility_range_end = PROP_RANGE
+		mi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
+		node.add_child(mi)
+	var lit := ArrayMesh.new()
+	if _vtx_surface(lit, 0, res[28], res[29], res[30], _mat_lamp) > 0:
+		var li := MeshInstance3D.new()
+		li.name = "PropLights"
+		li.mesh = lit
+		li.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		li.visibility_range_end = LAMP_RANGE
+		li.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
+		node.add_child(li)
+
+
+## Surface sem UV, com cor por vertice (props). Mesmo contrato de _tex_surface:
+## devolve o proximo indice livre, e nao cria nada quando o buffer esta vazio.
+func _vtx_surface(mesh: ArrayMesh, si: int, v: PackedVector3Array,
+		n: PackedVector3Array, c: PackedColorArray, mat: Material) -> int:
+	if v.is_empty() or n.size() != v.size() or c.size() != v.size():
+		return si
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = v
+	arr[Mesh.ARRAY_NORMAL] = n
+	arr[Mesh.ARRAY_COLOR] = c
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	mesh.surface_set_material(si, mat)
+	return si + 1
 
 
 func _unload(sec: Vector2i) -> void:

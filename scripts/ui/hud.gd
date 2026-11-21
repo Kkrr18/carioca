@@ -40,6 +40,7 @@ var _model_note := ""
 var _ui := 1.0
 var _btn_w := 96.0
 var _btn_h := 46.0
+var _root: Control
 
 var _bench_t := -1.0
 var _bench_dt: Array[float] = []
@@ -71,6 +72,7 @@ func _ready() -> void:
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
+	_root = root
 
 	var labels := ["SALVAR", "CARREGAR", "PERF", "MEDIR", "+1h", "LIMITAR 30"]
 	var cbs: Array[Callable] = [_on_save, _on_load, _on_perf, _on_bench, _on_plus_hour, _on_cap]
@@ -161,6 +163,14 @@ func _bar_button(parent: Node, text: String, cb: Callable) -> Button:
 func toast(msg: String) -> void:
 	_toast.text = msg
 	_toast_t = 2.5
+
+
+## Liga/desliga a telemetria de desenvolvimento inteira (botoes + numeros).
+## No jogo normal ela fica ESCONDIDA (o GTA HUD e a interface de verdade) e
+## volta pelo botao DEV; e por ela que se mede FPS no iPhone.
+func set_debug_visible(on: bool) -> void:
+	if _root != null:
+		_root.visible = on
 
 
 ## Carro para a linha de diagnostico da telemetria (pode ser null).

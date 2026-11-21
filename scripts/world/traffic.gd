@@ -89,6 +89,7 @@ var _light_lens: MultiMeshInstance3D
 var _light_items: Array = []  # {n, sx, sz} de cada semaforo em cena
 var _light_node := Vector2i(999999, 999999)   # no do jogador no ultimo rebuild
 var _light_t := 0.0           # throttle da cor das lentes
+var _focus3 := Vector3.ZERO   # ultima posicao do jogador (para o roubo)
 
 
 # --- Nucleo puro (sem cena; testado em tests/runner.gd) ----------------------
@@ -513,6 +514,8 @@ func setup(base_seed: int, focus: Vector3 = Vector3.ZERO) -> void:
 func update(delta: float, focus: Vector3 = Vector3.ZERO) -> void:
 	_clock += delta
 	if focus != Vector3.ZERO:
+		_focus3 = focus
+	if focus != Vector3.ZERO:
 		_follow(focus, delta)
 		# Semaforos: so os de perto ficam em cena (nao adianta desenhar os de
 		# 3 km). Reconstroi quando o jogador muda de no.
@@ -522,6 +525,9 @@ func update(delta: float, focus: Vector3 = Vector3.ZERO) -> void:
 			_rebuild_lights(focus)
 	_apply_spacing()
 	for c in cars:
+		if bool(c.get("taken", false)):
+			_recycle(c)
+			continue
 		if delta > 0.0:
 			advance(c, delta, _clock)
 	_write_instances()
@@ -539,6 +545,8 @@ func _follow(focus: Vector3, delta: float) -> void:
 		return
 	_follow_t = 0.5
 	for c in cars:
+		if bool(c.get("taken", false)):
+			continue
 		var o: Vector3 = pose(c).origin
 		if Vector2(o.x - focus.x, o.z - focus.z).length() > RESPAWN_FAR:
 			place_near(c, focus, RESPAWN_NEAR, RESPAWN_FAR)
@@ -575,6 +583,15 @@ func _write_instances() -> void:
 	for c in cars:
 		var m: int = c["model"]
 		var mm: MultiMesh = _mats_mm[m].multimesh
+		# Carro tomado pelo jogador fica com ESCALA ZERO (invisivel) ate voltar a
+		# rua. Nada de mexer em `instance_count` a cada roubo: encolher e crescer
+		# o buffer entre quadros e o tipo de coisa que estoura indice no meio do
+		# jogo, e o custo de manter a vaga e uma instancia degenerada.
+		if bool(c.get("taken", false)):
+			var hidden := Transform3D(Basis.from_scale(Vector3.ZERO), Vector3(0.0, -500.0, 0.0))
+			mm.set_instance_transform(used[m], hidden)
+			used[m] += 1
+			continue
 		mm.set_instance_transform(used[m], pose(c))
 		used[m] += 1
 
@@ -585,6 +602,8 @@ func _write_instances() -> void:
 func hit_test(pos: Vector3, radius: float) -> Dictionary:
 	var min_d := radius + CAR_RADIUS
 	for c in cars:
+		if bool(c.get("taken", false)):
+			continue
 		var o: Vector3 = pose(c).origin
 		var d := Vector2(pos.x - o.x, pos.z - o.z)
 		var dist := d.length()
@@ -684,6 +703,68 @@ func _update_lenses() -> void:
 		var st := light_states(nn, _clock)
 		var ew := float(it["sx"]) * float(it["sz"]) > 0.0
 		_light_lens.multimesh.set_instance_color(i, lens_color(st.y if ew else st.x))
+
+
+# --- Roubo de carro (o "carjack" do GTA) ---------------------------------------
+
+## Carro de transito mais proximo de uma posicao, para o jogador tomar. Devolve
+## {} quando nao ha nenhum dentro do raio.
+func car_near(pos: Vector3, radius: float) -> Dictionary:
+	var best := -1
+	var best_d := radius
+	for i in cars.size():
+		var c: Dictionary = cars[i]
+		if bool(c.get("taken", false)):
+			continue
+		var o: Vector3 = pose(c).origin
+		var d := Vector2(pos.x - o.x, pos.z - o.z).length()
+		if d > best_d:
+			continue
+		best_d = d
+		best = i
+	if best < 0:
+		return {}
+	return _car_info(best)
+
+
+## Tira o carro da rua (o jogador tomou): ele some das instancias e volta a
+## circular longe, 30 s depois. A cidade nao fica com um buraco para sempre.
+func take_car(index: int) -> Dictionary:
+	if index < 0 or index >= cars.size():
+		return {}
+	var info := _car_info(index)
+	if info.is_empty():
+		return {}
+	var c: Dictionary = cars[index]
+	c["taken"] = true
+	c["reuse"] = _clock + 30.0
+	return info
+
+
+func _car_info(index: int) -> Dictionary:
+	if index < 0 or index >= cars.size():
+		return {}
+	var c: Dictionary = cars[index]
+	var mi := clampi(int(c.get("model", 0)), 0, MODEL_LENGTHS.size() - 1)
+	var xf := pose(c)
+	return {
+		"index": index,
+		"pos": xf.origin,
+		"yaw": xf.basis.get_euler().y,
+		"model": mi,
+		"length": float(MODEL_LENGTHS[mi]),
+		"spec": c.get("spec", {}),
+	}
+
+
+## Carro tomado volta à rua depois do tempo, longe do jogador.
+func _recycle(c: Dictionary) -> void:
+	if _clock < float(c.get("reuse", 0.0)):
+		return
+	c["taken"] = false
+	c["reuse"] = 0.0
+	if _focus3 != Vector3.ZERO:
+		place_near(c, _focus3, 120.0, 220.0)
 
 
 func describe() -> String:

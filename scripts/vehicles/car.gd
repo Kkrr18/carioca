@@ -86,7 +86,12 @@ var _crash_cool := 0.0         # evita som/tremor repetido enquanto encostado
 
 ## Modelo CC0 do carro (sedan). Vazio = so a caixa de codigo.
 var model_path := ""
+## Comprimento (m) do modelo carregado: muda quando o jogador toma outro carro.
+var model_length := MODEL_LENGTH
 var model_loaded := false
+var _model_node: Node3D
+## Pecas da caixa de codigo (reserva), guardadas para poder trocar de veiculo.
+var _box_nodes: Array = []
 # {node: PIVO proprio da roda, front: bool, radius: float}. O giro acontece no
 # pivo (no centro da roda), nao no no do .glb (B-39).
 var _model_wheels: Array = []
@@ -214,6 +219,12 @@ func _build_body() -> void:
 		tl.position = Vector3(0.55 * side, WHEEL_RADIUS + 0.6, 2.12)
 		add_child(tl)
 
+	# Guarda as pecas da caixa para poder derrubar tudo se o jogador trocar de
+	# veiculo (set_vehicle). Nada mais foi criado alem de corpo e rodas ainda.
+	for ch in get_children():
+		if ch is MeshInstance3D:
+			_box_nodes.append(ch)
+
 
 func _build_wheels() -> void:
 	var tyre := StandardMaterial3D.new()
@@ -250,12 +261,14 @@ func _build_wheels() -> void:
 func _build_model() -> void:
 	var mp := ModelProp.new()
 	mp.model_path = model_path
-	mp.target_length = MODEL_LENGTH
+	mp.target_length = model_length
 	add_child(mp)
+	_model_node = mp
 	mp.load_model()
 	if not mp.loaded:
 		remove_child(mp)
 		mp.free()
+		_model_node = null
 		return
 	model_loaded = true
 	_model_wheels.clear()
@@ -307,6 +320,63 @@ func _build_model() -> void:
 ## eixo. Puro e testado no CI, porque transformacao errada aqui = roda orbitando.
 static func wheel_in_pivot(in_car: Transform3D, center: Vector3) -> Transform3D:
 	return Transform3D(Basis(), center).affine_inverse() * in_car
+
+
+## Troca o veiculo em uso (roubo de carro): derruba o modelo antigo, ajusta a
+## ficha e monta o novo. So com o carro parado e vazio — quem esta dirigindo
+## nao troca de carro por baixo.
+func set_vehicle(path: String, spec: Dictionary, length: float) -> void:
+	if occupied:
+		return
+	_clear_vehicle_nodes()
+	model_loaded = false
+	model_path = path
+	model_length = maxf(2.6, length)
+	if not spec.is_empty():
+		vehicle_spec = spec
+	_build_model()
+	if not model_loaded:
+		_build_body()
+		_build_wheels()
+	speed = 0.0
+	steer = 0.0
+	_st = {"speed": 0.0, "gear": 1, "shift_cool": 0.0}
+	gear = 1
+	rpm = float(spec().get("idle", 800.0))
+	engine_ratio = 0.0
+	damage = 0.0
+	damage_state = 0
+
+
+## Derruba TUDO que representa o veiculo (modelo, rodas nos pivos e as pecas da
+## caixa de reserva), sem tocar em camera nem no marcador.
+func _clear_vehicle_nodes() -> void:
+	for wi in _model_wheels:
+		var p := wi["node"] as Node3D
+		if p != null and is_instance_valid(p):
+			if p.get_parent() == self:
+				remove_child(p)
+			p.queue_free()
+	_model_wheels.clear()
+	if _model_node != null and is_instance_valid(_model_node):
+		if _model_node.get_parent() == self:
+			remove_child(_model_node)
+		_model_node.queue_free()
+	_model_node = null
+	for p in _wheels:
+		var wp := p as Node3D
+		if wp != null and is_instance_valid(wp):
+			remove_child(wp)
+			wp.queue_free()
+	_wheels.clear()
+	_front_pivots.clear()
+	for n in _box_nodes:
+		var bn := n as Node3D
+		if bn != null and is_instance_valid(bn):
+			if bn.get_parent() == self:
+				remove_child(bn)
+			bn.queue_free()
+	_box_nodes.clear()
 
 
 func _build_camera() -> void:

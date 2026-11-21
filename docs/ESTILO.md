@@ -89,7 +89,21 @@ fora do espectre definido:
 
 - Renderer **Compatibility** (OpenGL ES 3.0). Nao trocar sem medir (ver
   `docs/ARQUITETURA.md` e `docs/OTIMIZACAO_IPHONE12.md`).
-- 1 unidade = 1 metro. Cor por vertice, 1 material por setor, MultiMesh para props.
+- 1 unidade = 1 metro. Cor por vertice, 1 material por setor. Os props nao sao
+  mais cubos de `MultiMesh`: cada tipo tem malha propria gerada em codigo
+  (`scripts/world/prop_mesh.gd`) e e instanciado por transformacao dentro do
+  setor, entao continua 1 chamada de desenho por setor.
+- **AO por vertice** (`PropMesh.ao_shade`): a base de todo prop escurece perto
+  do chao. E o unico "SSAO" que o Compatibility tem de graca — AO de tela nao
+  existe neste renderer, entao o peso do objeto no chao vem da cor do vertice.
+- **Normais de grao em codigo** (`sector_streamer._grain_normal_texture`):
+  senoides com frequencia inteira (repetem sem emenda) viradas em normal map
+  para asfalto, calcada, areia e calcadao. Normal map fotografado e bem-vindo;
+  `ShaderMaterial` custom no caminho critico continua proibido (B-25).
+- **Varanda e embasamento** fazem parte da silhueta, nao do enfeite: a laje com
+  guarda-corpo na face da rua e a faixa de pedra no pe do predio sao o que
+  separa um predio de Ipanema de uma caixa de janelas. Entram no buffer de cor
+  por vertice e so no LOD full.
 - **Sem ShaderMaterial custom no caminho critico**: o shader do mar congelou o
   WebGL no Safari (B-25). Efeitos novos usam StandardMaterial3D (emissao,
   roughness, UV offset) ate um shader ser reavaliado com cuidado.

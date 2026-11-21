@@ -13,6 +13,7 @@ const Geo = preload("res://scripts/core/geo.gd")
 const CityGen = preload("res://scripts/world/city_gen.gd")
 const SaveManager = preload("res://scripts/autoload/save_manager.gd")
 const PropFactory = preload("res://scripts/world/prop_factory.gd")
+const PropMesh = preload("res://scripts/world/prop_mesh.gd")
 const Car = preload("res://scripts/vehicles/car.gd")
 const VehiclePhysics = preload("res://scripts/vehicles/vehicle_physics.gd")
 const Surf = preload("res://scripts/core/surface_db.gd")
@@ -27,6 +28,12 @@ const SectorStreamer = preload("res://scripts/world/sector_streamer.gd")
 const Traffic = preload("res://scripts/world/traffic.gd")
 const DayNight = preload("res://scripts/world/day_night.gd")
 const Pedestrians = preload("res://scripts/world/pedestrians.gd")
+const Wanted = preload("res://scripts/game/wanted.gd")
+const Ipanema = preload("res://scripts/game/ipanema.gd")
+const Missions = preload("res://scripts/game/missions.gd")
+const Police = preload("res://scripts/world/police.gd")
+const Radar = preload("res://scripts/ui/radar.gd")
+const GtaHud = preload("res://scripts/ui/gta_hud.gd")
 
 var _pass := 0
 var _fail := 0
@@ -54,6 +61,9 @@ func _initialize() -> void:
 	_test_normals()
 	_test_heights()
 	_test_props()
+	_test_prop_mesh()
+	_test_prop_sector_budget()
+	_test_facade_details()
 	_test_car_physics()
 	_test_surfaces()
 	_test_prop_physics()
@@ -76,6 +86,13 @@ func _initialize() -> void:
 	_test_pedestrians()
 	_test_pedestrian_model()
 	_test_pedestrian_life()
+	_test_wanted()
+	_test_ipanema()
+	_test_missions()
+	_test_police_pure()
+	_test_radar()
+	_test_gta_hud_pure()
+	_test_player_combat()
 	_test_player_model()
 	_test_head_model()
 	_test_shops()
@@ -389,6 +406,150 @@ func _test_props() -> void:
 		"copa da palmeira fica no alto do tronco")
 	check(float(PropFactory.shape_for("tree_crown", 9.0)[0]) > 5.0,
 		"copa da arvore fica acima do meio do tronco")
+
+
+## B-80: os props deixaram de ser CUBOS e passaram a ter malha de verdade
+## (PropMesh). Este teste cobre o que da para conferir sem GPU: cada tipo tem
+## geometria, a base fica no chao, a normal de cada face aponta para fora
+## (winding coerente), a luminaria tem buffer emissivo e o orcamento de
+## triangulos do setor inteiro continua cabendo num telefone.
+func _test_prop_mesh() -> void:
+	var kinds := [
+		["palm", 7.0], ["palm_crown", 7.0], ["tree", 8.0], ["tree_crown", 8.0],
+		["bush", 3.0], ["poste", 5.5], ["lampadaria", 5.5], ["banco", 0.6],
+		["lixeira", 1.0], ["kiosk", 3.2], ["umbrella", 2.2], ["caixa_dagua", 1.5],
+		["casa_maquinas", 2.5], ["antena", 4.8], ["carro", 1.3],
+		["ar_condicionado", 0.62], ["planta", 1.2], ["pedra", 1.2],
+		["placa", 3.0], ["hidrante", 1.0], ["cadeira", 0.8],
+	]
+	var empty: Array = []
+	var bad_vert: Array = []
+	var bad_norm: PackedStringArray = PackedStringArray()
+	var sunk: Array = []
+	for entry in kinds:
+		var kind := String(entry[0])
+		var h := float(entry[1])
+		var m: Dictionary = PropMesh.build(kind, h, 0.5)
+		if m.is_empty():
+			empty.append(kind)
+			continue
+		var solid = m["solid"]
+		var v: PackedVector3Array = solid.v
+		var n: PackedVector3Array = solid.n
+		var c: PackedColorArray = solid.c
+		if v.is_empty() or v.size() % 3 != 0 or n.size() != v.size() or c.size() != v.size():
+			bad_vert.append(kind)
+			continue
+		# Base no chao: nada abaixo de y = 0 (o def traz a altura do chao).
+		var lowest := 1e9
+		var i := 0
+		while i + 2 < v.size():
+			var a := v[i]
+			var b := v[i + 1]
+			var d := v[i + 2]
+			lowest = minf(lowest, minf(a.y, minf(b.y, d.y)))
+			var front := -(b - a).cross(d - a)
+			if front.length() > 0.0001 and front.normalized().dot(n[i]) < 0.9:
+				if not bad_norm.has(kind):
+					bad_norm.append(kind)
+			i += 3
+		if lowest < -0.02:
+			sunk.append(kind)
+	check(empty.is_empty(), "todos os tipos de prop tem malha%s" % (
+		"" if empty.is_empty() else " - sem malha: " + ",".join(empty)))
+	check(bad_vert.is_empty(), "props com vertices/normais/cores coerentes%s" % (
+		"" if bad_vert.is_empty() else " - errados: " + ",".join(bad_vert)))
+	check(bad_norm.is_empty(), "props com winding coerente (normal para fora)%s" % (
+		"" if bad_norm.is_empty() else " - invertidos: " + ",".join(bad_norm)))
+	check(sunk.is_empty(), "props apoiados no chao%s" % (
+		"" if sunk.is_empty() else " - enterrados: " + ",".join(sunk)))
+	# A luminaria e a UNICA coisa no buffer emissivo (o que acende a noite).
+	var lamp: Dictionary = PropMesh.build("lampadaria", 5.5, 0.5)
+	var glow = lamp["glow"]
+	check((glow.v as PackedVector3Array).size() > 0, "luminaria com disco de luz (emissivo)")
+	var post: Dictionary = PropMesh.build("poste", 5.5, 0.5)
+	check((post["glow"].v as PackedVector3Array).is_empty(),
+		"poste nao acende (so a luminaria no buffer emissivo)")
+	var car_solid: PackedVector3Array = PropMesh.build("carro", 1.3, 0.5)["solid"].v
+	check(car_solid.size() > 0, "carro parado tem malha propria")
+	# A copa da palmeira tem de cair no TOPO do tronco: e a mesma conta usada
+	# pelos dois defs ("palm" e "palm_crown").
+	var top := PropMesh.palm_top(7.0)
+	check(absf(top.y - 7.0) < 0.001 and top.x > 0.4,
+		"copa da palmeira no topo do tronco inclinado (%.2f, %.2f)" % [top.x, top.y])
+	# Tipo desconhecido nao pode estourar: devolve vazio e o setor nao desenha.
+	check(PropMesh.build("tipo_que_nao_existe", 1.0, 0.5).is_empty(),
+		"tipo de prop desconhecido devolve malha vazia")
+	# AO por vertice (B-81): a cor escurece perto do chao. Teste puro no helper,
+	# com uma caixa de cor 1.0: o topo tem de ficar 1.0 e a base, bem escura.
+	var buf := PropMesh.MBuf.new()
+	PropMesh.box(buf, Vector3(0.0, 0.5, 0.0), Vector3(1.0, 1.0, 1.0),
+			Color(1.0, 1.0, 1.0))
+	PropMesh.ao_shade(buf, 1.0, 0.50)
+	var lo := 2.0
+	var hi := 0.0
+	for i in buf.v.size():
+		if buf.v[i].y < 0.1:
+			lo = minf(lo, buf.c[i].r)
+		elif buf.v[i].y > 0.9:
+			hi = maxf(hi, buf.c[i].r)
+	check(lo < 0.55 and hi > 0.95,
+		"AO por vertice: base escurece e topo fica inteiro (%.2f / %.2f)" % [lo, hi])
+
+
+## B-80: o setor entrega os props como GEOMETRIA (nao mais como lista de cubos),
+## e o orcamento do setor inteiro tem de continuar de pe. Este teste e a rede de
+## seguranca do que roda no iPhone: 9 setores em cena ao mesmo tempo.
+func _test_prop_sector_budget() -> void:
+	var full := CityGen.generate(3, 0, 20260922, CityGen.LOD_FULL)
+	var far := CityGen.generate(3, 0, 20260922, CityGen.LOD_FAR)
+	check(full.size() >= 34, "setor traz props e areia molhada (%d arrays)" % full.size())
+	if full.size() < 34:
+		return
+	var pv: PackedVector3Array = full[25]
+	var pn: PackedVector3Array = full[26]
+	var pc: PackedColorArray = full[27]
+	var gv: PackedVector3Array = full[28]
+	print("  info: props do setor = %d vertices (%d tris), %d de luz, %d defs" % [
+		pv.size(), int(pv.size() / 3), gv.size(), (full[4] as Array).size()])
+	check(pv.size() > 6000, "setor tem geometria de props (%d vertices)" % pv.size())
+	# Teto de triangulos: ~130k vertices = 43k tris por setor. Com 4 setores em
+	# cena isso e o que separa "cidade detalhada" de "jogo que trava".
+	check(pv.size() < 130000, "props do setor abaixo do teto (%d vertices)" % pv.size())
+	check(pn.size() == pv.size() and pc.size() == pv.size(),
+		"props com 1 normal e 1 cor por vertice")
+	check(gv.size() > 0, "setor tem luminarias emissivas (%d vertices)" % gv.size())
+	# LOD far nao tem props: e detalhe de perto e custa vertices que o anel
+	# distante nao precisa (o mesmo criterio de postes e arvores de calcada).
+	check((far[25] as PackedVector3Array).is_empty(), "LOD far sem geometria de props")
+	# Areia molhada: existe na praia e nao no mar.
+	check((full[31] as PackedVector3Array).size() > 0,
+		"areia molhada na faixa do mar (%d vertices)" % (full[31] as PackedVector3Array).size())
+	var sea := CityGen.generate(3, -1, 20260922, CityGen.LOD_FULL)
+	check((sea[31] as PackedVector3Array).is_empty(), "mar sem areia molhada")
+
+
+## B-81: a fachada deixou de ser so o prisma com a textura. Varanda (laje +
+## guarda-corpo) e embasamento de pedra entram no buffer de cor por vertice, so
+## no LOD full — de longe o predio continua o bloco liso. Este teste confere que
+## as duas cores chegam ao setor e que NAO vazam para o LOD far.
+func _test_facade_details() -> void:
+	var full := CityGen.generate(3, 0, 20260922, CityGen.LOD_FULL)
+	var far := CityGen.generate(3, 0, 20260922, CityGen.LOD_FAR)
+	var slab := 0
+	var plinth := 0
+	for c in (full[2] as PackedColorArray):
+		if c.is_equal_approx(CityGen.BALCONY_SLAB):
+			slab += 1
+		elif c.is_equal_approx(CityGen.PLINTH):
+			plinth += 1
+	check(slab > 0, "fachada com varanda na cor da laje (%d vertices)" % slab)
+	check(plinth > 0, "predio assentado em embasamento (%d vertices)" % plinth)
+	var far_detail := 0
+	for c in (far[2] as PackedColorArray):
+		if c.is_equal_approx(CityGen.BALCONY_SLAB) or c.is_equal_approx(CityGen.PLINTH):
+			far_detail += 1
+	check(far_detail == 0, "varanda e embasamento so no LOD full (far: %d)" % far_detail)
 
 
 ## Quadros a 60 Hz ate o carro parar freando, para comparar pisos (B-67).
@@ -1882,6 +2043,7 @@ func _test_scripts_compile() -> void:
 		"res://scripts/physics/prop_field.gd",
 		"res://scripts/world/city_gen.gd",
 		"res://scripts/world/prop_factory.gd",
+		"res://scripts/world/prop_mesh.gd",
 		"res://scripts/world/model_prop.gd",
 		"res://scripts/audio/vehicle_audio.gd",
 		"res://scripts/world/traffic.gd",
@@ -1984,3 +2146,141 @@ func _test_sectors() -> void:
 	check(not Cfg.sector_in_bounds(Vector2i(99, 0)), "setor (99,0) invalido")
 	var km2 := (Cfg.WORLD_MAX.x - Cfg.WORLD_MIN.x) * (Cfg.WORLD_MAX.y - Cfg.WORLD_MIN.y) / 1_000_000.0
 	print("  info: fatia jogavel da Fase 1 = %.1f km2 (alvo do mundo completo: 83 km2)" % km2)
+
+
+# --- GTA: procurado, bairro, missoes, policia, radar e HUD --------------------
+# Tudo o que o jogador sente como "justo" ou nao (o nivel de procurado, a
+# chegada de uma missao, o recorte do radar) e puro e verificado aqui, sem GPU.
+
+func _test_wanted() -> void:
+	check(Wanted.stars(0.0) == 0, "sem calor = sem estrela")
+	check(Wanted.stars(1.0) == 1, "calor 1,0 = 1 estrela")
+	check(Wanted.stars(0.4) == 1, "calor 0,4 ja acende 1 estrela (arredonda para cima)")
+	check(Wanted.stars(2.1) == 3, "calor 2,1 = 3 estrelas")
+	check(Wanted.stars(9.0) == Wanted.MAX_STARS, "calor acima do teto para em 5 estrelas")
+	check(is_equal_approx(Wanted.add(0.0, "tiro"), Wanted.crime_heat("tiro")),
+		"o calor do tiro vem da tabela de crimes")
+	check(Wanted.stars(Wanted.add(0.0, "tiro")) >= 1, "o primeiro crime ja acende estrela")
+	check(Wanted.stars(Wanted.add(0.0, "tiro")) >= 2, "um tiro em policial acende mais de uma")
+	check(is_equal_approx(Wanted.add(4.9, "policial_morto"), 5.0),
+		"calor satura em 5 (nao passa do teto)")
+	check(Wanted.decay(1.0, 0.0, false) == 1.0, "sem tempo nao esfria")
+	check(Wanted.decay(1.0, 10.0, true) == 1.0, "visto pela policia nao esfria")
+	check(Wanted.decay(1.0, 1.0, false) < 1.0, "fora de vista esfria")
+	check(Wanted.decay(0.5, 100.0, false) == 0.0, "calor nunca fica negativo")
+	check(Wanted.decay_rate(5) < Wanted.decay_rate(1), "5 estrelas esfria mais devagar que 1")
+	check(Wanted.cop_count(0) == 0 and Wanted.cop_count(3) == 3,
+		"viaturas acompanham as estrelas")
+	check(Wanted.cop_count(99) == Wanted.MAX_COPS, "viaturas tem teto")
+	check(Wanted.cop_speed(5) > Wanted.cop_speed(1), "5 estrelas persegue mais rapido")
+	check(Wanted.busted_fine(1000) == 200, "multa de ser preso = 20%")
+	check(Wanted.busted_fine(-10) == 0, "multa nunca e negativa")
+	check(Wanted.wanted_line(0) == "", "sem estrela nao anuncia procurado")
+	check(Wanted.wanted_line(1).contains("1"), "uma estrela aparece no texto")
+
+
+func _test_ipanema() -> void:
+	var street := Ipanema.street_at(1728.0, 288.0)
+	check(not street.is_empty(), "rua identificada numa linha da grade (%s)" % street)
+	check(Ipanema.street_at(1728.0, 288.0) == Ipanema.street_at(1728.0, 310.0),
+		"a mesma rua vale ao longo da quadra")
+	check(Ipanema.street_at(1700.0, 500.0) == Ipanema.street_at(1700.0, 500.0),
+		"nome de rua e deterministico")
+	check(Ipanema.district_at(1600.0, 60.0) == "Praia de Ipanema",
+		"ao sul da Avenida Atlantica e praia")
+	check(Ipanema.district_at(2600.0, 200.0) == "Arpoador", "o leste e o Arpoador")
+	check(Ipanema.place("posto9") != Vector3.ZERO, "ponto do bairro resolvido em metros")
+	check(Ipanema.place("nao_existe") == Vector3.ZERO, "ponto desconhecido = origem")
+	check(is_equal_approx(Ipanema.place("posto9").y, Cfg.surface_at(1632.0, 96.0)),
+		"ponto do bairro apoiado no chao analitico")
+	check(Ipanema.nearest_place(Ipanema.place("osorio")) == "osorio",
+		"ponto mais proximo encontrado")
+	check(Ipanema.location_line(1728.0, 288.0).contains("\n"),
+		"localizacao traz bairro e rua")
+
+
+func _test_missions() -> void:
+	check(Missions.count() >= 3, "%d missoes no roteiro" % Missions.count())
+	var m := Missions.mission_at(0)
+	check(not m.is_empty(), "missao 0 existe")
+	check(not Missions.title_of(m).is_empty(), "missao tem titulo")
+	check(Missions.step_count(m) > 0, "missao tem passos")
+	var first := Missions.mission_at(0)
+	var after := Missions.mission_at(Missions.count())
+	check(String(after.get("id", "")) == String(first.get("id", "")),
+		"o roteiro volta ao comeco depois da ultima missao")
+	check(Missions.giver_pos(m) != Vector3.ZERO, "ponto de inicio da missao no mundo")
+	var got_goto := false
+	for i in Missions.step_count(m):
+		var st := Missions.step_at(m, i)
+		if Missions.step_kind(st) == "goto":
+			got_goto = true
+			check(Missions.has_target(st), "passo goto tem alvo")
+			check(Missions.step_pos(st) != Vector3.ZERO, "alvo do passo existe no mapa")
+			check(Missions.step_radius(st) > 2.0, "passo tem raio de chegada")
+			check(not Missions.objective_text(m, i).is_empty(), "passo tem objetivo escrito")
+	check(got_goto, "missao com passo de deslocamento")
+	check(Missions.step_at(m, 99).is_empty(), "passo fora do roteiro e vazio")
+	check(Missions.reward_of(m) > 0, "missao paga")
+
+
+func _test_police_pure() -> void:
+	var mesh := Police.cop_mesh()
+	check(mesh != null and mesh.get_surface_count() == 1,
+		"malha da viatura assada em UMA superficie (1 desenho)")
+	var verts := 0
+	if mesh != null and mesh.get_surface_count() > 0:
+		var arr: Array = mesh.surface_get_arrays(0)
+		var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		verts = v.size()
+	check(verts > 100 and verts < 1500, "viatura com %d vertices (barata)" % verts)
+
+
+func _test_radar() -> void:
+	var east := Radar.project(Vector2(10.0, 0.0), 0.0, 1.0)
+	check(east.is_equal_approx(Vector2(10.0, 0.0)), "yaw 0: leste fica a direita do radar")
+	var front := Radar.project(Vector2(0.0, -10.0), 0.0, 1.0)
+	check(front.y < 0.0, "yaw 0: o que esta a frente (-Z) sobe no radar")
+	var seg := Radar.clip_segment(Vector2(-500.0, 0.0), Vector2(500.0, 0.0), 100.0)
+	check(seg.size() == 2, "rua que cruza o radar e recortada em 2 pontos")
+	if seg.size() == 2:
+		check(seg[0].is_equal_approx(Vector2(-100.0, 0.0)) and
+			seg[1].is_equal_approx(Vector2(100.0, 0.0)),
+			"o recorte cai exatamente na borda do circulo")
+	check(Radar.clip_segment(Vector2(-500.0, 300.0), Vector2(500.0, 300.0), 100.0).is_empty(),
+		"rua fora do circulo nao desenha")
+	var poly := Radar.disc_below(0.0, 100.0)
+	check(poly.size() > 10, "faixa do mar tem contorno (%d pontos)" % poly.size())
+	var inside := true
+	for p in poly:
+		if p.length() > 100.5:
+			inside = false
+	check(inside, "faixa do mar nunca vaza do radar")
+	check(Radar.disc_below(-200.0, 100.0).is_empty(), "faixa acima do circulo e vazia")
+	check(Radar.disc_below(200.0, 100.0).size() >= 40,
+		"faixa que cobre tudo devolve o circulo inteiro")
+
+
+func _test_gta_hud_pure() -> void:
+	check(GtaHud.money_text(0) == "0", "dinheiro zero")
+	check(GtaHud.money_text(1500) == "1.500", "milhar com ponto")
+	check(GtaHud.money_text(1234567) == "1.234.567", "milhoes com pontos")
+	check(GtaHud.money_text(-2500) == "-2.500", "dinheiro negativo")
+	var pts := GtaHud.star_points(Vector2.ZERO, 10.0, 4.0)
+	check(pts.size() == 10, "estrela com 10 vertices")
+	var fits := true
+	for p in pts:
+		if p.length() > 10.5:
+			fits = false
+	check(fits, "estrela cabe no raio externo")
+
+
+func _test_player_combat() -> void:
+	check(Player.WEAPONS.has("punho") and Player.WEAPONS.has("pistola"),
+		"punho e pistola cadastrados")
+	var fist: Dictionary = Player.WEAPONS["punho"]
+	var gun: Dictionary = Player.WEAPONS["pistola"]
+	check(float(gun["range"]) > float(fist["range"]), "a pistola alcanca mais que o punho")
+	check(float(gun["damage"]) > float(fist["damage"]), "a pistola machuca mais")
+	check(bool(gun["ammo"]) and not bool(fist["ammo"]), "so a pistola gasta municao")
+	check(float(fist["cool"]) > float(gun["cool"]), "o punho tem mais espera entre golpes")

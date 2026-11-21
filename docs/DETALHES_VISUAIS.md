@@ -2,8 +2,13 @@
 
 Pesquisa e plano (Fase 1.5) para deixar o mundo atual bonito e realista,
 mantendo: custo zero, licenças livres, renderer Compatibility e alvo
-iPhone 12 (Safari / WebGL2). Nada aqui foi implementado ainda — este
-documento é o insumo da implementação.
+iPhone 12 (Safari / WebGL2).
+
+ESTADO (B-80/B-81): os passos A, B (procedural) e C (texturas) foram feitos em
+código — ambiente com ACES/glow/nevoeira, água com normais de onda, sombra de
+contato, props com malha própria, fachada com varanda e embasamento, chão com
+normal map de grão gerado em código. O que continua aberto é o Passo D
+(impostores e HDRI) e a medição de FPS no aparelho.
 
 ## Restrições duras (doc oficial do Godot 4.4, renderer Compatibility)
 

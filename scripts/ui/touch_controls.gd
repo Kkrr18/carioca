@@ -33,14 +33,23 @@ static var sprint_held_s := false
 static var pedal_gas_s := false
 static var pedal_brake_s := false
 static var car_press_s := false
+static var fire_press_s := false
+static var fire_held_s := false
+static var weapon_press_s := false
 
 var _stick_index := NONE
 var _stick_origin := Vector2.ZERO
 var _look_index := NONE
 var _jump_index := NONE
 var _sprint_index := NONE
+var _fire_index := NONE
+var _weapon_index := NONE
 var _jump_pos := Vector2.ZERO
 var _sprint_pos := Vector2.ZERO
+var _fire_pos := Vector2.ZERO
+var _weapon_pos := Vector2.ZERO
+## A arma equipada (o main avisa): o botao muda de BATER para ATIRAR.
+var armed := false
 var _font: Font = null
 var _driving := false
 var car_available := false
@@ -68,6 +77,9 @@ func _layout_buttons() -> void:
 	_sprint_pos = Vector2(vs.x - 196.0 * _ui, vs.y - 64.0 * _ui)
 	# Botao ENTRAR/SAIR do carro: acima dos pedais, no lado direito.
 	_car_pos = Vector2(vs.x - 86.0 * _ui, vs.y - 240.0 * _ui)
+	# Combate (so a pe): BATER/ATIRAR e TROCAR de arma.
+	_fire_pos = Vector2(vs.x - 186.0 * _ui, vs.y - 176.0 * _ui)
+	_weapon_pos = Vector2(vs.x - 292.0 * _ui, vs.y - 110.0 * _ui)
 
 
 func _notification(what: int) -> void:
@@ -123,6 +135,33 @@ static func take_car_press() -> bool:
 	return out
 
 
+## Consome o toque de BATER/ATIRAR.
+static func take_fire_press() -> bool:
+	var out := fire_press_s
+	fire_press_s = false
+	return out
+
+
+## Dedo segurando o botao de fogo (tiro automatico enquanto segura).
+static func fire_held() -> bool:
+	return fire_held_s
+
+
+## Consome o toque de TROCAR de arma.
+static func take_weapon_press() -> bool:
+	var out := weapon_press_s
+	weapon_press_s = false
+	return out
+
+
+## O main avisa qual arma esta na mao (muda o rotulo do botao).
+func set_armed(on: bool) -> void:
+	if armed == on:
+		return
+	armed = on
+	queue_redraw()
+
+
 ## O main avisa se o carro esta ao alcance e se o jogador esta dirigindo.
 ## Este botao vive aqui, e nao no HUD, porque no iPhone o toque em Button do
 ## Godot nao chegava ao jogo (B-38) — ja o toque tratado pelo TouchControls,
@@ -151,8 +190,13 @@ func set_driving(on: bool) -> void:
 	sprint_held_s = false
 	pedal_gas_s = false
 	pedal_brake_s = false
+	fire_press_s = false
+	fire_held_s = false
+	weapon_press_s = false
 	_jump_index = NONE
 	_sprint_index = NONE
+	_fire_index = NONE
+	_weapon_index = NONE
 	queue_redraw()
 
 
@@ -199,6 +243,13 @@ func _touch(index: int, pos: Vector2, pressed: bool) -> void:
 		elif index == _car_index:
 			_car_index = NONE
 			queue_redraw()
+		elif index == _fire_index:
+			_fire_index = NONE
+			fire_held_s = false
+			queue_redraw()
+		elif index == _weapon_index:
+			_weapon_index = NONE
+			queue_redraw()
 		return
 
 	var vs := get_viewport_rect().size
@@ -208,6 +259,20 @@ func _touch(index: int, pos: Vector2, pressed: bool) -> void:
 	if car_available and pos.distance_to(_car_pos) < _radius * 1.5:
 		_car_index = index
 		car_press_s = true
+		queue_redraw()
+		return
+
+	# Combate a pe: BATER/ATIRAR e TROCAR. Lidos ANTES de PULAR/CORRER para um
+	# dedo entre os dois nunca virar pulo por engano.
+	if not _driving and pos.distance_to(_fire_pos) < _radius * 1.4:
+		_fire_index = index
+		fire_held_s = true
+		fire_press_s = true
+		queue_redraw()
+		return
+	if not _driving and pos.distance_to(_weapon_pos) < _radius * 1.3:
+		_weapon_index = index
+		weapon_press_s = true
 		queue_redraw()
 		return
 
@@ -273,6 +338,9 @@ func _draw() -> void:
 	else:
 		_draw_button(_jump_pos, "PULAR", Color(0.95, 0.55, 0.25, 0.55), jump_held_s)
 		_draw_button(_sprint_pos, "CORRER", Color(0.35, 0.62, 0.90, 0.50), sprint_held_s)
+		_draw_button(_fire_pos, "ATIRAR" if armed else "BATER",
+			Color(0.95, 0.32, 0.28, 0.55), fire_held_s)
+		_draw_button(_weapon_pos, "TROCAR", Color(0.62, 0.62, 0.68, 0.42), false)
 
 
 func _draw_button(center: Vector2, label: String, col: Color, active: bool) -> void:

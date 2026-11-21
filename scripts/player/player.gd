@@ -34,6 +34,20 @@ const SHIRT_COL := Color(0.92, 0.45, 0.25)
 const PANTS_COL := Color(0.19, 0.27, 0.46)
 const HAIR_COL := Color(0.09, 0.08, 0.08)
 
+# --- Combate, vida e dinheiro (o "jogo" do GTA) ------------------------------
+const MAX_HEALTH := 100.0
+const MAX_ARMOR := 100.0
+const START_MONEY := 350
+
+## Ficha das armas. `range` em metros, `cone` em radianos (abertura do tiro),
+## `cool` em segundos entre golpes.
+const WEAPONS := {
+	"punho": {"label": "PUNHO", "range": 2.6, "cone": 1.0, "damage": 34.0,
+		"ammo": false, "cool": 0.42},
+	"pistola": {"label": "PISTOLA", "range": 46.0, "cone": 0.17, "damage": 100.0,
+		"ammo": true, "cool": 0.24},
+}
+
 # --- Cabeca 3D (B-77) ---------------------------------------------------------
 ## Cabeca de verdade no lugar da cabeca lisa do corpo CC0. O modelo e a cabeca
 ## escaneada de Lee Perry-Smith (CC-BY 3.0, ver data/ATTRIBUTION.md), baixada do
@@ -65,6 +79,22 @@ var invert_look_y := false
 
 var spawn_position := Vector3(1600.0, 0.0, 100.0)
 var enabled := true
+
+## Vida e colete: o colete absorve 75% do dano ate acabar (como no GTA).
+signal damaged(amount: float)
+signal died()
+
+var health := MAX_HEALTH
+var max_health := MAX_HEALTH
+var armor := 0.0
+var money := START_MONEY
+var weapon := "punho"
+var ammo := 0
+
+var _cool := 0.0
+var _push := Vector3.ZERO
+var _muzzle: MeshInstance3D
+var _muzzle_t := 0.0
 
 var _vy := 0.0
 var _grounded := false
@@ -400,6 +430,11 @@ func _input(event: InputEvent) -> void:
 func _physics_process(delta: float) -> void:
 	if not enabled:
 		return
+	_cool = maxf(0.0, _cool - delta)
+	if _muzzle_t > 0.0:
+		_muzzle_t -= delta
+		if _muzzle_t <= 0.0 and _muzzle != null:
+			_muzzle.visible = false
 
 	# --- Camera: arrasto do toque na direita + setas no desktop.
 	var look := TouchControls.consume_look()
@@ -443,6 +478,9 @@ func _physics_process(delta: float) -> void:
 	var target := wish * target_speed
 	var accel := ACCEL if _grounded else AIR_ACCEL
 	var hv := Vector2(velocity.x, velocity.z).move_toward(Vector2(target.x, target.z), accel * delta)
+	# Empurrao externo (viatura encostando no jogador a pe): some sozinho.
+	hv += Vector2(_push.x, _push.z)
+	_push = _push.move_toward(Vector3.ZERO, 14.0 * delta)
 
 	# --- Pulo / voo (botao PULAR; segurar mantem no ar como "asas" de debug).
 	if TouchControls.jump_pressed() or Input.is_key_pressed(KEY_SPACE):
@@ -599,6 +637,134 @@ func _update_camera(delta: float) -> void:
 	camera.look_at(head + Vector3(0, 0.15, 0), Vector3.UP)
 
 
+# --- Combate, vida e dinheiro -------------------------------------------------
+
+func alive() -> bool:
+	return health > 0.0
+
+
+## Dano recebido. O colete absorve 75% ate acabar; o resto vai na vida. O sinal
+## `damaged` faz a tela piscar vermelho; `died` dispara o WASTED no main.
+func add_damage(amount: float) -> void:
+	if amount <= 0.0 or health <= 0.0:
+		return
+	var left := amount
+	if armor > 0.0:
+		var absorbed := minf(armor, left * 0.75)
+		armor = maxf(0.0, armor - absorbed)
+		left -= absorbed
+	health = maxf(0.0, health - left)
+	damaged.emit(amount)
+	if health <= 0.0:
+		died.emit()
+
+
+func revive(hp: float = MAX_HEALTH) -> void:
+	health = clampf(hp, 1.0, MAX_HEALTH)
+	armor = 0.0
+	_cool = 0.0
+	_push = Vector3.ZERO
+
+
+func heal(amount: float) -> void:
+	health = clampf(health + maxf(0.0, amount), 0.0, MAX_HEALTH)
+
+
+func add_armor(amount: float) -> void:
+	armor = clampf(armor + maxf(0.0, amount), 0.0, MAX_ARMOR)
+
+
+func add_money(amount: int) -> void:
+	money = maxi(0, money + amount)
+
+
+## Dados da arma equipada. Nunca vazio: cai no punho.
+func weapon_data() -> Dictionary:
+	if weapon == "pistola":
+		return WEAPONS["pistola"]
+	return WEAPONS["punho"]
+
+
+func weapon_label() -> String:
+	return String(weapon_data()["label"])
+
+
+func armed() -> bool:
+	return weapon == "pistola"
+
+
+## Troca punho <-> pistola (botao TROCAR). A pistola entra com um carregador
+## cheio (12 balas) quando a municao estava zerada.
+func swap_weapon() -> void:
+	if weapon == "pistola":
+		weapon = "punho"
+	else:
+		weapon = "pistola"
+		if ammo <= 0:
+			ammo = 12
+
+
+func can_fire() -> bool:
+	if _cool > 0.0:
+		return false
+	if armed() and ammo <= 0:
+		return false
+	return true
+
+
+## Direcao da mira: a da CAMERA no plano XZ, nao a do corpo. No celular o
+## jogador mira com a camera; o corpo acompanha no disparo.
+func aim_dir() -> Vector3:
+	return Vector3(-sin(cam_yaw), 0.0, -cos(cam_yaw))
+
+
+func face_dir(d: Vector3) -> void:
+	if d.length() > 0.01 and avatar != null:
+		avatar.rotation.y = atan2(d.x, d.z)
+
+
+## Gasta o golpe: cooldown, municao, giro do corpo e clarao da boca do cano.
+func consume_fire() -> void:
+	_cool = maxf(0.08, float(weapon_data()["cool"]))
+	if armed():
+		ammo = maxi(0, ammo - 1)
+	face_dir(aim_dir())
+	flash_muzzle()
+
+
+func flash_muzzle() -> void:
+	if _muzzle == null:
+		_muzzle = MeshInstance3D.new()
+		_muzzle.name = "Muzzle"
+		var sph := SphereMesh.new()
+		sph.radius = 0.15
+		sph.height = 0.30
+		sph.radial_segments = 8
+		sph.rings = 4
+		_muzzle.mesh = sph
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.albedo_color = Color(1.0, 0.86, 0.40)
+		m.emission_enabled = true
+		m.emission = Color(1.0, 0.80, 0.30)
+		m.emission_energy_multiplier = 4.0
+		_muzzle.material_override = m
+		_muzzle.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_muzzle.top_level = true
+		add_child(_muzzle)
+	_muzzle.visible = true
+	_muzzle.global_position = global_position + Vector3(0.0, 1.25, 0.0) + aim_dir() * 0.8
+	_muzzle_t = 0.07
+
+
+## Empurrao externo (a viatura encostou). Curto de proposito: tira o jogador
+## do lugar sem jogar ele longe.
+func push(dir: Vector3) -> void:
+	if dir.length() < 0.01:
+		return
+	_push += Vector3(dir.x, 0.0, dir.z).normalized() * 4.5
+
+
 func teleport(pos: Vector3) -> void:
 	position = Vector3(pos.x, Cfg.surface_at(pos.x, pos.z) + 0.05, pos.z)
 	_vy = 0.0
@@ -607,13 +773,19 @@ func teleport(pos: Vector3) -> void:
 	_update_camera(0.0)
 
 
-## Estado para o save (schema 1).
+## Estado para o save (schema 1). Os campos novos sao opcionais na leitura, para
+## um save antigo continuar valendo.
 func state() -> Dictionary:
 	return {
 		"pos": [position.x, position.y, position.z],
 		"yaw": avatar.rotation.y,
 		"cam_yaw": cam_yaw,
 		"cam_pitch": cam_pitch,
+		"health": health,
+		"armor": armor,
+		"money": money,
+		"weapon": weapon,
+		"ammo": ammo,
 	}
 
 
@@ -623,6 +795,11 @@ func restore(data: Dictionary) -> void:
 	avatar.rotation.y = float(data.get("yaw", 0.0))
 	cam_yaw = float(data.get("cam_yaw", 0.0))
 	cam_pitch = float(data.get("cam_pitch", -0.28))
+	health = clampf(float(data.get("health", MAX_HEALTH)), 1.0, MAX_HEALTH)
+	armor = clampf(float(data.get("armor", 0.0)), 0.0, MAX_ARMOR)
+	money = maxi(0, int(data.get("money", START_MONEY)))
+	weapon = String(data.get("weapon", "punho"))
+	ammo = maxi(0, int(data.get("ammo", 0)))
 	_update_camera(0.0)
 
 

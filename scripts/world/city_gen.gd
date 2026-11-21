@@ -4,7 +4,8 @@ extends RefCounted
 ## Sem estado global e sem aleatoriedade do motor: o mesmo (seed, setor, LOD)
 ## gera sempre os mesmos vertices. Roda em WorkerThreadPool (so arrays, sem nos).
 ##
-## Retorno de generate(): 24 arrays, nesta ordem:
+## Retorno de generate(): 34 arrays, nesta ordem (os indices sao contrato com o
+## SectorStreamer e com tests/runner.gd — acrescente SEMPRE no fim):
 ##   0..2  vertices/normais/cores da cidade (chao, pintura, meio-fio, toldos)
 ##   3     colisores (Array de Rect2)
 ##   4     defs (Array de Dictionary com props)
@@ -14,6 +15,10 @@ extends RefCounted
 ##   14..16 areia texturada (vertices/normais/UV)
 ##   17..19 calcadao texturado (vertices/normais/UV)
 ##   20..23 fachada dos predios (vertices/normais/UV/cores) — surface com emissao
+##   24    lojas do setor (balconista, entrada e nome)
+##   25..27 props com geometria de verdade (vertices/normais/cores) — B-80
+##   28..30 props que acendem a noite (luminarias de rua)
+##   31..33 areia molhada da faixa do mar (vertices/normais/UV)
 ## As superficies texturadas existem porque textura e material sao por
 ## superficie: rua, calcada, areia e calcadao tem textura CC0 propria (Fase 4,
 ## premissa de realismo), o resto da cidade continua com cor por vertice.
@@ -21,6 +26,7 @@ extends RefCounted
 ## frente e -(b-a)x(d-a), que coincide com a normal salva.
 
 const Cfg = preload("res://scripts/core/cfg.gd")
+const PropMesh = preload("res://scripts/world/prop_mesh.gd")
 
 const LOD_FULL := 0
 const LOD_FAR := 1
@@ -56,6 +62,16 @@ const FACADE_H := 12.0
 ## Canto liso da textura de fachada: usado nas faces de topo e base, para o
 ## telhado nao ganhar janela.
 const FLAT_UV := Vector2(0.02, 0.02)
+
+## Platibanda (B-80): a faixa de concreto que coroa a laje. Sem ela o predio
+## termina num corte seco de papelao e o ceu parece entrar por cima do bloco.
+const PARAPET := 0.45
+const PARAPET_W := 0.22
+## Areia que o mar lava (B-80): vai para um material proprio, mais escuro e com
+## brilho de areia molhada. Na praia idealizada a altura zero cai em z = 32,
+## entao a faixa molhada e a celula de terreno de 32 a 64 m.
+const WET_Z0 := 32.0
+const WET_Z1 := 64.0
 
 const SAND := Color(0.86, 0.79, 0.64)
 const SAND_WET := Color(0.70, 0.65, 0.55)
@@ -109,6 +125,20 @@ const AWNINGS := [
 	Color(0.20, 0.46, 0.30), Color(0.86, 0.62, 0.16),
 ]
 
+## Embasamento (B-81): faixa de pedra no pe do predio, do nivel da rua para
+## cima. E o que assenta o bloco no chao — sem ela o predio nasce direto do
+## asfalto, como um cubo apoiado.
+const PLINTH := Color(0.42, 0.41, 0.38)
+const PLINTH_H := 1.05
+
+## Varandas (B-81): laje + guarda-corpo na fachada que olha para a rua. E o
+## detalhe que faz o predio de Ipanema parecer de Ipanema: sem ele, so sobra
+## um retangulo de janelas.
+const BALCONY_SLAB := Color(0.84, 0.83, 0.79)
+const BALCONY_RAIL := Color(0.26, 0.28, 0.30)
+const BALCONY_CHANCE := 0.55
+const BALCONY_REACH := 1.05
+
 # Faces do cubo: [normal para fora, tangente ya, tangente za], com za x ya = normal.
 const CUBE_FACES := [
 	[Vector3(0, 1, 0), Vector3(0, 0, -1), Vector3(1, 0, 0)],
@@ -132,8 +162,13 @@ static func generate(sx: int, sz: int, world_seed: int, lod: int) -> Array:
 	var road := TBuf.new(ROAD_TILE)
 	var walk := TBuf.new(WALK_TILE)
 	var sand := TBuf.new(SAND_TILE)
+	var wet := TBuf.new(SAND_TILE)
 	var calcadao := TBuf.new(CALCADAO_TILE)
 	var bld := TBuf.new(FACADE_W, FACADE_H)
+	# Props com geometria de verdade (B-80): o solido e o que acende a noite.
+	var props := PropMesh.MBuf.new()
+	var glow := PropMesh.MBuf.new()
+	var prop_cache: Dictionary = {}
 	var defs: Array = []
 	var colliders: Array = []
 	var shops: Array = []     # lojas do setor (balconista + nome na tela), B-66
@@ -141,7 +176,7 @@ static func generate(sx: int, sz: int, world_seed: int, lod: int) -> Array:
 	var oz := float(sz) * Cfg.SECTOR_SIZE
 	var s := Cfg.SECTOR_SIZE
 
-	_ground(gb, sand, ox, oz)
+	_ground(gb, sand, wet, ox, oz)
 	if sz == 0:
 		_beach(walk, road, calcadao, defs, ox, lod)
 
@@ -157,10 +192,53 @@ static func generate(sx: int, sz: int, world_seed: int, lod: int) -> Array:
 			_block(gb, win, walk, road, calcadao, bld, defs, colliders, shops, float(i) * BLOCK,
 					z_axis, world_seed, i, j, lod)
 
+	# Props: os defs (que continuam sendo os DADOS do que existe no setor) viram
+	# geometria aqui, ainda na worker thread — a malha de cada tipo e construida
+	# uma vez e instanciada por transformacao (ver PropMesh).
+	_props_geometry(props, glow, prop_cache, defs)
+
 	return [gb.v, gb.n, gb.c, colliders, defs, win.v, win.n, win.c,
 			road.v, road.n, road.uv, walk.v, walk.n, walk.uv, sand.v, sand.n, sand.uv,
 			calcadao.v, calcadao.n, calcadao.uv,
-			bld.v, bld.n, bld.uv, bld.col, shops]
+			bld.v, bld.n, bld.uv, bld.col, shops,
+			props.v, props.n, props.c, glow.v, glow.n, glow.c,
+			wet.v, wet.n, wet.uv]
+
+
+# --- Props (defs -> geometria) -----------------------------------------------
+
+## Transforma os defs do setor na geometria dos props. Puro e deterministico:
+## a mesma lista de defs gera sempre os mesmos vertices.
+##
+## A malha de cada tipo e construida UMA vez por (tipo, altura, tom) e cacheada
+## no proprio setor — 256 postes iguais custam uma construcao e 256 copias com
+## transformacao, que e o que faz isto caber na thread.
+static func _props_geometry(props, glow, cache: Dictionary, defs: Array) -> void:
+	for d in defs:
+		var dd: Dictionary = d
+		var kind := String(dd.get("kind", "tree"))
+		var h := float(dd.get("h", 6.0))
+		var hue := float(dd.get("hue", 0.5))
+		var key := "%s|%.1f|%d" % [kind, h, int(hue * 4.0)]
+		var tpl: Dictionary = cache.get(key, {})
+		if tpl.is_empty():
+			tpl = PropMesh.build(kind, h, hue)
+			if tpl.is_empty():
+				# Tipo sem malha (ex.: "carro_top", que virou parte do carro):
+				# guarda o vazio para nao tentar construir de novo.
+				cache[key] = {"solid": null, "glow": null}
+				continue
+			cache[key] = tpl
+		var solid = tpl.get("solid")
+		if solid == null:
+			continue
+		var c: Vector3 = dd["c"]
+		var rot := float(dd.get("rot", 0.0))
+		var xf := Transform3D(Basis(Vector3.UP, rot), c)
+		props.add(solid, xf)
+		var lit = tpl.get("glow")
+		if lit != null and not lit.is_empty():
+			glow.add(lit, xf)
 
 
 # --- Terreno -----------------------------------------------------------------
@@ -176,7 +254,7 @@ static func ground_color(x: float, z: float) -> Color:
 	return WALK_COL
 
 
-static func _ground(gb: GBuf, sand: TBuf, ox: float, oz: float) -> void:
+static func _ground(gb: GBuf, sand: TBuf, wet: TBuf, ox: float, oz: float) -> void:
 	var cells := int(Cfg.SECTOR_SIZE / Cfg.CELL_SIZE)
 	for cx in cells:
 		for cz in cells:
@@ -192,7 +270,13 @@ static func _ground(gb: GBuf, sand: TBuf, ox: float, oz: float) -> void:
 			var zmid := z0 + Cfg.CELL_SIZE * 0.5
 			if zmid >= 0.0 and zmid < Cfg.BEACH_EDGE_Z:
 				# Praia: textura de areia (e o chao que o jogador ve de perto).
-				sand.quad(a, b, c, d, Vector3.UP)
+				# A celula que o mar lava vai para a areia MOLHADA, com material
+				# proprio (mais escura e com brilho): e a faixa que separa a
+				# praia do mar na tela, e sem ela tudo virava um areial so.
+				if z0 >= WET_Z0 - 0.01 and z1 <= WET_Z1 + 0.01:
+					wet.quad(a, b, c, d, Vector3.UP)
+				else:
+					sand.quad(a, b, c, d, Vector3.UP)
 			else:
 				# Mar, cidade e morros: cor por vertice (SEABED, GRASS, FOREST).
 				_add_quad(gb, a, b, c, d, ground_color(x0 + 16.0, z0 + 16.0))
@@ -224,26 +308,32 @@ static func _beach(walk: TBuf, road: TBuf, calcadao: TBuf, defs: Array, ox: floa
 	var px := ox + 8.0
 	while px < end - 4.0:
 		var py := Cfg.height_at(px, 88.0)
-		# Palmeira = TRONCO + COPA, duas instancias do MESMO MultiMesh (B-52):
-		# uma coluna verde de 7 m nao lia como palmeira, lia como poste verde.
-		defs.append({"c": Vector3(px, py, 88.0), "kind": "palm", "h": 7.0})
-		defs.append({"c": Vector3(px, py, 88.0), "kind": "palm_crown", "h": 7.0, "rot": 0.42})
-		px += 32.0
+		# Palmeira = TRONCO + COPA, duas instancias do mesmo tipo (B-52), e agora
+		# com malha de verdade (B-80/B-81): tronco que afina e inclina, nove folhas
+		# em tres trechos e cacho de cocos. O tronco e a copa se encontram porque
+		# PropMesh.palm_top() e funcao SO da altura — por isso o def da copa nao
+		# tem `rot`, e as duas instancias usam a MESMA altura `ph`.
+		var phue := rng.unit()
+		var ph := rng.range_f(6.4, 9.4)
+		defs.append({"c": Vector3(px, py, 88.0), "kind": "palm", "h": ph, "hue": phue})
+		defs.append({"c": Vector3(px, py, 88.0), "kind": "palm_crown", "h": ph, "hue": phue})
+		px += 24.0
 	# Mobiliario do calçadão: bancos e lixeiras a cada 32 m.
 	var bx := ox + 16.0
 	while bx < end - 4.0:
 		defs.append({"c": Vector3(bx, Cfg.height_at(bx, 118.0), 118.0), "kind": "banco", "h": 0.6})
 		defs.append({"c": Vector3(bx + 8.0, Cfg.height_at(bx + 8.0, 118.0), 118.0), "kind": "lixeira", "h": 1.0})
 		bx += 32.0
-	# Carros estacionados na avenida, com cor variada e deterministicos.
+	# Carros estacionados na avenida, com cor variada e deterministicos. O carro
+	# agora e UMA malha (carroceria, capo, cabine, vidros, farois e rodas): ver
+	# PropMesh._carro.
 	var cx := ox + 9.0
 	while cx < end - 4.0:
-		if rng.chance(0.65):
+		if rng.chance(0.55):
 			var car_z := rng.range_f(100.5, 104.5)
 			var hue := rng.unit()
 			var car_y := Cfg.height_at(cx, car_z)
 			defs.append({"c": Vector3(cx, car_y, car_z), "kind": "carro", "hue": hue})
-			defs.append({"c": Vector3(cx, car_y, car_z), "kind": "carro_top", "hue": hue})
 		cx += 17.0
 	for k in 3:
 		if not rng.chance(0.75):
@@ -251,7 +341,29 @@ static func _beach(walk: TBuf, road: TBuf, calcadao: TBuf, defs: Array, ox: floa
 		var kx := ox + rng.range_f(20.0, Cfg.SECTOR_SIZE - 20.0)
 		var kz := rng.range_f(28.0, 84.0)
 		var kind := "kiosk" if rng.chance(0.5) else "umbrella"
-		defs.append({"c": Vector3(kx, Cfg.height_at(kx, kz), kz), "kind": kind, "hue": rng.unit()})
+		var k_y := Cfg.height_at(kx, kz)
+		defs.append({"c": Vector3(kx, k_y, kz), "kind": kind, "hue": rng.unit(),
+				"rot": rng.range_f(0.0, TAU)})
+		if kind == "umbrella":
+			# Cadeira de praia na sombra do guarda-sol (B-81): a praia cheia de
+			# gente nao tem so guarda-sol, tem onde sentar.
+			for j in 2:
+				var ang := rng.range_f(0.0, TAU)
+				var cx2 := kx + cos(ang) * rng.range_f(1.7, 2.7)
+				var cz2 := kz + sin(ang) * rng.range_f(1.7, 2.7)
+				defs.append({"c": Vector3(cx2, Cfg.height_at(cx2, cz2), cz2),
+						"kind": "cadeira", "hue": rng.unit(),
+						"rot": rng.range_f(0.0, TAU)})
+	# Pedras da arrebentacao (B-81): onde o mar quebra, a areia nao termina numa
+	# linha reta — ela quebra em pedra.
+	var rx := ox + 6.0
+	while rx < end - 4.0:
+		if rng.chance(0.55):
+			var rz := rng.range_f(24.0, 42.0)
+			defs.append({"c": Vector3(rx, Cfg.height_at(rx, rz), rz), "kind": "pedra",
+					"h": rng.range_f(0.8, 1.7), "hue": rng.unit(),
+					"rot": rng.range_f(0.0, TAU)})
+		rx += 26.0
 
 
 # --- Quadras -----------------------------------------------------------------
@@ -271,6 +383,24 @@ static func _block(gb: GBuf, win: GBuf, walk: TBuf, road: TBuf, calcadao: TBuf, 
 	if lod == LOD_FULL:
 		_add_curbs(gb, ax, az, edge)
 
+	# Arvores de calcada (B-80): uma no meio de cada calcada que a quadra
+	# desenha (oeste e sul). Rua arborizada e o que faz Ipanema parecer Ipanema;
+	# antes a rua era um corredor de concreto sem uma sombra de arvore.
+	# O sorteio acontece nos DOIS LODs (o layout nao pode mudar de um para outro).
+	var tree_h := [rng.range_f(6.0, 9.0), rng.range_f(6.0, 9.5)]
+	var tree_hue := [rng.unit(), rng.unit()]
+
+	# Mobiliario novo de calcada (B-81): canteiro, hidrante e placa de rua. Os
+	# SORTEIOS acontecem nos dois LODs (senao o layout do LOD far mudaria de
+	# valor e o predio pularia quando o setor troca de nivel); a geometria so
+	# entra no LOD full.
+	var planter_n := rng.range_i(1, 2)
+	var planter_hue := rng.unit()
+	var hydrant := rng.chance(0.30)
+	var hydrant_hue := rng.unit()
+	var sign_side := rng.chance(0.5)
+	var sign_hue := rng.unit()
+
 	# Postes com luminaria nos cantos da calçada (em qualquer tipo de quadra).
 	if lod == LOD_FULL:
 		for p2 in [
@@ -283,6 +413,34 @@ static func _block(gb: GBuf, win: GBuf, walk: TBuf, road: TBuf, calcadao: TBuf, 
 			var py := Cfg.surface_at(p2.x, p2.y)
 			defs.append({"c": Vector3(p2.x, py, p2.y), "kind": "poste", "h": 5.5})
 			defs.append({"c": Vector3(p2.x, py, p2.y), "kind": "lampadaria", "h": 5.5})
+		var spots := [
+			Vector2(ax + edge + 1.1, az + BLOCK * 0.5),
+			Vector2(ax + BLOCK * 0.5, az + edge + 1.1),
+		]
+		for k in spots.size():
+			var sp: Vector2 = spots[k]
+			var ty := Cfg.surface_at(sp.x, sp.y)
+			var th: float = tree_h[k]
+			var thue: float = tree_hue[k]
+			defs.append({"c": Vector3(sp.x, ty, sp.y), "kind": "tree", "h": th})
+			defs.append({"c": Vector3(sp.x, ty, sp.y), "kind": "tree_crown", "h": th,
+					"hue": thue})
+		# Canteiros na calcada oeste, hidrante e a placa de nome de rua na
+		# esquina (B-81). Sao os tres objetos que fazem uma rua parecer
+		# habitada em vez de um corredor de asfalto.
+		for k in planter_n:
+			var pz := az + 14.0 + float(k) * 30.0
+			defs.append({"c": Vector3(ax + 6.4, Cfg.surface_at(ax + 6.4, pz), pz),
+					"kind": "planta", "h": 1.2, "hue": planter_hue + float(k) * 0.25})
+		if hydrant:
+			var hz := az + BLOCK * 0.62
+			defs.append({"c": Vector3(ax + 5.7, Cfg.surface_at(ax + 5.7, hz), hz),
+					"kind": "hidrante", "h": 1.0, "hue": hydrant_hue})
+		if sign_side:
+			var sx := ax + 5.7
+			var sz := az + 11.0
+			defs.append({"c": Vector3(sx, Cfg.surface_at(sx, sz), sz), "kind": "placa",
+					"h": 3.0, "hue": sign_hue})
 
 	if rng.chance(0.07):
 		_add_flat(gb, ax + 14.0, az + 14.0, ax + BLOCK - 14.0, az + BLOCK - 14.0, PLAZA, PLAZA_LIFT)
@@ -360,6 +518,15 @@ static func _lot(gb: GBuf, win: GBuf, bld: TBuf, defs: Array, colliders: Array, 
 	var roof_hue := rng.unit()
 	var roof_ox := rng.range_f(-1.0, 1.0)
 	var roof_oz := rng.range_f(-1.0, 1.0)
+	# Ar-condicionado de split na fachada (B-80): e o detalhe que mais faz uma
+	# fachada carioca parecer carioca. Sorteado SEMPRE, usado so no LOD full.
+	var ac_n := rng.range_i(0, 2)
+	var ac_pick := rng.unit()
+	var ac_off := rng.range_f(-0.6, 0.6)
+	var ac_hue := rng.unit()
+	# Varandas (B-81): sorteado SEMPRE (o layout nao pode mudar de LOD), usado
+	# so no LOD full e so em predio residencial de quatro andares ou mais.
+	var balcony := rng.chance(BALCONY_CHANCE)
 	# Nivel do passeio (calcada levantada): o toldo, o arbusto e a arvore ficam
 	# nesta altura, nao enterrados no meio-fio.
 	var ground_y := Cfg.surface_at(lx, lz)
@@ -390,6 +557,9 @@ static func _lot(gb: GBuf, win: GBuf, bld: TBuf, defs: Array, colliders: Array, 
 	var bx := lx + off_x
 	var bz := lz + off_z
 	var roof_y := ground_y + float(floors) * 3.0
+	# Platibanda so no LOD full (e detalhe de perto): no anel distante o predio
+	# continua sendo o prisma liso, que e o que se ve a 2 km.
+	var par := PARAPET if lod == LOD_FULL else 0.0
 	# Fundo enterrado: o predio atravessa o relevo (a cidade e suave aqui).
 	var base_y := minf(Cfg.height_at(bx - w * 0.5, bz - d * 0.5),
 			Cfg.height_at(bx + w * 0.5, bz + d * 0.5)) - 2.5
@@ -404,7 +574,7 @@ static func _lot(gb: GBuf, win: GBuf, bld: TBuf, defs: Array, colliders: Array, 
 		# Embasamento de dois/tres andares (loja, garagem) com a planta inteira e
 		# a torre recuada por cima: a silhueta deixa de ser um bloco so.
 		var pod_top := ground_y + (6.3 if floors >= 8 else 4.2)
-		_add_prism_tx(bld, full, base_y, pod_top, base_col, ROOF, skip_edge)
+		_add_prism_tx(bld, full, base_y, pod_top, base_col, ROOF, skip_edge, par)
 		ground_top = pod_top
 		ground_col = base_col
 		roof_w = maxf(6.5, w * tower_f)
@@ -413,20 +583,20 @@ static func _lot(gb: GBuf, win: GBuf, bld: TBuf, defs: Array, colliders: Array, 
 		roof_cz = bz + tower_sz * (d - roof_d) * 0.5
 		var tplan := _plan_rect(roof_cx, roof_cz, roof_w, roof_d,
 				chamfer_corner if chamfered else -1, chamfer_cut)
-		_add_prism_tx(bld, tplan, pod_top, roof_y, col, ROOF)
+		_add_prism_tx(bld, tplan, pod_top, roof_y, col, ROOF, -1, par)
 	elif style == 1 and floors >= 3:
 		# Topo recuado (setback): o ultimo andar (ou dois) entra para dentro.
 		var low_top := maxf(ground_y + 3.0, roof_y - step_floors * 3.0)
-		_add_prism_tx(bld, full, base_y, low_top, col, ROOF, skip_edge)
+		_add_prism_tx(bld, full, base_y, low_top, col, ROOF, skip_edge, par)
 		ground_top = low_top
 		roof_w = maxf(6.0, w * tower_f)
 		roof_d = maxf(6.0, d * tower_f2)
 		roof_cx = bx + tower_sx * (w - roof_w) * 0.5
 		roof_cz = bz + tower_sz * (d - roof_d) * 0.5
 		_add_prism_tx(bld, _plan_rect(roof_cx, roof_cz, roof_w, roof_d, -1, 0.0), low_top, roof_y,
-				col, ROOF)
+				col, ROOF, -1, par)
 	else:
-		_add_prism_tx(bld, full, base_y, roof_y, col, ROOF, skip_edge)
+		_add_prism_tx(bld, full, base_y, roof_y, col, ROOF, skip_edge, par)
 		ground_top = roof_y
 
 	if shop_open:
@@ -442,17 +612,34 @@ static func _lot(gb: GBuf, win: GBuf, bld: TBuf, defs: Array, colliders: Array, 
 		# Publica a loja: onde o balconista fica em pe, onde o jogador entra (e o
 		# que o HUD mostra) e para onde o balconista olha.
 		shops.append(_shop_spot(bx, bz, w, d, side, bw, bd, ground_y, shop_kind))
+	elif lod == LOD_FULL and floors >= 3:
+		# Porta de entrada (B-80): sem loja, todo predio era um bloco sem porta.
+		_add_entrance(gb, bx, bz, w, d, side, ground_y)
 
 	if lod == LOD_FULL:
-		# Cobertura: casa de maquinas, caixa d'agua ou antena. Vai para o
-		# MultiMesh dos props (custo zero de desenho e da silhueta la em cima),
-		# nao para um caixote maior que a propria laje, como antes.
+		# Cobertura: casa de maquinas, caixa d'agua ou antena. Vai como def para
+		# o PropMesh (geometria de verdade, nao mais um cubo), que e o que da a
+		# silhueta la em cima.
 		_roof_props(defs, roof_kind, roof_hue, roof_cx, roof_cz, roof_w, roof_d, roof_y,
 				roof_ox, roof_oz)
+		# Ar-condicionado: preso na fachada que olha para a rua, acima do terreo
+		# e abaixo do topo do volume (nunca flutuando na frente de um recuo).
+		if ac_n > 0:
+			_place_acs(defs, bx, bz, w, d, side, ground_y, ground_top, ac_n, ac_pick,
+					ac_off, ac_hue)
 		# Com loja, a placa colorida ja marca a fachada: o toldo sairia em cima
 		# dela (os dois a ~3,4 m).
-		if awning and floors <= 8 and not shop_open:
+		if awning and floors >= 2 and floors <= 8 and not shop_open:
 			_add_awning(gb, lx, lz, bx, bz, w, d, ground_y, ax, az, awning_col)
+		# Varandas na fachada da rua (B-81): so em predio residencial alto o
+		# bastante para ter andar sobrando, e nunca sobre a loja aberta.
+		if balcony and floors >= 4 and floors <= 9 and not shop_open and w >= 8.5 and d >= 8.5:
+			_add_balconies(gb, bx, bz, w, d, side, ground_y, floors, ground_top)
+		# Embasamento de pedra (B-81): assenta o predio no passeio. Com a loja
+		# aberta a faixa atravessaria o vao, entao ela so entra na fachada
+		# fechada.
+		if not shop_open:
+			_add_base_band(gb, full, ground_y)
 	# Colisores: com o vao aberto viram corpo do predio + duas laterais do vao;
 	# sem loja (ou no LOD far, onde a frente fica fechada) continua um retangulo.
 	if shop_open:
@@ -474,6 +661,54 @@ static func _roof_props(defs: Array, kind: int, hue: float, cx: float, cz: float
 	var px := cx + ox * maxf(0.0, w * 0.5 - 1.8)
 	var pz := cz + oz * maxf(0.0, d * 0.5 - 1.8)
 	defs.append({"c": Vector3(px, y, pz), "kind": k, "h": 3.0, "hue": hue})
+
+
+## Ar-condicionado de split preso na fachada que olha para a rua. O def traz a
+## rotacao em `rot` porque a malha do aparelho sai da parede no +X: girar o +X
+## para a normal de fora e o que faz o aparelho ficar de frente para a rua.
+## Nunca acima de `top_y` (o topo do volume daquele predio), senao ele flutuaria
+## na frente de um recuo.
+static func _place_acs(defs: Array, bx: float, bz: float, w: float, d: float, side: int,
+		ground_y: float, top_y: float, count: int, pick: float, off: float, hue: float) -> void:
+	var room := top_y - ground_y - 3.2
+	if room < 2.4:
+		return
+	var levels := int(room / 3.0)
+	var span := w if side < 2 else d
+	var face := Vector2.ZERO
+	var nrm := Vector3.ZERO
+	var tan := Vector3.ZERO
+	match side:
+		0:
+			face = Vector2(bx - w * 0.5, bz)
+			nrm = Vector3(-1.0, 0.0, 0.0)
+			tan = Vector3(0.0, 0.0, 1.0)
+		1:
+			face = Vector2(bx + w * 0.5, bz)
+			nrm = Vector3(1.0, 0.0, 0.0)
+			tan = Vector3(0.0, 0.0, 1.0)
+		2:
+			face = Vector2(bx, bz - d * 0.5)
+			nrm = Vector3(0.0, 0.0, -1.0)
+			tan = Vector3(1.0, 0.0, 0.0)
+		_:
+			face = Vector2(bx, bz + d * 0.5)
+			nrm = Vector3(0.0, 0.0, 1.0)
+			tan = Vector3(1.0, 0.0, 0.0)
+	# Gira +X para a normal de fora (rotacao em Y: +X -> (cos, 0, -sin)).
+	var rot := atan2(-nrm.z, nrm.x)
+	var first := 1 + int(clampf(pick, 0.0, 0.999) * float(maxi(1, levels)))
+	for i in count:
+		var level := first + i
+		if level > levels:
+			break
+		var y := ground_y + float(level) * 3.0 + 1.35
+		var lateral := off * span * 0.32
+		if count > 1:
+			lateral += (float(i) - 0.5) * 2.2
+		var base := Vector3(face.x, 0.0, face.y) + tan * lateral
+		defs.append({"c": Vector3(base.x, y, base.z), "kind": "ar_condicionado",
+				"h": 0.62, "hue": hue, "rot": rot})
 
 
 ## Lado da quadra mais proximo da calcada: 0 = oeste, 1 = leste, 2 = sul,
@@ -679,7 +914,70 @@ static func _add_shop(gb: GBuf, bx: float, bz: float, w: float, d: float, side: 
 
 
 
-## mais proxima da quadra (a calcada). Antes saia sempre virado para o sul.
+## Quad com normal CORRIGIDA pelo winding: o chamador diz para onde a face deve
+## olhar (`want`) e a ordem dos vertices e ajustada sozinha. E o que permite
+## desenhar toldo inclinado, porta e platibanda sem errar o sentido da face.
+static func _quad_out(gb: GBuf, a: Vector3, b: Vector3, c: Vector3, d: Vector3,
+		col: Color, want: Vector3) -> void:
+	var nrm := -(b - a).cross(d - a)
+	if nrm.length_squared() < 1e-10:
+		return
+	if nrm.dot(want) < 0.0:
+		var tmp := b
+		b = d
+		d = tmp
+		nrm = -nrm
+	gb.normal(nrm.normalized())
+	_add_quad(gb, a, b, c, d, col)
+
+
+## Painel plano encostado numa fachada: retangulo de `hw` de meia-largura ao
+## longo de `tan`, de y0 a y1, virado para `nrm`. Usado pela porta de entrada.
+static func _facade_panel(gb: GBuf, center: Vector3, tan: Vector3, nrm: Vector3,
+		hw: float, y0: float, y1: float, col: Color) -> void:
+	var a := center - tan * hw
+	var b := center + tan * hw
+	_quad_out(gb, a + Vector3(0.0, y0, 0.0), b + Vector3(0.0, y0, 0.0),
+			b + Vector3(0.0, y1, 0.0), a + Vector3(0.0, y1, 0.0), col, nrm)
+
+
+## Porta de entrada do predio (B-80): moldura clara e o vidro escuro da portaria.
+## Antes todo predio era um bloco fechado, sem porta nenhuma na rua.
+static func _add_entrance(gb: GBuf, bx: float, bz: float, w: float, d: float, side: int,
+		ground_y: float) -> void:
+	var face := Vector2.ZERO
+	var nrm := Vector3.ZERO
+	var tan := Vector3.ZERO
+	match side:
+		0:
+			face = Vector2(bx - w * 0.5, bz)
+			nrm = Vector3(-1.0, 0.0, 0.0)
+			tan = Vector3(0.0, 0.0, 1.0)
+		1:
+			face = Vector2(bx + w * 0.5, bz)
+			nrm = Vector3(1.0, 0.0, 0.0)
+			tan = Vector3(0.0, 0.0, 1.0)
+		2:
+			face = Vector2(bx, bz - d * 0.5)
+			nrm = Vector3(0.0, 0.0, -1.0)
+			tan = Vector3(1.0, 0.0, 0.0)
+		_:
+			face = Vector2(bx, bz + d * 0.5)
+			nrm = Vector3(0.0, 0.0, 1.0)
+			tan = Vector3(1.0, 0.0, 0.0)
+	var half := (w if side < 2 else d) * 0.5
+	var hw := clampf(half * 0.34, 0.7, 1.5)
+	var centre := Vector3(face.x, 0.0, face.y)
+	var y0 := ground_y + 0.02
+	_facade_panel(gb, centre + nrm * 0.05, tan, nrm, hw + 0.22, y0, y0 + 3.05,
+			Color(0.80, 0.79, 0.74))
+	_facade_panel(gb, centre + nrm * 0.09, tan, nrm, hw, y0, y0 + 2.85,
+			Color(0.14, 0.20, 0.22))
+
+
+## Toldo do comercio: LONA INCLINADA que sai da parede e cai sobre a calcada,
+## com a saia na frente. Antes era um caixote de 25 cm de espessura colado na
+## fachada, que na tela lia como uma laje solta (B-80).
 static func _add_awning(gb: GBuf, lx: float, lz: float, bx: float, bz: float,
 		w: float, d: float, ground_y: float, ax: float, az: float, col: Color) -> void:
 	# Qual face do lote esta mais perto da calcada.
@@ -697,16 +995,133 @@ static func _add_awning(gb: GBuf, lx: float, lz: float, bx: float, bz: float,
 		best = south
 	if north < best:
 		side = 3
-	var y := ground_y + 3.4
-	var reach := 2.2
-	if side == 0:
-		_add_box(gb, Vector3(bx - w * 0.5 - reach * 0.5, y, bz), Vector3(reach, 0.25, d * 0.8), col)
-	elif side == 1:
-		_add_box(gb, Vector3(bx + w * 0.5 + reach * 0.5, y, bz), Vector3(reach, 0.25, d * 0.8), col)
-	elif side == 2:
-		_add_box(gb, Vector3(bx, y, bz - d * 0.5 - reach * 0.5), Vector3(w * 0.8, 0.25, reach), col)
-	else:
-		_add_box(gb, Vector3(bx, y, bz + d * 0.5 + reach * 0.5), Vector3(w * 0.8, 0.25, reach), col)
+	# Normal de fora, tangente ao longo da fachada e meia-largura disponivel.
+	var nrm := Vector3.ZERO
+	var tan := Vector3.ZERO
+	var face := Vector2.ZERO
+	match side:
+		0:
+			nrm = Vector3(-1.0, 0.0, 0.0)
+			tan = Vector3(0.0, 0.0, 1.0)
+			face = Vector2(bx - w * 0.5, bz)
+		1:
+			nrm = Vector3(1.0, 0.0, 0.0)
+			tan = Vector3(0.0, 0.0, 1.0)
+			face = Vector2(bx + w * 0.5, bz)
+		2:
+			nrm = Vector3(0.0, 0.0, -1.0)
+			tan = Vector3(1.0, 0.0, 0.0)
+			face = Vector2(bx, bz - d * 0.5)
+		_:
+			nrm = Vector3(0.0, 0.0, 1.0)
+			tan = Vector3(1.0, 0.0, 0.0)
+			face = Vector2(bx, bz + d * 0.5)
+	var span := (w if side < 2 else d) * 0.82
+	var reach := 1.9
+	var y_high := ground_y + 3.45      # na parede
+	var y_low := ground_y + 3.05       # na ponta, sobre a calcada
+	var inner := Vector3(face.x, 0.0, face.y)
+	var outer := inner + nrm * reach
+	# Lona: duas faces (de cima e de baixo), porque o jogador passa por baixo.
+	_quad_out(gb, inner - tan * span * 0.5 + Vector3(0.0, y_high, 0.0),
+			inner + tan * span * 0.5 + Vector3(0.0, y_high, 0.0),
+			outer + tan * span * 0.5 + Vector3(0.0, y_low, 0.0),
+			outer - tan * span * 0.5 + Vector3(0.0, y_low, 0.0), col,
+			(nrm + Vector3.UP).normalized())
+	_quad_out(gb, inner - tan * span * 0.5 + Vector3(0.0, y_high - 0.04, 0.0),
+			inner + tan * span * 0.5 + Vector3(0.0, y_high - 0.04, 0.0),
+			outer + tan * span * 0.5 + Vector3(0.0, y_low - 0.04, 0.0),
+			outer - tan * span * 0.5 + Vector3(0.0, y_low - 0.04, 0.0),
+			col.darkened(0.28), (-nrm + Vector3.DOWN).normalized())
+	# Saia do toldo na ponta (a faixa onde o comercio escreve o nome).
+	_quad_out(gb, outer - tan * span * 0.5 + Vector3(0.0, y_low, 0.0),
+			outer + tan * span * 0.5 + Vector3(0.0, y_low, 0.0),
+			outer + tan * span * 0.5 + Vector3(0.0, y_low - 0.32, 0.0),
+			outer - tan * span * 0.5 + Vector3(0.0, y_low - 0.32, 0.0),
+			col.darkened(0.12), nrm)
+
+
+## Varandas na fachada que olha para a rua (B-81). Uma laje a cada dois andares
+## a partir do segundo, com guarda-corpo na frente e nos lados. Custa 1 caixa e
+## 3 quads por varanda: entra no buffer de cor por vertice, sem desenho novo.
+##
+## `floors` e o numero de andares do VOLUME; a varanda pula o primeiro (loja),
+## o ultimo (onde fica a platibanda) e qualquer andar acima de `max_y` — em
+## predio com torre recuada o volume de baixo e mais largo, e uma varanda presa
+## na fachada de baixo ficaria flutuando no vazio depois do recuo.
+static func _add_balconies(gb: GBuf, bx: float, bz: float, w: float, d: float,
+		side: int, ground_y: float, floors: int, max_y: float) -> void:
+	# Normal de fora, tangente ao longo da fachada e o ponto dela no chao.
+	var face := Vector3.ZERO
+	var nrm := Vector3.ZERO
+	var tan := Vector3.ZERO
+	match side:
+		0:
+			face = Vector3(bx - w * 0.5, 0.0, bz)
+			nrm = Vector3(-1.0, 0.0, 0.0)
+			tan = Vector3(0.0, 0.0, 1.0)
+		1:
+			face = Vector3(bx + w * 0.5, 0.0, bz)
+			nrm = Vector3(1.0, 0.0, 0.0)
+			tan = Vector3(0.0, 0.0, 1.0)
+		2:
+			face = Vector3(bx, 0.0, bz - d * 0.5)
+			nrm = Vector3(0.0, 0.0, -1.0)
+			tan = Vector3(1.0, 0.0, 0.0)
+		_:
+			face = Vector3(bx, 0.0, bz + d * 0.5)
+			nrm = Vector3(0.0, 0.0, 1.0)
+			tan = Vector3(1.0, 0.0, 0.0)
+	var span := (d if side < 2 else w) * 0.62
+	if span < 3.0:
+		return
+	var reach := BALCONY_REACH
+	for f in floors:
+		if f < 2 or f % 2 == 1 or f >= floors - 1:
+			continue
+		var y := ground_y + float(f) * 3.0
+		if y + 1.10 > max_y:
+			continue
+		# Laje: a caixa e montada nos eixos da face (nunca em diagonal, porque
+		# os predios do city_gen sao retangulares). O fundo entra 12 cm DENTRO
+		# da parede para a face da laje nao ficar coplanar com a fachada (duas
+		# superficies no mesmo plano brigam por profundidade — regra do B-52).
+		var mid := face + nrm * ((reach - 0.12) * 0.5) + Vector3(0.0, y + 0.07, 0.0)
+		var thick := reach + 0.12
+		_add_box(gb, mid, Vector3(absf(nrm.x) * thick + absf(tan.x) * span, 0.14,
+				absf(nrm.z) * thick + absf(tan.z) * span), BALCONY_SLAB)
+		var a := face + nrm * reach - tan * (span * 0.5)
+		var b := face + nrm * reach + tan * (span * 0.5)
+		# Guarda-corpo da frente (um quad so: a face de dentro nao existe).
+		_quad_out(gb, a + Vector3(0.0, y + 0.14, 0.0), b + Vector3(0.0, y + 0.14, 0.0),
+				b + Vector3(0.0, y + 1.00, 0.0), a + Vector3(0.0, y + 1.00, 0.0),
+				BALCONY_RAIL, nrm)
+		for s in [-1.0, 1.0]:
+			var e := face + tan * (span * 0.5 * float(s))
+			var eo := e + nrm * reach
+			_quad_out(gb, e + Vector3(0.0, y + 0.14, 0.0), eo + Vector3(0.0, y + 0.14, 0.0),
+					eo + Vector3(0.0, y + 1.00, 0.0), e + Vector3(0.0, y + 1.00, 0.0),
+					BALCONY_RAIL, tan * float(s))
+
+
+## Faixa de embasamento (B-81): pedra do nivel da rua ate PLINTH_H, 6 cm para
+## fora da parede. Assenta o predio no chao e separa a loja do corpo do predio.
+static func _add_base_band(gb: GBuf, plan: PackedVector2Array, ground_y: float) -> void:
+	var n := plan.size()
+	for i in n:
+		var a := plan[i]
+		var b := plan[(i + 1) % n]
+		var dx := b.x - a.x
+		var dz := b.y - a.y
+		var seg := sqrt(dx * dx + dz * dz)
+		if seg < 0.05:
+			continue
+		var nrm := Vector3(dz / seg, 0.0, -dx / seg)
+		var o := nrm * 0.06
+		_quad_out(gb, Vector3(a.x, ground_y, a.y) + o,
+				Vector3(b.x, ground_y, b.y) + o,
+				Vector3(b.x, ground_y + PLINTH_H, b.y) + o,
+				Vector3(a.x, ground_y + PLINTH_H, a.y) + o, PLINTH, nrm)
 
 
 ## Ruas da quadra (borda oeste e sul) com a sinalizacao pintada.
@@ -919,7 +1334,8 @@ static func plan_area(pts: PackedVector2Array) -> float:
 ## face de baixo nao existe (o predio esta enterrado) — e o que faz este prisma
 ## custar menos vertices que a caixa de 6 faces de antes.
 static func _add_prism_tx(tb: TBuf, plan: PackedVector2Array, y0: float, y1: float,
-		wall_col: Color, roof_col: Color, skip_edge: int = -1) -> void:
+		wall_col: Color, roof_col: Color, skip_edge: int = -1,
+		parapet: float = 0.0) -> void:
 	var n := plan.size()
 	if n < 3 or y1 - y0 < 0.05:
 		return
@@ -960,6 +1376,32 @@ static func _add_prism_tx(tb: TBuf, plan: PackedVector2Array, y0: float, y1: flo
 			continue
 		tb.tri_uv(cc, Vector3(pa.x, y1, pa.y), Vector3(pb.x, y1, pb.y), Vector3.UP,
 				FLAT_UV, FLAT_UV, FLAT_UV, roof_col)
+	# Platibanda (B-80): a faixa de concreto em volta da laje, com o topo de
+	# PARAPET_W de largura. Custa 2 quads por aresta e muda a leitura do predio:
+	# sem ela o volume termina num corte seco e a laje parece papelao. As faces
+	# usam o canto LISO da textura (FLAT_UV): platibanda nao tem janela.
+	if parapet > 0.02:
+		var ph := parapet
+		var band := roof_col.darkened(0.10)
+		var cap := roof_col.lightened(0.05)
+		for i in n:
+			var a := plan[i]
+			var b := plan[(i + 1) % n]
+			var dx := b.x - a.x
+			var dz := b.y - a.y
+			var seg := sqrt(dx * dx + dz * dz)
+			if seg < 0.05:
+				continue
+			var nrm := Vector3(dz / seg, 0.0, -dx / seg)
+			tb.quad_uv(Vector3(a.x, y1, a.y), Vector3(b.x, y1, b.y),
+					Vector3(b.x, y1 + ph, b.y), Vector3(a.x, y1 + ph, a.y), nrm,
+					FLAT_UV, FLAT_UV, FLAT_UV, FLAT_UV, band)
+			var ix := nrm.x * PARAPET_W
+			var iz := nrm.z * PARAPET_W
+			tb.quad_uv(Vector3(a.x, y1 + ph, a.y), Vector3(b.x, y1 + ph, b.y),
+					Vector3(b.x - ix, y1 + ph, b.y - iz),
+					Vector3(a.x - ix, y1 + ph, a.y - iz), Vector3.UP,
+					FLAT_UV, FLAT_UV, FLAT_UV, FLAT_UV, cap)
 
 
 # --- Utilitarios -------------------------------------------------------------
@@ -970,25 +1412,6 @@ static func mix3(a: int, b: int, c: int) -> int:
 	h = (h ^ (h >> 13)) * 1274126177
 	h = h ^ (h >> 16)
 	return h & 0x7FFFFFFF
-
-
-## Cubo unitario (centrado, lado 1) para o MultiMesh dos props.
-static func unit_cube_mesh() -> ArrayMesh:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for f in CUBE_FACES:
-		var fc: Vector3 = f[0]
-		var ya: Vector3 = f[1]
-		var za: Vector3 = f[2]
-		var c: Vector3 = fc * 0.5
-		var yv: Vector3 = ya * 0.5
-		var zv: Vector3 = za * 0.5
-		var quad: Array[Vector3] = [c - yv - zv, c + yv - zv, c + yv + zv, c - yv + zv]
-		for idx in [0, 1, 2, 0, 2, 3]:
-			st.set_normal(fc)
-			st.set_color(Color.WHITE)
-			st.add_vertex(quad[idx])
-	return st.commit()
 
 
 # --- Buffers e PRNG ----------------------------------------------------------

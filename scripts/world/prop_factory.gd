@@ -51,6 +51,10 @@ static func color_for(kind: String, hue: float) -> Color:
 			return Color(0.74, 0.73, 0.69)
 		"antena":
 			return Color(0.30, 0.31, 0.33)
+		# Canteiro de calcada (B-81): vaso de concreto claro, e a moita usa a cor
+		# de "tree_crown". O tom varia com o hue (cinza -> bege).
+		"planta":
+			return Color(0.72, 0.70, 0.66).lerp(Color(0.62, 0.55, 0.46), hue)
 		_:
 			return LEAF
 
