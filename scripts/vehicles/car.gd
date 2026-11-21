@@ -36,9 +36,12 @@ const MODEL_LENGTH := 4.3      # comprimento do sedan CC0 (m); frente em -Z
 # MAX_SPEED fica porque normaliza a forca da batida no HUD e no som.
 const MAX_SPEED := 22.0        # ~80 km/h: referencia de "batida forte"
 const WHEELBASE := 2.6         # distancia entre eixos (m), igual ao preset sedan
-const STEER_MAX := 0.55        # rad de esterco maximo, parado
-const STEER_SPEED := 3.5       # resposta do volante (rad/s)
-const STEER_DROP := 0.55       # quanto o esterco maximo cai com a velocidade
+const STEER_MAX := 0.75        # rad de esterco maximo, parado (~43 graus)
+const STEER_SPEED := 4.5       # resposta do volante (rad/s)
+const STEER_DROP := 0.40       # quanto o esterco maximo cai com a velocidade
+## A roda DESENHADA nao passa daqui (34 graus): acima disso ela entra no para-lama.
+## O volante da fisica vira mais que isso, o desenho nao precisa.
+const VISUAL_STEER := 0.60
 const WHEEL_RADIUS := 0.34
 # Distancia (m) para o prompt ENTRAR aparecer. Era 3,5 m: no iPhone o jogador
 # nao achava o carro e nao conseguia entrar (B-36).
@@ -98,7 +101,10 @@ func spec() -> Dictionary:
 
 
 ## Esterco maximo util: em alta velocidade o volante fica mais curto, senao o
-## carro gira no proprio eixo a 80 km/h.
+## carro gira no proprio eixo a 80 km/h. Abaixo de ~10 m/s quem manda e este
+## limite; acima disso quem limita e a aderencia (mu*g), entao o curso maior do
+## volante aparece nas manobras (vira, estaciona, sai da areia) sem deixar o
+## carro nervoso na avenida.
 static func steer_limit(speed: float) -> float:
 	return STEER_MAX / (1.0 + STEER_DROP * absf(speed) / 10.0)
 
@@ -479,6 +485,9 @@ func _update_wheels(delta: float) -> void:
 	# wrapf mantem o angulo pequeno: sem isso o acumulo perde precisao float
 	# depois de alguns minutos dirigindo.
 	_spin = wrapf(_spin + (speed / maxf(0.05, _spin_radius)) * delta, -TAU, TAU)
+	# A roda desenhada para no para-lama (VISUAL_STEER); o volante da fisica vira
+	# mais que isso nas manobras.
+	var wheel_steer := clampf(steer, -VISUAL_STEER, VISUAL_STEER)
 	if model_loaded:
 		for wi in _model_wheels:
 			var pivot := wi["node"] as Node3D
@@ -489,12 +498,12 @@ func _update_wheels(delta: float) -> void:
 			# "BackWheels" carrega as duas rodas de tras. Sinal negativo: com o
 			# carro andando para -Z, o topo da roda vai para -Z (B-39).
 			pivot.rotation.x = -_spin
-			pivot.rotation.y = steer if bool(wi["front"]) else 0.0
+			pivot.rotation.y = wheel_steer if bool(wi["front"]) else 0.0
 		return
 	for w in _wheels:
 		w.rotation.x = -_spin
 	for p in _front_pivots:
-		p.rotation.y = steer
+		p.rotation.y = wheel_steer
 
 
 func _update_camera(delta: float) -> void:

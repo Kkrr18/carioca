@@ -728,6 +728,18 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   aparelho: falta dirigir e dizer se o carro "pesa" como carro (se estiver mole,
   mexer em torque/massas do preset; se estiver duro demais, no `brake`).
 
+- B-68: Fase 4 — VOLANTE COM MAIS CURSO. Pedido do autor: "deixa o volante
+  virar um pouco mais, ta muito limitado o volante". O esterco maximo parado
+  subiu de 0,55 rad (31 graus) para 0,75 rad (43 graus), a resposta do volante
+  de 3,5 para 4,5 rad/s e a queda com a velocidade ficou menos agressiva (0,55
+  para 0,40): a 18 km/h o carro agora fecha uma curva de 3,6 m de raio em vez de
+  5,7 m. Isso NAO deixa o carro nervoso na avenida, porque acima de ~10 m/s quem
+  limita a curva e a ADERENCIA (mu*g, B-67) e nao o curso do volante: o ganho
+  aparece nas manobras — virar na quadra, sair da areia, encostar. A roda
+  DESENHADA ganhou um teto proprio (`VISUAL_STEER` = 0,60 rad, 34 graus) para
+  nao entrar no para-lama quando o volante esta todo virado. Testes novos: o
+  volante vira 40+ graus parado e o raio a 18 km/h fica abaixo de 4 m.
+
 ## Proximas tarefas (Fase 1 -> Fase 2)1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
 2. Medir FPS no iPhone jogando uma sessao real (B-09): o botao PERF grava CSV.
 3. Pedir ao usuario que toque em SALVAR e CARREGAR no jogo e confirme que o save volta (valida o B-08 no aparelho).

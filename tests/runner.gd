@@ -494,6 +494,14 @@ func _test_car_physics() -> void:
 		"taxa de guinada inverte na marcha a re (modelo bicycle)")
 	check(Car.steer_limit(20.0) < Car.steer_limit(0.0) * 0.7,
 		"esterco maximo cai com a velocidade")
+	# B-68: o autor pediu "deixa o volante virar um pouco mais, ta muito
+	# limitado". Parado o volante passa de 40 graus e a 18 km/h o carro ainda
+	# fecha uma curva de menos de 4 m de raio.
+	check(Car.steer_limit(0.0) >= 0.70,
+		"volante vira 40+ graus parado (%.2f rad)" % Car.steer_limit(0.0))
+	var turn_radius := Car.WHEELBASE / tan(Car.steer_limit(5.0))
+	check(turn_radius < 4.0,
+		"raio de curva abaixo de 4 m a 18 km/h (%.1f m)" % turn_radius)
 
 
 func _test_car_scene_enter_exit() -> void:
