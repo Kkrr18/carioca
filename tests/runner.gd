@@ -1005,6 +1005,21 @@ func _test_pedestrians() -> void:
 		k = Pedestrians.next_corner(k, true)
 	check(k == 0, "quatro cantos fecham a volta na quadra")
 	check(Pedestrians.next_corner(0, false) == 3, "sentido anti-horario vai ao canto 3")
+	# B-62: o pedestre tem que OLHAR para onde anda. Com um giro extra de PI ele
+	# atravessava a rua de costas (o "moonwalk" que o autor viu) e nenhum teste
+	# olhava a DIRECAO — o clipe tocava, a perna mexia, e o corpo ia de re.
+	var dirs: Array[Vector2] = [Vector2(1.0, 0.0), Vector2(0.0, 1.0),
+			Vector2(-1.0, 0.0), Vector2(0.0, -1.0), Vector2(0.7, -0.7)]
+	var facing_ok := true
+	var worst := 0.0
+	for d in dirs:
+		var yaw := Pedestrians.facing_yaw(d)
+		var fwd := Vector3(-sin(yaw), 0.0, -cos(yaw))
+		var err := fwd.distance_to(Vector3(d.x, 0.0, d.y).normalized())
+		worst = maxf(worst, err)
+		if err > 0.01:
+			facing_ok = false
+	check(facing_ok, "pedestre olha para onde anda (erro max %.3f)" % worst)
 	var sides_ok := true
 	var near_ok := true
 	for kk in 4:

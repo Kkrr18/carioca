@@ -607,6 +607,19 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   o player nao e reiniciado se ja esta tocando (cada `play()` num gerador vazio
   repetia o aviso). Fecha o B-42 no build Web; falta confirmar ouvindo no iPhone.
 
+- B-62: Fase 4 — PEDESTRE DE COSTAS (MOONWALK). O autor: "eles andam pra tras ja
+  reparou? meio que fazendo moonwalk". CAUSA: `MODEL_YAW = PI` partia da
+  suposicao de que o glTF da Quaternius olha para +Z. O walker olha para o -Z
+  (a frente do Godot), entao o giro extra deixava o corpo 180 graus fora do
+  sentido do passo: ele atravessava a rua olhando para tras. Pior: o PI era
+  somado na hora de DESENHAR, longe do calculo que guarda o yaw, e nenhum teste
+  olhava a DIRECAO — o clipe tocava, a perna mexia, e o corpo ia de re.
+  CORRECAO: `MODEL_YAW = 0.0` e a conta virou uma funcao pura, `facing_yaw(dir)`,
+  usada no calculo e na escrita da rotacao. O CI ganhou uma checagem: para cinco
+  direcoes, o -Z do no depois do giro aponta na direcao do passo (erro < 0,01).
+  Licao para os proximos modelos: a frente do glTF nao se adivinha, se mede —
+  quando entrar o modelo do jogador, conferir isso antes de tudo.
+
 ## Proximas tarefas (Fase 1 -> Fase 2)
 
 1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).

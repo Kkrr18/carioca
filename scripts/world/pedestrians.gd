@@ -88,8 +88,10 @@ const VIS_RANGE_HEAVY := 80.0   # m: alem disso o pedestre nem e desenhado
 const MATCH_MIN := 0.60
 ## Abaixo disso (radianos) a animacao nao dirige o esqueleto de verdade.
 const MOTION_MIN := 0.05
-## O glTF da Quaternius olha para +Z; o pedestre anda com o -Z do no na frente.
-const MODEL_YAW := PI
+## Correcao da frente declarada pelo modelo. O walker da Quaternius olha para o
+## -Z do no (a frente do Godot): com +PI ele andava DE COSTAS, o "moonwalk" que o
+## autor viu na tela (B-62). Toda a conta de giro fica em `facing_yaw()`.
+const MODEL_YAW := 0.0
 
 # Paleta das pessoas. Pele e roupa variam, como na rua de verdade.
 const SKINS := [
@@ -160,6 +162,18 @@ static func corner(b: Vector2i, k: int) -> Vector2:
 
 static func next_corner(k: int, clockwise: bool) -> int:
 	return (k + 1) % 4 if clockwise else (k + 3) % 4
+
+
+## Giro em Y para o modelo OLHAR na direcao do passo `dir` (plano XZ: x -> x,
+## y -> z). Um no girado em Y leva o -Z local (a frente do Godot, que e a frente
+## do walker) para (-sin y, -cos y), entao y = atan2(-dir.x, -dir.y).
+## Esta e a unica conta de giro do pedestre: o valor guardado em `yaw` ja sai
+## pronto para virar `rotation.y`, sem soma extra na hora de desenhar (era o que
+## deixava o pedestre de costas, B-62).
+static func facing_yaw(dir: Vector2) -> float:
+	if dir.length_squared() < 0.000001:
+		return 0.0
+	return atan2(-dir.x, -dir.y) + MODEL_YAW
 
 
 ## Cruzamento que governa a travessia feita do canto `k`: e o semaforo da
@@ -873,7 +887,7 @@ func _step(p: Dictionary, dt: float, player_pos: Vector3, car_pos: Vector3,
 	pos += dir * step
 	p["pos"] = pos
 	p["phase"] = float(p["phase"]) + speed * dt * 4.2
-	p["yaw"] = lerp_angle(float(p["yaw"]), atan2(-dir.x, -dir.y), minf(1.0, 8.0 * dt))
+	p["yaw"] = lerp_angle(float(p["yaw"]), facing_yaw(dir), minf(1.0, 8.0 * dt))
 	_dodge(p, player_pos)
 
 
@@ -976,7 +990,7 @@ func _write_models() -> void:
 		var p: Dictionary = peds[i]
 		var pos: Vector2 = p["pos"]
 		root.position = Vector3(pos.x, Cfg.surface_at(pos.x, pos.y), pos.y)
-		root.rotation.y = float(p["yaw"]) + MODEL_YAW
+		root.rotation.y = float(p["yaw"])
 		root.scale = Vector3.ONE * float(p["scale"])
 		var ap: AnimationPlayer = _anims[i]
 		if ap == null:
