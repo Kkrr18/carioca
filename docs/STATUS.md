@@ -783,6 +783,37 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   vidro/retrovisor/para-choque como pecas (o sedan CC0 e uma malha so), portas
   com Joint3D, ESP no carro e dano estrutural de predio.
 
+- B-70: Fase 4 — ESP, PAREDE POR ANGULO E FICHA NO TRANSITO. Continuacao do
+  pedido de fisica realista (docs/FISICA.md). Tres coisas que o autor sente
+  dirigindo: (1) ESP de verdade no carro do jogador — quando o pneu passa do
+  limite lateral (slip acima de 0,35) o controle CORTA ACELERADOR para devolver
+  aderencia a curva, que e o que ele faz na vida real (o pneu dividido entre
+  tracao e curva perde das duas); freando ele nao age. O HUD mostra "ESP" na
+  linha de marcha/aderencia. (2) IMPACTO EM PAREDE POR ANGULO: antes, qualquer
+  encostao em predio zerava a velocidade, o que parecia bug (raspar de lado
+  parava o carro). Agora o `push_out` devolve a normal da parede e a velocidade
+  e decomposta: de frente o carro quase para e o dano e maior; raspando ele
+  DESLIZA na parede, perde so a componente perpendicular e arranha menos. O dano
+  acompanha o quanto a batida foi de frente, nao a velocidade crua.
+  (3) TRANSITO COM FICHA: cada modelo da rua (sedan, SUV, esportivo, taxi)
+  carrega massa, freio, centro de gravidade e ritmo proprios. O SUV (2200 kg, CG
+  0,72 m) freia a 4,1 m/s2 contra 5,3 do sedan e faz a esquina a 6,3 m/s contra
+  8,3; o esportivo (1250 kg, CG 0,45 m, RWD) cruza a 10,3 m/s. A velocidade
+  deixou de ser instantanea: o carro tem `v` real que sobe e desce pela ficha,
+  entao o SUV nao "salta" para o cruzeiro quando o carro da frente libera,
+  reduz ANTES da esquina (16 m antes) e FREIA no sinal fechado (antes ele so
+  travava a posicao e arrancava no verde em velocidade de cruzeiro).
+  Dicionarios de carro sem `v` (montados em
+  teste) continuam no modelo antigo, o que manteve os testes de transito
+  existentes intactos. Novo preset `VehiclePhysics.sport()` (1250 kg, RWD,
+  260 Nm) tambem disponivel para o jogador. Testes novos: ESP so age com
+  acelerador e slip alto e nao mexe no freio; batida de frente mata o embalo,
+  raspando o carro desliza (4x mais velocidade restante) e machuca menos;
+  esportivo mais leve e mais forte que o sedan; SUV mais pesado, esquina mais
+  devagar, freio mais fraco; esportivo anda mais que o SUV; carro com ficha nao
+  salta para o cruzeiro num quadro e vai ganhando velocidade; carro sem ficha
+  continua no modelo antigo. NAO validado no aparelho.
+
 ## Proximas tarefas (Fase 1 -> Fase 2)1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
 2. Medir FPS no iPhone jogando uma sessao real (B-09): o botao PERF grava CSV.
 3. Pedir ao usuario que toque em SALVAR e CARREGAR no jogo e confirme que o save volta (valida o B-08 no aparelho).

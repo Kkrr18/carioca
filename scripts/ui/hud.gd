@@ -223,9 +223,10 @@ func _refresh_stats() -> void:
 			float(car.input_steer) * 100.0])
 		# Marcha e giro (B-67): e por esta linha que se ve, no aparelho, se o
 		# cambio esta subindo e se o motor nao morre na areia.
-		lines.append("marcha %d   %d rpm   aderencia %.0f%%" % [
+		lines.append("marcha %d   %d rpm   aderencia %.0f%%%s" % [
 			int(car.gear), int(round(float(car.rpm))),
-			(1.0 - float(car.slip)) * 100.0])
+			(1.0 - float(car.slip)) * 100.0,
+			"   ESP" if bool(car.esp_on) else ""])
 		# Avaria (B-69): fase do dano e quanto o motor ainda entrega.
 		lines.append("avaria %.0f%% (%s)" % [
 			float(car.damage) * 100.0, String(car.damage_label())])

@@ -29,6 +29,12 @@ const MAX_FORWARD := 90.0
 ## Marcha a re: |velocidade| maxima (m/s). O pedal do freio e o mesmo da re.
 const REVERSE_MAX := 7.0
 
+## ESP (controle de estabilidade): acima deste slip (0 = agarrado, 1 = no limite
+## lateral) o controle comeca a cortar acelerador para devolver aderencia a curva.
+const ESP_SLIP := 0.35
+const ESP_GAIN := 1.2
+const ESP_MIN := 0.25
+
 
 # --- Veiculos ----------------------------------------------------------------
 
@@ -73,6 +79,21 @@ static func suv() -> Dictionary:
 
 static func specs() -> Array:
 	return [compact(), sedan(), suv()]
+
+
+## Esportivo: mais leve, mais torque, centro de gravidade baixo (B-70). Usado
+## pelo carro de rua esportivo do transito e disponivel para o jogador.
+static func sport() -> Dictionary:
+	return {
+		"name": "Esportivo",
+		"mass": 1250.0, "drive": "rwd",
+		"torque": 260.0, "redline": 7000.0, "idle": 900.0,
+		"gears": [3.20, 2.00, 1.45, 1.10, 0.86], "final": 4.0,
+		"wheel_radius": 0.33, "wheelbase": 2.55, "track": 1.62,
+		"com_height": 0.45, "spring": 40000.0, "damp": 5000.0,
+		"brake": 12000.0, "rolling": 0.012,
+		"cd": 0.31, "area": 1.95,
+	}
 
 
 # --- Motor -------------------------------------------------------------------
@@ -163,6 +184,53 @@ static func tire_force(long_want: float, lat_slip_vel: float, load: float,
 ## o carro nao consegue fazer curva mais fechada do que isso.
 static func lateral_limit(spec: Dictionary, mu: float) -> float:
 	return mu * GRAVITY
+
+
+## Relacao forca/peso (m/s2) que a ficha entrega na primeira marcha. E o numero
+## que diz se um carro "puxa": usado pelo transito para dar ritmo a cada modelo.
+static func power_to_weight(spec: Dictionary) -> float:
+	var gears: Array = spec["gears"]
+	var force := float(spec["torque"]) * float(gears[0]) * float(spec["final"]) \
+			/ maxf(0.05, float(spec["wheel_radius"]))
+	return force / maxf(1.0, float(spec["mass"]))
+
+
+# --- ESP (controle de estabilidade) ------------------------------------------
+
+## ESP: quando o pneu ja esta no limite lateral (slip alto), corta o acelerador
+## para devolver aderencia a curva. Fisicamente, o pneu dividido entre tracao e
+## curva perde das duas: tirar potencia libera a lateral. Freando, nao mexe.
+static func esp_throttle(slip: float, throttle: float) -> float:
+	if throttle <= 0.0 or slip <= ESP_SLIP:
+		return throttle
+	return throttle * clampf(1.0 - (slip - ESP_SLIP) * ESP_GAIN, ESP_MIN, 1.0)
+
+
+## O ESP esta agindo? (telemetria/HUD)
+static func esp_active(slip: float, throttle: float) -> bool:
+	return throttle > 0.0 and slip > ESP_SLIP
+
+
+# --- Impacto em parede por angulo -------------------------------------------
+
+## Batida em parede por ANGULO (B-70). `vel` e a velocidade no plano XZ antes da
+## batida e `normal` e a direcao em que o carro foi empurrado para fora (o que o
+## push_out devolve). Devolve [velocidade_restante, dano 0..1]:
+##   * de frente (normal contra o movimento): sobra so um quique curto;
+##   * raspando: perde so a componente perpendicular e desliza na parede;
+##   * o dano acompanha o quanto a batida foi "de frente", nao a velocidade crua.
+static func wall_hit(vel: Vector2, normal: Vector2, ref_speed: float) -> Array:
+	if normal.length() < 0.0001:
+		return [vel, 0.0]
+	var n := normal.normalized()
+	var vn := vel.dot(n)                    # < 0: indo contra a parede
+	var into := minf(vn, 0.0)
+	var along := vel - n * vn               # o que desliza ao longo da parede
+	# Atrito da parede: raspando perde 10% do que desliza; quique de 8% do que
+	# batia de frente (o carro nao gruda nem atravessa).
+	var out := along * 0.90 + n * (-into) * 0.08
+	var head_on := clampf(-into / maxf(0.5, absf(vel.length())), 0.0, 1.0)
+	return [out, head_on * 0.10]
 
 
 # --- Integracao longitudinal --------------------------------------------------

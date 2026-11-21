@@ -64,6 +64,8 @@ var rpm := 800.0
 var engine_ratio := 0.0
 ## 0 = pneu agarrado, 1 = derrapando (a curva pedida passou de mu*g).
 var slip := 0.0
+## ESP agindo neste quadro (cortando acelerador no limite lateral, B-70).
+var esp_on := false
 var accel_long := 0.0
 var accel_lat := 0.0
 ## Avaria acumulada: 0 = novo, 1 = destruido (B-69). Cai a potencia do motor,
@@ -420,6 +422,12 @@ func _drive(delta: float) -> void:
 	var h_back := Cfg.surface_at(position.x - fwd2.x * 1.6, position.z - fwd2.y * 1.6)
 	var slope := atan2(h_front - h_back, 3.2)
 	var mu := VehiclePhysics.surface_mu(position.x, position.z)
+	# ESP (B-70): `slip` e do quadro anterior. No limite lateral, cortar o
+	# acelerador devolve aderencia a curva — e o que o controle de estabilidade
+	# faz de verdade (o pneu dividido entre tracao e curva perde das duas).
+	var throttle_wanted := throttle
+	throttle = VehiclePhysics.esp_throttle(slip, throttle)
+	esp_on = VehiclePhysics.esp_active(slip, throttle_wanted)
 	# Avaria tira potencia do motor (Damage.power_scale): carro destruido anda,
 	# mas mal. E o motorista sente na hora.
 	var power := Damage.power_scale(damage)
@@ -465,13 +473,16 @@ func _drive(delta: float) -> void:
 	if streamer != null:
 		var pushed: Vector2 = streamer.push_out(next.x, next.z, 1.1)
 		if pushed != Vector2(next.x, next.z):
+			# Impacto por ANGULO (B-70): de frente mata o embalo e machuca;
+			# raspando de lado, o carro desliza na parede e perde so um pouco.
+			var normal := pushed - Vector2(next.x, next.z)
+			var res := VehiclePhysics.wall_hit(
+					Vector2(forward.x, forward.z) * speed, normal, MAX_SPEED)
+			var left: Vector2 = res[0]
 			next.x = pushed.x
 			next.z = pushed.y
-			# Bateu num predio: mata a velocidade para frente (a re continua) e
-			# arranha o carro (B-69).
-			if speed > 0.0:
-				add_damage(clampf(speed * 0.010, 0.005, 0.06))
-				speed = 0.0
+			speed = left.dot(Vector2(forward.x, forward.z))
+			add_damage(float(res[1]))
 	# Colisao com o transito: o carro nao atravessa outro carro. Empurra para
 	# fora e mata o embalo, com um pequeno recuo que da a sensacao de batida.
 	if traffic != null:

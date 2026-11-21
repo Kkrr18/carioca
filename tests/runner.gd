@@ -65,6 +65,7 @@ func _initialize() -> void:
 	_test_facing_and_roll()
 	_test_curb()
 	_test_traffic_pure()
+	_test_traffic_specs()
 	_test_traffic_lights()
 	_test_traffic_models()
 	_test_traffic_collision()
@@ -508,6 +509,37 @@ func _test_car_physics() -> void:
 	var turn_radius := Car.WHEELBASE / tan(Car.steer_limit(5.0))
 	check(turn_radius < 4.0,
 		"raio de curva abaixo de 4 m a 18 km/h (%.1f m)" % turn_radius)
+	# ESP (B-70): no limite lateral corta o acelerador; freando, nao faz nada.
+	check(VehiclePhysics.esp_throttle(0.0, 1.0) == 1.0,
+		"com pneu agarrado o ESP nao mexe no acelerador")
+	check(VehiclePhysics.esp_throttle(0.9, 1.0) < 0.5,
+		"no limite lateral o ESP corta o acelerador (%.2f)" % VehiclePhysics.esp_throttle(0.9, 1.0))
+	check(VehiclePhysics.esp_throttle(0.9, -1.0) == -1.0,
+		"freando o ESP nao corta nada")
+	var on := VehiclePhysics.esp_active(0.8, 1.0)
+	var off := VehiclePhysics.esp_active(0.1, 1.0)
+	check(on and not off, "ESP so aparece no HUD quando age")
+	# Impacto em parede por ANGULO (B-70): de frente para, raspando desliza.
+	var head := VehiclePhysics.wall_hit(Vector2(0.0, -10.0), Vector2(0.0, 1.0), 22.0)
+	var graze := VehiclePhysics.wall_hit(Vector2(-9.4, -3.4), Vector2(0.0, 1.0), 22.0)
+	var head_left: Vector2 = head[0]
+	var graze_left: Vector2 = graze[0]
+	check(head_left.length() < 1.5,
+		"batida de frente mata o embalo (%.1f m/s)" % head_left.length())
+	check(graze_left.length() > head_left.length() * 4.0,
+		"raspando a parede o carro desliza (%.1f x %.1f m/s)" % [
+			graze_left.length(), head_left.length()])
+	check(float(graze[1]) < float(head[1]),
+		"de frente machuca mais que de raspao (%.3f x %.3f)" % [
+			float(head[1]), float(graze[1])])
+	# Esportivo (B-70): mais leve e mais forte que o sedan.
+	var sport := VehiclePhysics.sport()
+	var sedan := VehiclePhysics.sedan()
+	check(float(sport["mass"]) < 1300.0,
+		"esportivo e mais leve que o sedan (%.0f kg)" % float(sport["mass"]))
+	check(VehiclePhysics.power_to_weight(sport) > VehiclePhysics.power_to_weight(sedan) * 1.25,
+		"esportivo puxa mais que o sedan (%.1f x %.1f m/s2)" % [
+			VehiclePhysics.power_to_weight(sport), VehiclePhysics.power_to_weight(sedan)])
 
 
 func _test_surfaces() -> void:
@@ -939,6 +971,52 @@ func _test_curb() -> void:
 	print("  info: setor com meio-fio = %d vertices (LOD far %d)" % [
 		(_verts(full) as PackedVector3Array).size(), (_verts(far) as PackedVector3Array).size()])
 	check((_verts(full) as PackedVector3Array).size() < 40000, "setor com meio-fio ainda abaixo de 40k vertices")
+
+
+## B-70: cada modelo da rua tem ficha propria (massa, freio, centro de gravidade).
+func _test_traffic_specs() -> void:
+	var sedan := Traffic.spec_for_model(0)
+	var suv := Traffic.spec_for_model(1)
+	var sport := Traffic.spec_for_model(2)
+	check(float(suv["mass"]) > float(sedan["mass"]) * 1.3,
+		"SUV da rua e mais pesado que o sedan (%.0f x %.0f kg)" % [
+			float(suv["mass"]), float(sedan["mass"])])
+	var suv_corner := Traffic.corner_speed(suv)
+	var sedan_corner := Traffic.corner_speed(sedan)
+	var sport_corner := Traffic.corner_speed(sport)
+	check(suv_corner < sedan_corner and sport_corner > sedan_corner,
+		"esquina: SUV mais devagar que sedan e esportivo (%.1f/%.1f/%.1f m/s)" % [
+			suv_corner, sedan_corner, sport_corner])
+	check(Traffic.brake_of(suv) < Traffic.brake_of(sedan),
+		"SUV freia mais devagar que o sedan (%.1f x %.1f m/s2)" % [
+			Traffic.brake_of(suv), Traffic.brake_of(sedan)])
+	check(Traffic.cruise_speed(sport, 1.0) > Traffic.cruise_speed(suv, 1.0),
+		"esportivo anda mais que o SUV na mesma avenida (%.1f x %.1f m/s)" % [
+			Traffic.cruise_speed(sport, 1.0), Traffic.cruise_speed(suv, 1.0)])
+	# Carro com ficha nao salta para o cruzeiro num quadro: acelera pela ficha.
+	var car := Traffic.spawn_car(7, 0, 1)          # modelo 1 = SUV
+	Traffic.apply_spec(car)
+	car["v"] = 0.0
+	var cruise := float(car["speed"])
+	# Instante com o semaforo aberto no sentido dele (fechado, o carro freia).
+	var open_t := 0.0
+	for i in 60:
+		var cand := float(i) * 0.5
+		if not Traffic.must_stop(car["node"], car["h"], 0.0, cand):
+			open_t = cand
+			break
+	Traffic.advance(car, 0.2, open_t)
+	var after_one := float(car["v"])
+	Traffic.advance(car, 2.0, open_t)
+	check(after_one > 0.0 and after_one < cruise * 0.6,
+		"carro nao salta para o cruzeiro num quadro (%.2f m/s)" % after_one)
+	check(float(car["v"]) > after_one,
+		"e vai ganhando velocidade (%.1f m/s)" % float(car["v"]))
+	# Sem ficha (dicionario montado a mao) o modelo antigo continua valendo.
+	var old := Traffic.spawn_car(9, 1, 0)
+	Traffic.advance(old, 0.5, 0.0)
+	check(not old.has("v"),
+		"carro sem ficha nao ganha velocidade real (modelo antigo intacto)")
 
 
 func _test_traffic_lights() -> void:

@@ -24,6 +24,8 @@ extends Node3D
 const Cfg = preload("res://scripts/core/cfg.gd")
 const CityGen = preload("res://scripts/world/city_gen.gd")
 const ModelProp = preload("res://scripts/world/model_prop.gd")
+const SurfaceDB = preload("res://scripts/core/surface_db.gd")
+const VehiclePhysics = preload("res://scripts/vehicles/vehicle_physics.gd")
 
 const LANE := 2.5                       # m do eixo da rua ate o centro da faixa
 const BLOCK := Cfg.BLOCK_SIZE           # 64 m entre cruzamentos
@@ -32,6 +34,14 @@ const GRID := Vector2i(10, 6)           # janela de nascimento (perto do spawn)
 const SPEED_MIN := 5.0                  # m/s (~18 km/h)
 const SPEED_MAX := 9.0                  # m/s (~32 km/h)
 const LAT_RATE := 4.0                   # m/s com que a faixa se ajusta numa curva
+
+# --- Ficha por modelo (B-70): o SUV nao anda como um hatch -------------------
+# A ordem segue MODEL_PATHS: sedan, SUV, esportivo, taxi.
+const MODEL_SPECS := ["sedan", "suv", "sport", "sedan"]
+## Raio (m) da curva de 90 graus na esquina e a distancia em que o carro ja
+## alivia o acelerador para fazer a curva (m).
+const TURN_RADIUS := 7.0
+const CORNER_ZONE := 16.0
 
 # Grade inteira da cidade desenhada (CITY_MIN_Z ate CITY_MAX_Z, x de 0 a 6144):
 # os carros podem circular por toda ela, nao so pela janela do nascimento.
@@ -119,6 +129,12 @@ static func place_near(car: Dictionary, focus: Vector3, near_m: float, far_m: fl
 		car["lat"] = Vector2(right_of(h)) * LANE
 		car["speed"] = rng.randf_range(SPEED_MIN, SPEED_MAX)
 		car["pace"] = 1.0
+		# Carro com ficha (B-70): volta na velocidade de cruzeiro DELE e ja em
+		# movimento (nao nasce acelerando do zero depois de um respawn).
+		if car.has("spec"):
+			car["speed"] = cruise_speed(car["spec"], rng.randf())
+		if car.has("v"):
+			car["v"] = float(car["speed"])
 		return true
 	return false
 
@@ -126,6 +142,67 @@ static func place_near(car: Dictionary, focus: Vector3, near_m: float, far_m: fl
 ## Faixa da direita do sentido h (mao direita). Para h = (1, 0) (leste) da (0, 1).
 static func right_of(h: Vector2i) -> Vector2i:
 	return Vector2i(-h.y, h.x)
+
+
+# --- Fichas dos veiculos (B-70) ---------------------------------------------
+
+## Ficha do veiculo pelo indice do modelo carregado. Desconhecido = sedan.
+static func spec_for_model(model: int) -> Dictionary:
+	var key := "sedan"
+	if model >= 0 and model < MODEL_SPECS.size():
+		key = String(MODEL_SPECS[model])
+	match key:
+		"suv":
+			return VehiclePhysics.suv()
+		"sport":
+			return VehiclePhysics.sport()
+		"compact":
+			return VehiclePhysics.compact()
+		_:
+			return VehiclePhysics.sedan()
+
+
+## Velocidade de cruzeiro pela ficha: carro com mais forca por peso anda mais na
+## mesma avenida (o esportivo puxa na frente, o SUV fica no ritmo de passeio).
+static func cruise_speed(spec: Dictionary, r: float) -> float:
+	var score := clampf(VehiclePhysics.power_to_weight(spec) / 5.9, 0.80, 1.15)
+	return lerpf(SPEED_MIN, SPEED_MAX, clampf(r, 0.0, 1.0)) * score
+
+
+## Aceleracao (m/s2) e freio (m/s2) que a ficha aguenta. O freio e o que mais
+## separa os modelos: o SUV de 2200 kg precisa de mais distancia para parar.
+static func accel_of(spec: Dictionary) -> float:
+	if spec.is_empty():
+		return 2.6
+	return clampf(VehiclePhysics.power_to_weight(spec) * 0.45, 1.6, 3.8)
+
+
+static func brake_of(spec: Dictionary) -> float:
+	if spec.is_empty():
+		return 5.3
+	return clampf(float(spec["brake"]) / maxf(1.0, float(spec["mass"])) * 0.7, 3.5, 7.5)
+
+
+## Limite na curva de 90 graus: v = sqrt(mu*g*R). Centro de gravidade alto
+## derruba o limite — o SUV faz a esquina mais devagar que o esportivo.
+static func corner_speed(spec: Dictionary) -> float:
+	if spec.is_empty():
+		return 8.3
+	var com := maxf(0.35, float(spec.get("com_height", 0.55)))
+	var base := sqrt(SurfaceDB.MU_ASPHALT * VehiclePhysics.GRAVITY * TURN_RADIUS)
+	return clampf(base * (0.55 / com), 4.0, 20.0)
+
+
+## Poe a ficha no carro: modelo -> massa/freio/CG, ritmo de cruzeiro e limite de
+## curva. `v` e a velocidade REAL (sobe e desce pela ficha, ver advance()).
+static func apply_spec(car: Dictionary) -> void:
+	var spec := spec_for_model(int(car.get("model", 0)))
+	car["spec"] = spec
+	car["corner"] = corner_speed(spec)
+	var r := clampf(float(car.get("speed", SPEED_MAX)) / SPEED_MAX, 0.0, 1.0)
+	car["speed"] = cruise_speed(spec, r)
+	car["v"] = float(car["speed"])
+	car["pace"] = 1.0
 
 
 ## Deslocamento de fase do cruzamento: assim os semaforos da cidade nao trocam
@@ -276,10 +353,27 @@ static func spawn_car(rng_seed: int, index: int, model: int) -> Dictionary:
 static func advance(car: Dictionary, dt: float, t: float = 0.0) -> void:
 	# 'pace' vem do espacamento (0 = parado atras de outro carro).
 	var pace: float = clampf(float(car.get("pace", 1.0)), 0.0, 1.0)
-	var step: float = float(car["speed"]) * pace * dt
 	var s: float = float(car["s"])
 	var n: Vector2i = car["node"]
 	var h: Vector2i = car["h"]
+	var step: float = float(car["speed"]) * pace * dt
+	# B-70: carro COM ficha ("v") tem velocidade real, que sobe e desce pela
+	# aceleracao/freio do modelo, freia no semaforo e reduz antes da esquina. Sem
+	# "v" (dicionario montado a mao em teste) vale o modelo antigo.
+	if car.has("v"):
+		var want_speed := float(car["speed"]) * pace
+		# Semaforo fechado: FREIA ate a linha, em vez de so travar a posicao.
+		if must_stop(n, h, s, t):
+			want_speed = 0.0
+		var corner := float(car.get("corner", 0.0))
+		if want_speed > 0.0 and corner > 0.0 and s > BLOCK - CORNER_ZONE:
+			want_speed = minf(want_speed, corner)
+		var spec: Dictionary = car.get("spec", {})
+		var v := float(car["v"])
+		var rate := accel_of(spec) if want_speed > v else brake_of(spec)
+		v = move_toward(v, want_speed, rate * dt)
+		car["v"] = v
+		step = v * dt
 	# Semaforo fechado: para na linha de retencao.
 	if must_stop(n, h, s, t):
 		s = minf(s + step, BLOCK - STOP_BEFORE)
@@ -387,6 +481,9 @@ func setup(base_seed: int, focus: Vector3 = Vector3.ZERO) -> void:
 		var c := spawn_car(base_seed + k * 7919, k, k % meshes.size())
 		if focus != Vector3.ZERO:
 			place_near(c, focus, 30.0, 130.0)
+		# Ficha por modelo (B-70): o SUV da rua freia antes e faz a curva mais
+		# devagar que o hatch; o esportivo anda mais.
+		apply_spec(c)
 		cars.append(c)
 
 	for m in meshes.size():

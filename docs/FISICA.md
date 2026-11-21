@@ -99,7 +99,7 @@ LOD 35/100 m`.
 | 1 Auditoria | Feita (este documento). |
 | 2 Fisica global (9,81, 60 Hz) | Gravidade 9,81 nos modulos; `physics_ticks_per_second=60` ja no project.godot. Sem RigidBody3D: nao ha corpo para gravidade global, e nada recebe gravidade duas vezes. |
 | 3 Colisoes universais | Adaptado: carro/predio/objetos pelo chao analitico + `push_out`. Nao ha carros, motos, caminhoes ou caixas como corpos fisicos — sao desenho e estado. Layers/masks nao se aplicam enquanto nao houver PhysicsServer em uso (tabela proposta na secao 5). |
-| 4 Fisica veicular | Feito nas B-67/B-68: massa, transferencia de peso, mu por piso, FWD/RWD/AWD (presets), ABS, TCS, cambio, curva de torque, arrasto, frenagem. **Falta**: ESP, capotamento (precisa de corpo com 3 eixos), dano visual por peca, veiculos com fichas diferentes na rua (moto/caminhao). |
+| 4 Fisica veicular | Feito nas B-67/B-68/B-70: massa, transferencia de peso, mu por piso, FWD/RWD/AWD (presets), ABS, TCS, **ESP** (corta acelerador no limite lateral), cambio, curva de torque, arrasto, frenagem, e **impacto em parede por angulo** (de frente para, raspando desliza). O transito ganhou FICHA por modelo (B-70): SUV freia antes, faz a esquina mais devagar e o esportivo anda mais. **Falta**: capotamento (precisa de corpo com 3 eixos), dano visual por peca, moto e caminhao. |
 | 5 Personagens/pedestres | Parcial: colisao com o mundo, empurrao de objetos e queda por atropelamento (B-64) existem. **Ragdoll fisico nao**: exige `PhysicalBoneSimulator3D` com ossos fisicos autorados no `.glb`; o walker CC0 nao tem. Ver limites. |
 | 6 Destruicao | 3 estados e destrocos com teto para objetos moveis e para o carro. Vidro/para-choque/porta/retrovisor como pecas separadas precisam de malhas separadas (nao existem). Predio NAO e destrutivel: precisa de dano estrutural por seccao. |
 | 7 Ambiente interativo | Caixas, cadeiras, lixeiras e cones: empurrar, tombar, rolar, cair, quebrar. Portas/janelas com `Joint3D` e mesas ainda nao (precisam de modelo e nao ha geometria de colisao para a dobradica). |
@@ -173,10 +173,37 @@ compilacao), `docs/STATUS.md`, `README.md`.
 
 ## 9. Pendencias priorizadas (ordem sugerida)
 
-1. ESP (corrigir a guinada quando o carro sai de frente) — so fisica, barato.
-2. Fichas de veiculo na rua: usar `compact()`/`suv()` no transito para o SUV nao
-   andar como hatch (o transito e cinematico, entao e aceleracao/curva por ficha).
-3. Porta de loja com `HingeJoint3D` em Area isolada (precisa de malha da porta).
-4. Pecas de carro separadas (vidro, retrovisor, para-choque) para dano visual.
-5. Ragdoll, quando houver corpo com ossos fisicos.
-6. Dano estrutural de predio por seccao (troca de LOD, sem fragmentos).
+1. Porta de loja e portas de interior (precisa de malha da porta; a dobradica
+   seria por codigo ou `HingeJoint3D` numa Area isolada).
+2. Pecas de carro separadas (vidro, retrovisor, para-choque) para dano visual.
+3. Ragdoll, quando houver corpo com ossos fisicos.
+4. Dano estrutural de predio por seccao (troca de LOD, sem fragmentos).
+5. Moto e caminhao no transito com ficha propria (a estrutura de `apply_spec` ja
+   aceita qualquer preset; falta o modelo CC0 e a estabilidade de 2 rodas, que
+   no modelo bicycle e um caso a parte).
+
+## 10. B-70: ESP, impacto em parede por angulo e ficha no transito
+
+- **ESP** (`VehiclePhysics.esp_throttle`, `esp_active`): quando o pneu esta no
+  limite lateral (slip acima de 0,35), o controle corta acelerador para devolver
+  aderencia a curva — o pneu dividido entre tracao e curva perde das duas. Freando
+  ele nao age. O HUD mostra `ESP` na linha de marcha/aderencia.
+- **Parede por angulo** (`VehiclePhysics.wall_hit`): antes, QUALQUER encostao em
+  predio zerava a velocidade. Agora o `push_out` devolve a normal da parede e a
+  batida e decomposta: de frente o carro quase para e o dano e maior; raspando de
+  lado ele desliza, perde so a componente perpendicular e arranha menos. O dano
+  acompanha o quanto a batida foi de frente, nao a velocidade crua.
+- **Transito com ficha** (`Traffic.apply_spec`, `spec_for_model`, `corner_speed`,
+  `brake_of`, `accel_of`, `cruise_speed`): cada modelo da rua (sedan, SUV,
+  esportivo, taxi) carrega massa, freio, centro de gravidade e ritmo proprios. O
+  SUV freia antes (4,1 m/s2 contra 5,3 do sedan), faz a esquina a 6,3 m/s contra
+  8,3 e o esportivo cruza a 10,3 m/s. A velocidade deixa de ser instantanea: o
+  carro acelera e freia pela ficha (`v`), entao ele nao "salta" para o cruzeiro
+  quando o carro da frente libera. Freia tambem no semaforo fechado (antes ele
+  so travava a posicao e seguia em velocidade de cruzeiro, o que dava um arranque
+  irreal no verde). Dicionarios sem `v` continuam com o modelo
+  antigo, o que mantem os testes de transito existentes intactos.
+- **Esportivo** (`VehiclePhysics.sport()`): preset novo (1250 kg, RWD, 260 Nm,
+  centro de gravidade 0,45 m), disponivel para o jogador tambem.
+
+

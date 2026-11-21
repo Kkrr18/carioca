@@ -44,7 +44,9 @@ Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
   eixo para eixo (o carro mergulha ao frear, levanta ao acelerar e rola para fora
   na curva), arrasto aerodinâmico e aderência por piso — asfalto, areia da praia
   e pedra do calçadão. Em curva rápida o carro **subesterça** em vez de girar no
-  próprio eixo, como um carro de verdade. O HUD mostra marcha, rotação e
+  próprio eixo, como um carro de verdade. Tem ESP (corta acelerador quando o
+  pneu chega no limite lateral) e a batida em parede é **por ângulo**: de frente
+  o carro para, raspando ele desliza. O HUD mostra marcha, rotação e
   aderência; o som do motor acompanha o giro. Nada de `RigidBody3D`: a física
   roda sobre o chão analítico, sem nenhuma malha de colisão — é o que cabe no
   iPhone.
@@ -58,7 +60,10 @@ Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
   pneu e para objeto. Tudo sobre o chão analítico, com LOD de 35/100 m, sono e
   3 desenhos no total ([docs/FISICA.md](docs/FISICA.md)).
 - Tráfego: 12 carros de passeio (4 modelos CC0) pela grade de ruas, um desenho
-  por modelo. Eles colidem com o seu carro, mantêm distância entre si e
+  por modelo. Cada modelo tem **ficha própria**: o SUV freia antes e faz a
+  esquina mais devagar, o esportivo anda mais — a velocidade não é mais
+  instantânea, o carro acelera e freia pela ficha dele. Eles colidem com o seu
+  carro, mantêm distância entre si e
   acompanham você pela cidade. O carro que você dirige é o sedã CC0, com rodas
   que giram e esterçam. As ruas têm sinalização pintada: eixo amarelo, faixa de
   pedestres e linha de retenção.
