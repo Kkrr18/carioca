@@ -59,6 +59,13 @@ Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
 - Semáforos: quatro postes por cruzamento com ciclo verde/amarelo/vermelho
   defasado; os carros param na linha de retenção e atravessam no verde. A
   cidade inteira de semáforos custa 2 desenhos por quadro.
+- Lojas com interior: prédios baixos virados para a calçada ganham uma loja no
+  térreo — o vão entra até 4,5 m para dentro do prédio, com piso, forro, paredes,
+  balcão, prateleira, produtos e uma placa colorida (padaria, farmácia, bar,
+  loja, mercado). Os colisores deixam o vão aberto, então **você entra andando**
+  e não atravessa parede. Custo: geometria no mesmo desenho do setor (nenhuma
+  chamada nova), e a loja só existe no LOD detalhado — de longe o prédio fica
+  fechado.
 - Calçada com meio-fio: o miolo da quadra fica 15 cm acima da rua, e o chão de
   quem anda acompanha (personagem e carro sobem no meio-fio).
 - Texturas no chão: asfalto, calçada, areia e o calçadão de pedra portuguesa

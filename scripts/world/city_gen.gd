@@ -78,6 +78,30 @@ const PALETTE := [
 	Color(0.68, 0.72, 0.78),
 ]
 
+# --- Loja (B-65) -------------------------------------------------------------
+## Predio baixo ganha uma LOJA no terreo, aberta para a calcada: o vao entra
+## SHOP_DEPTH para dentro do predio e o jogador entra andando (os colisores do
+## vao ficam abertos). Predios altos nao tem loja: sao torres com garagem.
+const SHOP_CHANCE := 0.22
+const SHOP_H := 3.0              # pe direito da loja (m)
+const SHOP_BAY_MAX := 5.5        # largura maxima da frente
+const SHOP_DEPTH_MAX := 4.5      # profundidade maxima do vao
+const SHOP_FLOOR := Color(0.42, 0.35, 0.28)     # piso (ceramica/madeira)
+const SHOP_WALL := Color(0.88, 0.86, 0.80)      # parede interna clara
+const SHOP_COUNTER := Color(0.52, 0.40, 0.28)   # balcao e prateleira
+## Tipos de loja: [nome, cor da placa]. A cor e o que se ve de longe na rua.
+const SHOP_TYPES := [
+	["Padaria", Color(0.92, 0.74, 0.24)],
+	["Farmacia", Color(0.18, 0.56, 0.34)],
+	["Bar", Color(0.76, 0.18, 0.16)],
+	["Loja", Color(0.24, 0.44, 0.72)],
+	["Mercado", Color(0.96, 0.54, 0.14)],
+]
+## Lado (oeste/leste/sul/norte) -> aresta da planta que fica naquele lado.
+## A planta de _plan_rect vai em anti-horario: 0 = sul, 1 = leste, 2 = norte,
+## 3 = oeste.
+const SHOP_EDGE := [3, 1, 0, 2]
+
 ## Lonas de toldo: o comercio de rua tem toldo COLORIDO. Antes o toldo saia na
 ## cor de telhado (cinza) e parecia uma laje solta na fachada.
 const AWNINGS := [
@@ -337,6 +361,21 @@ static func _lot(gb: GBuf, win: GBuf, bld: TBuf, defs: Array, colliders: Array, 
 	# Nivel do passeio (calcada levantada): o toldo, o arbusto e a arvore ficam
 	# nesta altura, nao enterrados no meio-fio.
 	var ground_y := Cfg.surface_at(lx, lz)
+	# Loja (B-65): predio baixo, virado para a calcada, com vao aberto no terreo.
+	# O sorteio e identico nos dois LODs (o layout nao muda), mas o vao so e
+	# ABERTO no LOD full: de longe o predio fica fechado (economia de geometria).
+	var side := street_side(lx, lz, ax, az)
+	var shop := floors >= 2 and floors <= 3 and w >= 8.0 and d >= 8.0 and rng.chance(SHOP_CHANCE)
+	var shop_kind := 0
+	if shop:
+		shop_kind = rng.range_i(0, SHOP_TYPES.size() - 1)
+	var shop_open := shop and lod == LOD_FULL
+	# Planta do vao: frente de ate SHOP_BAY_MAX e ate SHOP_DEPTH_MAX para dentro.
+	var bw := minf(w * 0.62, SHOP_BAY_MAX)
+	var bd := minf(d * 0.45, SHOP_DEPTH_MAX)
+	var skip_edge := SHOP_EDGE[side] if shop_open else -1
+	var ground_top := 0.0
+	var ground_col := col
 
 	if empty:
 		if lod == LOD_FULL and shrub:
@@ -360,7 +399,9 @@ static func _lot(gb: GBuf, win: GBuf, bld: TBuf, defs: Array, colliders: Array, 
 		# Embasamento de dois/tres andares (loja, garagem) com a planta inteira e
 		# a torre recuada por cima: a silhueta deixa de ser um bloco so.
 		var pod_top := ground_y + (6.3 if floors >= 8 else 4.2)
-		_add_prism_tx(bld, full, base_y, pod_top, base_col, ROOF)
+		_add_prism_tx(bld, full, base_y, pod_top, base_col, ROOF, skip_edge)
+		ground_top = pod_top
+		ground_col = base_col
 		roof_w = maxf(6.5, w * tower_f)
 		roof_d = maxf(6.5, d * tower_f2)
 		roof_cx = bx + tower_sx * (w - roof_w) * 0.5
@@ -371,7 +412,8 @@ static func _lot(gb: GBuf, win: GBuf, bld: TBuf, defs: Array, colliders: Array, 
 	elif style == 1 and floors >= 3:
 		# Topo recuado (setback): o ultimo andar (ou dois) entra para dentro.
 		var low_top := maxf(ground_y + 3.0, roof_y - step_floors * 3.0)
-		_add_prism_tx(bld, full, base_y, low_top, col, ROOF)
+		_add_prism_tx(bld, full, base_y, low_top, col, ROOF, skip_edge)
+		ground_top = low_top
 		roof_w = maxf(6.0, w * tower_f)
 		roof_d = maxf(6.0, d * tower_f2)
 		roof_cx = bx + tower_sx * (w - roof_w) * 0.5
@@ -379,7 +421,19 @@ static func _lot(gb: GBuf, win: GBuf, bld: TBuf, defs: Array, colliders: Array, 
 		_add_prism_tx(bld, _plan_rect(roof_cx, roof_cz, roof_w, roof_d, -1, 0.0), low_top, roof_y,
 				col, ROOF)
 	else:
-		_add_prism_tx(bld, full, base_y, roof_y, col, ROOF)
+		_add_prism_tx(bld, full, base_y, roof_y, col, ROOF, skip_edge)
+		ground_top = roof_y
+
+	if shop_open:
+		# A frente do predio, agora com o VAO da loja: os dois lados e a verga por
+		# cima, com o modulo da fachada continuo (a janela nao escorrega).
+		var fa: Vector2 = full[skip_edge]
+		var fb: Vector2 = full[(skip_edge + 1) % 4]
+		var seg := (fb - fa).length()
+		var off := (seg - bw) * 0.5
+		_wall_with_hole(bld, fa, fb, base_y, ground_top, off, bw, ground_y,
+				ground_y + SHOP_H, ground_col)
+		_add_shop(gb, bx, bz, w, d, side, bw, bd, ground_y, shop_kind)
 
 	if lod == LOD_FULL:
 		# Cobertura: casa de maquinas, caixa d'agua ou antena. Vai para o
@@ -387,9 +441,16 @@ static func _lot(gb: GBuf, win: GBuf, bld: TBuf, defs: Array, colliders: Array, 
 		# nao para um caixote maior que a propria laje, como antes.
 		_roof_props(defs, roof_kind, roof_hue, roof_cx, roof_cz, roof_w, roof_d, roof_y,
 				roof_ox, roof_oz)
-		if awning and floors <= 8:
+		# Com loja, a placa colorida ja marca a fachada: o toldo sairia em cima
+		# dela (os dois a ~3,4 m).
+		if awning and floors <= 8 and not shop_open:
 			_add_awning(gb, lx, lz, bx, bz, w, d, ground_y, ax, az, awning_col)
-	colliders.append(Rect2(bx - w * 0.5, bz - d * 0.5, w, d))
+	# Colisores: com o vao aberto viram corpo do predio + duas laterais do vao;
+	# sem loja (ou no LOD far, onde a frente fica fechada) continua um retangulo.
+	if shop_open:
+		colliders.append_array(shop_colliders(bx, bz, w, d, side, bw, bd))
+	else:
+		colliders.append(Rect2(bx - w * 0.5, bz - d * 0.5, w, d))
 
 
 ## Detalhe de cobertura na laje (caixa d'agua, casa de maquinas ou antena).
@@ -407,7 +468,177 @@ static func _roof_props(defs: Array, kind: int, hue: float, cx: float, cz: float
 	defs.append({"c": Vector3(px, y, pz), "kind": k, "h": 3.0, "hue": hue})
 
 
-## Toldo do comercio, na face do predio voltada para a rua — isto e, a borda
+## Lado da quadra mais proximo da calcada: 0 = oeste, 1 = leste, 2 = sul,
+## 3 = norte. E para la que a loja e o toldo olham.
+static func street_side(lx: float, lz: float, ax: float, az: float) -> int:
+	var side := 0
+	var best := lx - ax
+	if ax + BLOCK - lx < best:
+		side = 1
+		best = ax + BLOCK - lx
+	if lz - az < best:
+		side = 2
+		best = lz - az
+	if az + BLOCK - lz < best:
+		side = 3
+	return side
+
+
+## Colisores de um predio COM loja: o vao fica ABERTO para a rua e as paredes
+## viram retangulos (corpo do predio + duas laterais do vao). Puro e testado:
+## e o que garante que da para entrar andando e que parede nao se atravessa.
+static func shop_colliders(bx: float, bz: float, w: float, d: float, side: int,
+		bw: float, bd: float) -> Array:
+	var x0 := bx - w * 0.5
+	var x1 := bx + w * 0.5
+	var z0 := bz - d * 0.5
+	var z1 := bz + d * 0.5
+	var half_z := (z1 - z0) * 0.5 - bw * 0.5
+	var half_x := (x1 - x0) * 0.5 - bw * 0.5
+	var out: Array = []
+	match side:
+		0:
+			out.append(Rect2(x0 + bd, z0, w - bd, d))
+			out.append(Rect2(x0, z0, bd, half_z))
+			out.append(Rect2(x0, bz + bw * 0.5, bd, z1 - (bz + bw * 0.5)))
+		1:
+			out.append(Rect2(x0, z0, w - bd, d))
+			out.append(Rect2(x1 - bd, z0, bd, half_z))
+			out.append(Rect2(x1 - bd, bz + bw * 0.5, bd, z1 - (bz + bw * 0.5)))
+		2:
+			out.append(Rect2(x0, z0 + bd, w, d - bd))
+			out.append(Rect2(x0, z0, half_x, bd))
+			out.append(Rect2(bx + bw * 0.5, z0, x1 - (bx + bw * 0.5), bd))
+		_:
+			out.append(Rect2(x0, z0, w, d - bd))
+			out.append(Rect2(x0, z1 - bd, half_x, bd))
+			out.append(Rect2(bx + bw * 0.5, z1 - bd, x1 - (bx + bw * 0.5), bd))
+	return out
+
+
+## Quad vertical (parede) com normal `nrm`: a ordem dos pontos e corrigida
+## sozinha se o winding sair ao contrario (a convencao do arquivo e front =
+## -(b-a) x (d-a)). Assim nenhuma parede da loja some por engano.
+static func _wall_quad(gb: GBuf, a: Vector2, b: Vector2, y0: float, y1: float,
+		nrm: Vector3, col: Color) -> void:
+	var d := Vector3(b.x - a.x, 0.0, b.y - a.y)
+	if (-(d.cross(Vector3.UP))).dot(nrm) < 0.0:
+		var tmp := a
+		a = b
+		b = tmp
+	gb.normal(nrm)
+	_add_quad(gb, Vector3(a.x, y0, a.y), Vector3(b.x, y0, b.y),
+			Vector3(b.x, y1, b.y), Vector3(a.x, y1, a.y), col)
+
+
+## Parede da fachada com um VAO retangular (a frente da loja): desenha os dois
+## lados e a verga por cima do vao, com UV de fachada continuo — o modulo da
+## janela nao escorrega. Abaixo do vao nao se desenha nada: fica enterrado.
+static func _wall_with_hole(tb: TBuf, a: Vector2, b: Vector2, y0: float, y1: float,
+		off: float, ow: float, hole_y0: float, hole_y1: float, col: Color) -> void:
+	var dir := b - a
+	var seg := dir.length()
+	if seg < 0.2:
+		return
+	var u := dir / seg
+	var nrm := Vector3(u.y, 0.0, -u.x)
+	_wall_piece(tb, a, u, nrm, 0.0, off, y0, y1, y0, col)
+	_wall_piece(tb, a, u, nrm, off + ow, seg, y0, y1, y0, col)
+	_wall_piece(tb, a, u, nrm, off, off + ow, hole_y1, y1, y0, col)
+
+
+## Pedaco de parede entre t0..t1 (ao longo da face) e yb..yt, com UV de modulo.
+static func _wall_piece(tb: TBuf, a: Vector2, u: Vector2, nrm: Vector3,
+		t0: float, t1: float, yb: float, yt: float, y_base: float, col: Color) -> void:
+	if t1 - t0 < 0.02 or yt - yb < 0.02:
+		return
+	var p0 := a + u * t0
+	var p1 := a + u * t1
+	tb.quad_uv(
+			Vector3(p0.x, yb, p0.y), Vector3(p1.x, yb, p1.y),
+			Vector3(p1.x, yt, p1.y), Vector3(p0.x, yt, p0.y), nrm,
+			Vector2(t0 / tb.tile, (yb - y_base) / tb.tile_v),
+			Vector2(t1 / tb.tile, (yb - y_base) / tb.tile_v),
+			Vector2(t1 / tb.tile, (yt - y_base) / tb.tile_v),
+			Vector2(t0 / tb.tile, (yt - y_base) / tb.tile_v), col)
+
+
+## Loja aberta para a calcada (B-65): interior com piso, forro, paredes de fundo
+## e laterais (quads simples, so a face de dentro), balcao, prateleira, dois
+## produtos e a PLACA colorida na fachada. Tudo no buffer de cor por vertice:
+## nenhum desenho novo por setor.
+static func _add_shop(gb: GBuf, bx: float, bz: float, w: float, d: float, side: int,
+		bw: float, bd: float, ground_y: float, kind: int) -> void:
+	var face := Vector2.ZERO
+	var inward := Vector2.ZERO
+	match side:
+		0:
+			face = Vector2(bx - w * 0.5, bz)
+			inward = Vector2(1.0, 0.0)
+		1:
+			face = Vector2(bx + w * 0.5, bz)
+			inward = Vector2(-1.0, 0.0)
+		2:
+			face = Vector2(bx, bz - d * 0.5)
+			inward = Vector2(0.0, 1.0)
+		_:
+			face = Vector2(bx, bz + d * 0.5)
+			inward = Vector2(0.0, -1.0)
+	var across := Vector2(-inward.y, inward.x)
+	var nrm_in := Vector3(-inward.x, 0.0, -inward.y)     # normal para DENTRO
+	var half := bw * 0.5
+	var deep := bd
+	var y0 := ground_y + 0.02
+	# Forro 3 cm abaixo do pe direito: com predio de 1 andar o teto da loja
+	# encostaria na laje e os dois brigariam por profundidade na tela.
+	var roof := ground_y + SHOP_H - 0.03
+	# Piso e forro: U (para dentro) x V (ao longo da frente) = -cima, entao a
+	# ordem abaixo da a normal para cima (piso) e a invertida da para baixo.
+	var u3 := Vector3(inward.x, 0.0, inward.y)
+	var v3 := Vector3(across.x, 0.0, across.y)
+	var base := face + inward * 0.05 - across * half
+	var p00 := Vector3(base.x, y0, base.y)
+	var p10 := p00 + u3 * (deep - 0.1)
+	var p11 := p10 + v3 * bw
+	var p01 := p00 + v3 * bw
+	gb.normal(Vector3.UP)
+	_add_quad(gb, p00, p10, p11, p01, SHOP_FLOOR)
+	gb.normal(Vector3.DOWN)
+	_add_quad(gb, Vector3(p01.x, roof, p01.z), Vector3(p11.x, roof, p11.z),
+			Vector3(p10.x, roof, p10.z), Vector3(p00.x, roof, p00.z), SHOP_WALL)
+	# Paredes: fundo e as duas laterais (so a face de dentro).
+	var back_a := face + inward * deep + across * half
+	var back_b := face + inward * deep - across * half
+	_wall_quad(gb, back_a, back_b, y0, roof, nrm_in, SHOP_WALL)
+	var l0 := face + inward * 0.05 + across * half
+	var l1 := face + inward * deep + across * half
+	_wall_quad(gb, l0, l1, y0, roof, -Vector3(across.x, 0.0, across.y), SHOP_WALL)
+	var r0 := face + inward * 0.05 - across * half
+	var r1 := face + inward * deep - across * half
+	_wall_quad(gb, r0, r1, y0, roof, Vector3(across.x, 0.0, across.y), SHOP_WALL)
+	# Balcao perto do fundo, prateleira na parede do fundo, dois produtos.
+	var col: Color = SHOP_TYPES[kind][1]
+	var counter := face + inward * (deep * 0.62)
+	var sx := 0.6 if absf(inward.x) > 0.5 else minf(bw * 0.72, 2.4)
+	var sz := minf(bw * 0.72, 2.4) if absf(inward.x) > 0.5 else 0.6
+	_add_box(gb, Vector3(counter.x, ground_y + 0.50, counter.y), Vector3(sx, 1.0, sz), SHOP_COUNTER)
+	var shelf := face + inward * (deep - 0.25)
+	var shx := 0.35 if absf(inward.x) > 0.5 else bw * 0.7
+	var shz := bw * 0.7 if absf(inward.x) > 0.5 else 0.35
+	_add_box(gb, Vector3(shelf.x, ground_y + 1.05, shelf.y), Vector3(shx, 1.7, shz), SHOP_COUNTER)
+	for k in 2:
+		var o := face + inward * (deep - 0.35) + across * (half * 0.45 * (1.0 if k == 0 else -1.0))
+		_add_box(gb, Vector3(o.x, ground_y + 1.05, o.y),
+				Vector3(0.3, 0.35, 0.3), col.lerp(Color.WHITE, 0.35))
+	# Placa da loja, acima do vao, na cor do tipo (padaria, farmacia, bar...).
+	# A frente escura por fora da a leitura de "placa" em vez de "faixa".
+	var sign := face + inward * 0.06
+	var pgx := 0.14 if absf(inward.x) > 0.5 else bw * 1.02
+	var pgz := bw * 1.02 if absf(inward.x) > 0.5 else 0.14
+	_add_box(gb, Vector3(sign.x, roof + 0.42, sign.y), Vector3(pgx, 0.72, pgz), col)
+
+
+
 ## mais proxima da quadra (a calcada). Antes saia sempre virado para o sul.
 static func _add_awning(gb: GBuf, lx: float, lz: float, bx: float, bz: float,
 		w: float, d: float, ground_y: float, ax: float, az: float, col: Color) -> void:
@@ -648,12 +879,14 @@ static func plan_area(pts: PackedVector2Array) -> float:
 ## face de baixo nao existe (o predio esta enterrado) — e o que faz este prisma
 ## custar menos vertices que a caixa de 6 faces de antes.
 static func _add_prism_tx(tb: TBuf, plan: PackedVector2Array, y0: float, y1: float,
-		wall_col: Color, roof_col: Color) -> void:
+		wall_col: Color, roof_col: Color, skip_edge: int = -1) -> void:
 	var n := plan.size()
 	if n < 3 or y1 - y0 < 0.05:
 		return
 	var vv := (y1 - y0) / tb.tile_v
 	for i in n:
+		if i == skip_edge:
+			continue
 		var a := plan[i]
 		var b := plan[(i + 1) % n]
 		var dx := b.x - a.x

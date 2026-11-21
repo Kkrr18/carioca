@@ -639,8 +639,34 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   NAO validado no aparelho: falta ver se ele anda de frente e se o passo casa com
   a velocidade (se patinar, ajustar os divisores 4,6 e 1,5).
 
-## Proximas tarefas (Fase 1 -> Fase 2)
+- B-64: Fase 4 — ANIMACOES DOS NPCs. O autor pediu "animacoes mais trabalhadas".
+  O CI imprimiu o inventario do `ped-walk.glb`: **so 3 clipes** (idle, walk,
+  run) — o espelho do GitHub perdeu pulo/punch/work/death do pack da Quaternius.
+  Entregue: papeis de clipe resolvidos por nome (idle/walk/run/gesto/queda, cada
+  um so entra se existir), transicoes com blend (0,28 s no passo, 0,12 s no
+  resto), clipe de CORRIDA para quem corre na orla com compasso casado com a
+  velocidade (sem patinar), giro de espera de +-12 graus em quem esta parado e
+  QUEDA por codigo quando o carro do jogador passa a mais de 3 m/s a menos de
+  1,7 m (tomba 90 graus em 0,25 s, fica 4,5 s no chao com o passo congelado e
+  levanta). `clip_for`, `clip_pace`, `car_hit` e `fall_pitch` sao puros e
+  testados. FALTA: um arquivo com os 7 clipes do pack (so existe em .zip) e
+  gestos reais de conversa.
+- B-65: Fase 4 — LOJAS COM INTERIOR. Predio baixo (2 ou 3 andares) virado para a
+  calcada ganha loja no terreo: o vao (ate 5,5 m de frente por 4,5 m de fundo,
+  3 m de pe direito) entra para dentro do predio, a fachada da frente passa a ser
+  desenhada em 3 pedacos (dois lados + verga, com UV de modulo continuo) e por
+  dentro entram piso, forro, 3 paredes, balcao, prateleira, 2 produtos e a placa
+  colorida do tipo (padaria/farmacia/bar/loja/mercado). Tudo no buffer de cor
+  por vertice: NENHUM desenho novo por setor. Os colisores passam de 1 retangulo
+  para 3 (corpo do predio + as duas laterais do vao), entao o jogador ENTRA
+  andando e nao atravessa parede; no LOD far o vao fica fechado e o colisor
+  volta a ser um retangulo so, para a colisao casar com o que se ve. O toldo sai
+  quando ha loja (a placa ocupa o mesmo lugar, ~3,4 m). `street_side`,
+  `shop_colliders` e a fachada com vao sao puros e testados no CI (vao livre,
+  parede fechada, 3 pedacos, nada cobrindo a porta). NAO validado no aparelho:
+  falta entrar numa loja e ver se o interior le bem a luz do dia.
 
+## Proximas tarefas (Fase 1 -> Fase 2)
 1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
 2. Medir FPS no iPhone jogando uma sessao real (B-09): o botao PERF grava CSV.
 3. Pedir ao usuario que toque em SALVAR e CARREGAR no jogo e confirme que o save volta (valida o B-08 no aparelho).

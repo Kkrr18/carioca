@@ -68,6 +68,7 @@ func _initialize() -> void:
 	_test_pedestrian_model()
 	_test_pedestrian_life()
 	_test_player_model()
+	_test_shops()
 	_test_windows()
 	_test_building_shapes()
 	_test_scripts_compile()
@@ -1271,6 +1272,69 @@ func _test_player_model() -> void:
 		check(cols[3].is_equal_approx(Color(0, 0, 1)), "tronco = camisa")
 		check(cols[6].is_equal_approx(Color(0, 0, 0)), "nuca = cabelo preto")
 	mi.free()
+
+
+func _test_shops() -> void:
+	# B-65: lojas com interior. O que da para provar sem GPU: o lado da rua que a
+	# loja olha, os colisores deixarem o vao ABERTO para o jogador entrar (e as
+	# paredes fechadas), a fachada com vao ter 3 pedacos e a loja gerar interior.
+	check(CityGen.street_side(10.0, 32.0, 0.0, 0.0) == 0, "lote do oeste olha para o oeste")
+	check(CityGen.street_side(54.0, 32.0, 0.0, 0.0) == 1, "lote do leste olha para o leste")
+	check(CityGen.street_side(32.0, 10.0, 0.0, 0.0) == 2, "lote do sul olha para o sul")
+	check(CityGen.street_side(32.0, 54.0, 0.0, 0.0) == 3, "lote do norte olha para o norte")
+	# Colisores: o centro do vao fica LIVRE, o miolo do predio e a parede
+	# lateral ficam fechados, nos quatro lados.
+	var free_ok := true
+	var body_ok := true
+	var wall_ok := true
+	for side in 4:
+		var rects := CityGen.shop_colliders(0.0, 0.0, 12.0, 12.0, side, 5.0, 4.0)
+		var bay := [Vector2(-4.0, 0.0), Vector2(4.0, 0.0), Vector2(0.0, -4.0), Vector2(0.0, 4.0)]
+		var wall := [Vector2(-4.0, 4.0), Vector2(4.0, 4.0), Vector2(4.0, -4.0), Vector2(4.0, 4.0)]
+		if _rect_list_has(rects, bay[side]):
+			free_ok = false
+		if not _rect_list_has(rects, Vector2(0.5, 0.5)):
+			body_ok = false
+		if not _rect_list_has(rects, wall[side]):
+			wall_ok = false
+		check(rects.size() == 3, "loja no lado %d tem 3 colisores (%d)" % [side, rects.size()])
+	check(free_ok, "vao da loja aberto: o jogador entra andando")
+	check(body_ok, "corpo do predio continua fechado")
+	check(wall_ok, "paredes laterais do vao fechadas")
+	# Fachada com vao: dois lados + verga (3 quads = 18 vertices), nada tapando
+	# o buraco.
+	var tb := CityGen.TBuf.new(22.9, 12.0)
+	CityGen._wall_with_hole(tb, Vector2(0.0, 0.0), Vector2(10.0, 0.0), 0.0, 12.0,
+			3.0, 4.0, 1.0, 4.0, Color.WHITE)
+	check(tb.v.size() == 18, "fachada com vao = 3 pedacos (%d vertices)" % tb.v.size())
+	var open := true
+	for i in range(0, tb.v.size(), 6):
+		var a := tb.v[i]
+		var c := tb.v[i + 2]
+		# Nenhum pedaco pode cobrir o miolo do vao (t entre 3 e 7, y entre 1 e 4).
+		var x0 := minf(a.x, c.x)
+		var x1 := maxf(a.x, c.x)
+		var y0 := minf(a.y, c.y)
+		var y1 := maxf(a.y, c.y)
+		if x0 < 6.9 and x1 > 3.1 and y0 < 3.9 and y1 > 1.1:
+			open = false
+	check(open, "vao da fachada livre (sem parede tapando a porta)")
+	# A loja gera interior de verdade (piso, forro, 3 paredes, balcao, placa).
+	var gb := CityGen.GBuf.new()
+	CityGen._add_shop(gb, 0.0, 0.0, 12.0, 12.0, 0, 5.0, 4.0, 1.0, 0)
+	check(gb.v.size() > 200, "interior da loja gerado (%d vertices)" % gb.v.size())
+	check(gb.v.size() % 3 == 0, "geometria da loja em triangulos")
+	check(gb.n.size() == gb.v.size() and gb.c.size() == gb.v.size(),
+		"loja com 1 normal e 1 cor por vertice")
+
+
+## O retangulo `p` cai dentro de algum dos Rect2 da lista?
+func _rect_list_has(rects: Array, p: Vector2) -> bool:
+	for r in rects:
+		var rect: Rect2 = r
+		if rect.has_point(p):
+			return true
+	return false
 
 
 func _test_windows() -> void:
