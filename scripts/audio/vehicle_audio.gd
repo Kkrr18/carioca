@@ -1,19 +1,24 @@
 extends Node
-## Som do carro e da cidade (Fase 4): motor sintetizado em codigo + um impacto
+## Som do carro e da cidade (Fase 4): motor em loop gerado em codigo + impacto
 ## CC0 baixado.
+##
+## B-74: o motor usava `AudioStreamGenerator` (buffer preenchido a cada quadro).
+## No iPhone de verdade o console mostrava, ao entrar no carro:
+##   WARNING: /root/Main/VehicleAudio/Engine is trying to play a sample from a
+##   stream that cannot be sampled. at: play_basic (audio_stream_player_internal)
+## e o motor ficava mudo. Era o mesmo sintoma do B-42/B-61, que eu tinha
+## "consertado" enchendo o buffer antes do play: a causa nao era buffer vazio —
+## no build Web o gerador nao e amostravel. Agora o motor e um `AudioStreamWAV`
+## de 1,5 s GERADO UMA VEZ no _ready, em loop, e o giro vira `pitch_scale`.
+## Ganhos: sem aviso no console, sem sintese por amostra no Web/iPhone (so uma
+## escrita de propriedade por quadro) e o tom acompanha o giro igual.
 ##
 ## Por que sintetizar em vez de baixar: nao existe loop de motor CC0 em .wav ou
 ## .mp3 com URL direta (pesquisa de 2026-11); os loops livres que existem sao
-## .ogg, que o Safari do iPhone nao decodifica. E um arquivo fixo nao acompanha a
-## velocidade — aqui o tom sobe com o giro, que e o que faz o carro parecer vivo.
-## O unico arquivo baixado e a batida (thud2.wav, CC0, BMacZero, OpenGameArt).
+## .ogg, que o Safari do iPhone nao decodifica.
 ##
 ## O Safari so libera audio depois do primeiro toque na tela; o Godot retoma o
 ## AudioContext nesse momento, entao o som "acorda" no primeiro comando.
-##
-## Custo: a tabela do motor e preenchida uma vez; por amostra so ha uma leitura
-## de tabela e um filtro de ruido, porque chamar sin() 700 vezes por quadro no
-## iPhone custaria mais que o desenho da cidade.
 
 const MIX_RATE := 22050.0
 const TABLE_SIZE := 512
@@ -22,31 +27,30 @@ const MAX_HZ := 96.0
 const MAX_SPEED := 22.0      # igual a car.gd (m/s)
 const IMPACT_PATH := "res://assets/sounds/impact.wav"
 
-var car = null               # car.gd: velocidade e acelerador vem daqui
+## Loop do motor: 1,5 s. O comprimento tem um numero INTEIRO de ciclos da
+## frequencia base, senao a emenda estala.
+const LOOP_SECONDS := 1.5
+const LOOP_HZ := 60.0
+## Giro -> pitch do loop: 60 Hz x 0,42 = 25 Hz na lenta; 60 x 1,60 = 96 Hz no
+## corte (a mesma faixa de engine_hz).
+const PITCH_IDLE := 0.42
+const PITCH_MAX := 1.60
+
+var car = null               # car.gd: giro e acelerador vem daqui
 var enabled := true
 
 var _stream: AudioStreamPlayer
 var _impact: AudioStreamPlayer
-var _playback: AudioStreamGeneratorPlayback
-var _table := PackedFloat32Array()
-var _phase := 0.0
-var _noise := 0.0
-var _rng := RandomNumberGenerator.new()
 var _started := false
 var _tries := 0
 var _retry := 0.0
 
 
 func _ready() -> void:
-	_rng.seed = 20260922
-	_table = engine_table()
-	var gen := AudioStreamGenerator.new()
-	gen.mix_rate = MIX_RATE
-	gen.buffer_length = 0.12
 	_stream = AudioStreamPlayer.new()
 	_stream.name = "Engine"
-	_stream.stream = gen
-	_stream.volume_db = -8.0
+	_stream.stream = engine_loop(LOOP_SECONDS, MIX_RATE)
+	_stream.volume_db = -40.0        # mudo ate estar dirigindo
 	add_child(_stream)
 	_impact = AudioStreamPlayer.new()
 	_impact.name = "Impact"
@@ -56,9 +60,7 @@ func _ready() -> void:
 	if _impact.stream == null:
 		push_warning("VehicleAudio: %s nao carregou" % IMPACT_PATH)
 	# NAO chamar play() aqui: no build web o AudioContext ainda esta suspenso (o
-	# Safari exige um toque), e o Godot imprime "is trying to play a sample from
-	# a stream that cannot be sampled" e o motor fica mudo (B-42). O som comeca
-	# no primeiro toque, em _input.
+	# Safari exige um toque). O som comeca no primeiro gesto, em _input.
 
 
 # --- Nucleo puro (testado em tests/runner.gd) --------------------------------
@@ -90,6 +92,36 @@ static func engine_table() -> PackedFloat32Array:
 	return t
 
 
+## Gera o loop do motor como AudioStreamWAV 16 bits mono (B-74). PURO e
+## deterministico: o CI confere tamanho, loop e pico sem placa de audio.
+## O "ruido de cidade" e feito de harmonicos INTEIROS no mesmo loop (ruido
+## aleatorio repetido faria "tick" a cada volta do loop).
+static func engine_loop(seconds: float, mix_rate: float) -> AudioStreamWAV:
+	var rate := maxf(1000.0, mix_rate)
+	var cycles := maxf(1.0, round(LOOP_HZ * maxf(0.1, seconds)))
+	var frames := int(round(cycles / LOOP_HZ * rate))
+	var table := engine_table()
+	var data := PackedByteArray()
+	data.resize(frames * 2)
+	for i in frames:
+		var x := fmod(float(i) * LOOP_HZ / rate, 1.0)
+		var v := table[int(x * float(TABLE_SIZE)) & (TABLE_SIZE - 1)]
+		var u := float(i) / float(frames)
+		v += (sin(TAU * u * 37.0) + sin(TAU * u * 61.0) * 0.7
+				+ sin(TAU * u * 89.0) * 0.5) * 0.035
+		v = clampf(v, -0.95, 0.95)
+		data.encode_s16(i * 2, int(round(v * 32000.0)))
+	var st := AudioStreamWAV.new()
+	st.format = AudioStreamWAV.FORMAT_16_BITS
+	st.mix_rate = int(round(rate))
+	st.stereo = false
+	st.data = data
+	st.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	st.loop_begin = 0
+	st.loop_end = frames
+	return st
+
+
 ## Pitch do impacto: batida forte soa mais grave e mais alta.
 static func impact_pitch(strength: float) -> float:
 	return lerpf(1.25, 0.85, clampf(strength, 0.0, 1.0))
@@ -107,12 +139,17 @@ static func load_impact() -> AudioStream:
 # --- Cena --------------------------------------------------------------------
 
 func start() -> void:
-	_start_stream()
+	if _stream == null or _tries >= 8:
+		return
+	_started = true
+	_tries += 1
+	if not _stream.playing:
+		_stream.play()
 
 
 ## Estado do som para a telemetria: sem isso, "nao tem som" e um mistério.
 func describe() -> String:
-	if _playback != null:
+	if _stream != null and _stream.playing:
 		return "som: motor sintetizado ligado"
 	if _started:
 		return "som: sem audio neste navegador (%d tentativas)" % _tries
@@ -122,7 +159,7 @@ func describe() -> String:
 ## O Safari so libera audio depois de um gesto. Cada toque/tecla tenta ligar o
 ## motor de novo, ate conseguir (ou ate desistir, para nao gastar quadro).
 func _input(event: InputEvent) -> void:
-	if _playback != null:
+	if _stream != null and _stream.playing:
 		return
 	var press := false
 	if event is InputEventScreenTouch:
@@ -132,27 +169,7 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventKey:
 		press = (event as InputEventKey).pressed
 	if press:
-		_start_stream()
-
-
-func _start_stream() -> void:
-	if _stream == null or _tries >= 8:
-		return
-	_started = true
-	_tries += 1
-	# Nao reinicia o player se ele ja esta tocando: cada play() num gerador
-	# vazio repete o aviso "cannot be sampled" (B-42).
-	if not _stream.playing:
-		_stream.play()
-	var pb := _stream.get_stream_playback() as AudioStreamGeneratorPlayback
-	if pb == null:
-		return
-	_playback = pb
-	# Enche o buffer AQUI, ainda neste quadro: o mixer pode rodar antes do
-	# _process, e um gerador vazio na hora da mistura faz o Godot imprimir
-	# "trying to play a sample from a stream that cannot be sampled" e o motor
-	# fica mudo (B-42). Era o erro que aparecia no painel ao entrar no carro.
-	_push(int(MIX_RATE * 0.08))
+		start()
 
 
 ## Batida (ligada ao signal crashed do carro).
@@ -164,9 +181,18 @@ func crash(strength: float) -> void:
 	_impact.play()
 
 
-## Enche o buffer do gerador com `n` amostras (motor + ruido de cidade).
-func _push(n: int) -> void:
-	if _playback == null or n <= 0:
+## O giro vira pitch do loop: uma escrita de propriedade por quadro, sem
+## sintese de amostra (era o custo do gerador em B-42/B-61).
+func _process(delta: float) -> void:
+	if not enabled or _stream == null or not _started:
+		return
+	if not _stream.playing:
+		# O navegador aceitou o toque mas ainda nao tocou: tenta de novo algumas
+		# vezes, sem insistir a cada quadro.
+		_retry -= delta
+		if _tries < 8 and _retry <= 0.0:
+			_retry = 0.5
+			start()
 		return
 	var ratio := 0.0
 	var gas := 0.0
@@ -174,41 +200,10 @@ func _push(n: int) -> void:
 	if car != null:
 		driving = bool(car.occupied)
 		gas = clampf(absf(float(car.input_throttle)), 0.0, 1.0)
-		# Com a fisica nova (B-67) o som segue o MOTOR, nao a velocidade: e a
-		# troca de marcha que se ouve (o giro cai ao subir a marcha).
 		var er: Variant = car.get("engine_ratio")
 		if er != null:
 			ratio = clampf(float(er), 0.0, 1.0)
 		else:
 			ratio = clampf(absf(float(car.speed)) / MAX_SPEED, 0.0, 1.0)
-	var inc := engine_hz(ratio) / MIX_RATE
-	var amp := (0.10 + 0.20 * ratio + 0.08 * gas) if driving else 0.0
-	var buf := PackedVector2Array()
-	buf.resize(n)
-	for i in n:
-		_phase = fmod(_phase + inc, 1.0)
-		var sample := 0.0
-		if amp > 0.0:
-			sample += _table[int(_phase * float(TABLE_SIZE)) & (TABLE_SIZE - 1)] * amp
-		# Ruido filtrado: cidade e vento atras do motor.
-		_noise = lerpf(_noise, _rng.randf_range(-1.0, 1.0), 0.03)
-		sample += _noise * 0.06
-		sample = clampf(sample, -0.9, 0.9)
-		buf[i] = Vector2(sample, sample)
-	_playback.push_buffer(buf)
-
-
-func _process(_delta: float) -> void:
-	if not enabled:
-		return
-	if _playback == null:
-		# Sem toque ainda, ou o navegador recusou: tenta de novo a cada 0,5 s,
-		# algumas vezes, em vez de insistir a cada quadro.
-		_retry -= _delta
-		if _started and _tries < 8 and _retry <= 0.0:
-			_retry = 0.5
-			_start_stream()
-		return
-	var frames := _playback.get_frames_available()
-	if frames > 0:
-		_push(frames)
+	_stream.pitch_scale = lerpf(PITCH_IDLE, PITCH_MAX, ratio)
+	_stream.volume_db = (lerpf(-18.0, -8.0, ratio) + gas * 2.0) if driving else -40.0

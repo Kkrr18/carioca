@@ -292,9 +292,14 @@ static func step(spec: Dictionary, state: Dictionary, throttle: float, slope: fl
 	new_speed = clampf(new_speed, -REVERSE_MAX, MAX_FORWARD)
 
 	# Cambio automatico: sobe perto do corte, desce se o motor cair demais.
+	# B-74: DESCE tambem com o acelerador solto. Antes so reduzia com
+	# `throttle != 0`, entao o carro ficava em 5a a 10 km/h: o HUD mostrava
+	# "marcha 1 / 800 rpm" (giro no corte de baixo) andando, o som ficava em
+	# marcha lenta e arrancar de novo pedia emenda. Subir continua exigindo
+	# acelerador.
 	var now_rpm := rpm_for(spec, new_speed, gear)
-	if cool <= 0.0 and throttle != 0.0:
-		if now_rpm > SHIFT_UP_RPM and gear < gears.size():
+	if cool <= 0.0:
+		if now_rpm > SHIFT_UP_RPM and gear < gears.size() and throttle > 0.0:
 			gear += 1
 			cool = 0.55
 		elif now_rpm < SHIFT_DOWN_RPM and gear > 1:

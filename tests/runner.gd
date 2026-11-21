@@ -1220,7 +1220,31 @@ func _test_audio_pure() -> void:
 	check(absf(table[0]) < 0.01, "tabela do motor comeca em zero (sem clique no loop)")
 	check(VehicleAudio.impact_pitch(0.0) > VehicleAudio.impact_pitch(1.0),
 		"batida forte soa mais grave")
+	# B-74: com o pe solto o cambio TEM de reduzir (antes ficava em 4a a 10 km/h
+	# com o giro preso na lenta; foi assim que o HUD apareceu no print do iPhone).
+	var sp := VehiclePhysics.sedan()
+	var coast_up := {"speed": 2.78, "gear": 4, "shift_cool": 0.0}
+	for i in 120:
+		coast_up = VehiclePhysics.step(sp, coast_up, 0.0, 0.0, Surf.MU_ASPHALT, 1.0 / 60.0)
+	check(int(coast_up["gear"]) == 1,
+		"com o pe solto o cambio reduz ate a 1a (marcha %d)" % int(coast_up["gear"]))
+	check(float(coast_up["rpm"]) > 900.0,
+		"e o giro sai da marcha lenta andando (%.0f rpm)" % float(coast_up["rpm"]))
 	check(VehicleAudio.load_impact() != null, "som de batida CC0 carregou")
+	# B-74: o motor e um LOOP de AudioStreamWAV gerado em codigo. O
+	# AudioStreamGenerator imprimia "cannot be sampled" no iPhone e ficava mudo.
+	var loop := VehicleAudio.engine_loop(VehicleAudio.LOOP_SECONDS, VehicleAudio.MIX_RATE)
+	var loop_bytes := loop.data.size() if loop != null else 0
+	check(loop != null and loop_bytes > 1000, "loop do motor gerado (%d bytes)" % loop_bytes)
+	if loop != null:
+		check(loop.loop_mode == AudioStreamWAV.LOOP_FORWARD, "loop do motor em repeticao")
+		var frames := loop_bytes / 2
+		check(absi(loop.loop_end - frames) <= 1,
+			"loop cobre o buffer inteiro (%d de %d quadros)" % [loop.loop_end, frames])
+		var peak := 0
+		for i in mini(frames, 4000):
+			peak = maxi(peak, absi(loop.data.decode_s16(i * 2)))
+		check(peak > 8000 and peak < 32767, "loop audivel e sem estouro (pico %d)" % peak)
 	# B-42: o som nao pode comecar antes de um toque (o Safari recusa e o motor
 	# fica mudo). Antes do primeiro toque, o estado tem que dizer isso.
 	var av := VehicleAudio.new()

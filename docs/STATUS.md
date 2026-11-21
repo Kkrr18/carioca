@@ -919,6 +919,39 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   por `vs.y/640`, entao o layout acompanha); nao fiz isso as cegas porque
   suaviza a imagem no desktop e o ganho no iPhone precisa ser medido com MEDIR.
 
+- B-74: Fase 4 — PRIMEIRO PRINT DO IPHONE DE VERDADE. O autor mandou uma captura
+  do jogo rodando no aparelho (retrato, dirigindo). O que ela PROVA, com numeros
+  lidos na tela: `FPS 30  frame 33.3 ms  p95 33.9 ms` — o iPhone 12 segura os
+  30 FPS cravados com `draw calls 327`, `primitivas 228.136`, `objetos 1.596` na
+  cidade (nao na praia), `setores 9`, `marcha/rpm/aderencia`, `avaria 0%`,
+  `props 20 (0 acordados) + 0 destrocos`. Ou seja: os 12-21 FPS que eu tinha
+  medido no inspetor de navegador eram o rasterizador por SOFTWARE do ambiente
+  de teste (renderer "WebKit WebGL" sem nome de GPU), NAO o telefone. Tambem
+  deu para ver que as seis fichas do topo (SALVAR/CARREGAR/PERF, MEDIR/+1h/
+  LIMITAR 30) aparecem inteiras no aparelho: o corte no topo que eu tinha visto
+  era do ambiente de teste, mas a correcao de `100dvh` do B-73 continua valendo
+  e e inocua.
+  DOIS PROBLEMAS REAIS ACHADOS NA CAPTURA: (1) o console mostra o aviso
+  `WARNING: /root/Main/VehicleAudio/Engine is trying to play a sample from a
+  stream that cannot be sampled at play_basic (audio_stream_player_internal)`
+  — o motor ficava MUDO no aparelho. A causa nunca foi buffer vazio (o B-42/
+  B-61 tinham "consertado" isso enchendo o buffer antes do play): no build Web
+  o `AudioStreamGenerator` nao e amostravel. SOLUCAO: o motor passou a ser um
+  `AudioStreamWAV` de 1,5 s GERADO UMA VEZ no `_ready` (tabela do motor +
+  harmonicos inteiros para o "ruido", numero inteiro de ciclos para o loop nao
+  estalar), tocado em loop com `pitch_scale` de 0,42 a 1,60 conforme o giro.
+  Fica mais barato (uma escrita de propriedade por quadro em vez de sintetizar
+  amostra) e o aviso some. (2) Em movimento lento (`10 km/h`) o HUD mostrava o
+  giro na marcha lenta: o cambio SO reduzia com o acelerador apertado
+  (`throttle != 0`), entao depois de frear o carro ficava em 4a/5a a 10 km/h —
+  giro preso no corte de baixo, som em marcha lenta e retomada fraca. Agora a
+  reducao acontece tambem com o pe solto (subir continua exigindo acelerador).
+  Testes novos: o loop do motor tem tamanho, repeticao, loop cobrindo o buffer
+  e pico audivel sem estouro; a reducao com o pe solto cai de 5a para 1a.
+  AINDA NAO MEDIDO: o MEDIR (15 s sem o limite) no aparelho — e o unico numero
+  que diz a FOLGA real acima de 30 FPS (com o limite ligado, 30 FPS so prova
+  que ele cumpre o limite).
+
 ## Proximas tarefas (Fase 1 -> Fase 2)1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
 2. Medir FPS no iPhone jogando uma sessao real (B-09): o botao PERF grava CSV.
 3. Pedir ao usuario que toque em SALVAR e CARREGAR no jogo e confirme que o save volta (valida o B-08 no aparelho).
