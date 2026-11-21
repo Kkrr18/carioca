@@ -66,6 +66,7 @@ func _initialize() -> void:
 	_test_sky()
 	_test_pedestrians()
 	_test_pedestrian_model()
+	_test_pedestrian_life()
 	_test_player_model()
 	_test_windows()
 	_test_building_shapes()
@@ -1154,6 +1155,48 @@ func _test_pedestrian_model() -> void:
 	var sm := Pedestrians.soft_shadow_material(0.45)
 	check(sm.albedo_texture != null and sm.albedo_color.a > 0.2,
 		"sombra de contato redonda (gradiente), nao um quadrado cinza")
+
+
+func _test_pedestrian_life() -> void:
+	# B-64: vida e animacoes dos NPCs. O que da para provar sem GPU: o clipe
+	# escolhido em cada estado, o compasso que evita patinar no chao, o limite do
+	# atropelamento, e quais clipes o arquivo realmente traz (gesto/queda podem
+	# nao existir: nesse caso o jogo nao inventa animacao).
+	var clips := Pedestrians.load_clips(Pedestrians.ANIM_PATH)
+	var gesture := Pedestrians.pick_clip(clips, "work")
+	if gesture == "":
+		gesture = Pedestrians.pick_clip(clips, "punch")
+	var roles := {
+		"parado": Pedestrians.pick_clip(clips, "idle"),
+		"andar": Pedestrians.pick_clip(clips, "walk"),
+		"correr": Pedestrians.pick_clip(clips, "run"),
+		"pulo": Pedestrians.pick_clip(clips, "jump"),
+		"gesto": gesture,
+		"queda": Pedestrians.pick_clip(clips, "death"),
+	}
+	print("  info: clipes do pedestre: %d no arquivo; papeis %s" % [clips.size(), str(roles)])
+	check(roles["andar"] != "" and roles["parado"] != "", "pedestre tem andar e parado")
+	check(Pedestrians.clip_for(true, true, true, 5.0, true, true, true, true) == "down",
+		"atropelado: animacao de queda manda")
+	check(Pedestrians.clip_for(false, true, false, 0.0, true, true, true, true) == "gesture",
+		"parado gesticulando: gesto")
+	check(Pedestrians.clip_for(false, false, true, 3.0, true, true, true, true) == "run",
+		"correndo: clipe de corrida")
+	check(Pedestrians.clip_for(false, false, true, 1.2, true, true, true, true) == "walk",
+		"andando: clipe de passo")
+	check(Pedestrians.clip_for(false, false, false, 0.0, true, true, true, true) == "idle",
+		"parado: clipe de espera")
+	check(Pedestrians.clip_for(true, false, false, 0.0, false, true, true, true) == "idle",
+		"sem clipe de queda, atropelado nao inventa animacao")
+	check(absf(Pedestrians.clip_pace("walk", 1.4) - 1.0) < 0.01, "passo a 1,4 m/s toca 1x")
+	check(absf(Pedestrians.clip_pace("run", 4.6) - 1.0) < 0.01, "corrida a 4,6 m/s toca 1x")
+	check(Pedestrians.clip_pace("run", 99.0) <= 2.0 and Pedestrians.clip_pace("walk", 0.0) >= 0.6,
+		"compasso limitado (corrida %.2f, passo a %.2f)" % [
+			Pedestrians.clip_pace("run", 99.0), Pedestrians.clip_pace("walk", 0.0)])
+	var ped := Vector2(10.0, 20.0)
+	check(not Pedestrians.car_hit(Vector3(10.0, 0.0, 20.0), 1.0, ped), "carro devagar nao atropela")
+	check(Pedestrians.car_hit(Vector3(10.5, 0.0, 20.5), 6.0, ped), "carro rapido e perto atropela")
+	check(not Pedestrians.car_hit(Vector3(15.0, 0.0, 20.0), 6.0, ped), "carro longe nao atropela")
 
 
 func _test_player_model() -> void:

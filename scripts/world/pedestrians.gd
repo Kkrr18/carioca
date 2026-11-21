@@ -61,6 +61,18 @@ const GIVE_UP := 18.0           # s esperando o sinal antes de desistir
 const DODGE_RADIUS := 1.5       # m do jogador: sai da frente
 const CAR_PANIC := 9.0          # carro a menos disso durante a travessia: corre
 
+# --- Vida e animacao (B-64) --------------------------------------------------
+## Correr de verdade a partir desta velocidade (o clipe de corrida entra no lugar
+## do passo).
+const RUN_FROM := 2.2
+const BLEND_WALK := 0.28        # s de transicao entre parado/andar/correr
+const BLEND_ONCE := 0.12        # s de transicao para gesto/queda
+## Carro do jogador: acima desta velocidade e a esta distancia, o pedestre cai.
+const HIT_SPEED := 3.0
+const HIT_RADIUS := 1.7
+const DOWN_TIME := 4.5          # s no chao antes de levantar
+const GESTURE_TIME := 1.6       # s de gesto de quem esta parado
+
 # --- Modelos externos (B-57) -------------------------------------------------
 ## Corpos: adultos VESTIDOS da Quaternius ("Ultimate Modular Characters", CC0).
 ## Tem esqueleto e roupa de gente normal, mas nenhuma animacao propria.
@@ -123,6 +135,10 @@ var _vis_range := VIS_RANGE_HEAVY
 var _clips: Dictionary = {}     # nome do clipe -> Animation (de ped-walk.glb)
 var _walk_anim := ""
 var _idle_anim := ""
+var _clip_run := ""
+var _clip_jump := ""
+var _clip_gesture := ""
+var _clip_down := ""
 var _holders: Array = []        # Node3D de cada pedestre (modelo animado)
 var _anims: Array = []          # AnimationPlayer de cada pedestre
 var _mat: StandardMaterial3D
@@ -250,6 +266,10 @@ static func spawn_ped(seed_value: int, index: int) -> Dictionary:
 		"yaw": 0.0,
 		"wait": 0.0,
 		"waited": 0.0,
+		# B-64: vida extra — queda por atropelamento e gesto de quem espera.
+		"down_until": -1.0,
+		"gesture_until": -1.0,
+		"gesture_next": rng.randf_range(4.0, 12.0),
 		"scale": rng.randf_range(0.93, 1.07),
 		"skin": SKINS[rng.randi_range(0, SKINS.size() - 1)],
 		"shirt": SHIRTS[rng.randi_range(0, SHIRTS.size() - 1)],
@@ -386,6 +406,15 @@ func setup(base_seed: int, focus: Vector3 = Vector3.ZERO) -> void:
 	_clips = load_clips(ANIM_PATH)
 	_walk_anim = pick_clip(_clips, "walk")
 	_idle_anim = pick_clip(_clips, "idle")
+	# Clipes extras do pack da Quaternius ("Idle, jump, punch, run, walk, work and
+	# death"): cada um so e usado se existir no arquivo, entao o jogo nunca
+	# depende de um clipe que nao veio (B-64).
+	_clip_run = pick_clip(_clips, "run")
+	_clip_jump = pick_clip(_clips, "jump")
+	_clip_gesture = pick_clip(_clips, "work")
+	if _clip_gesture == "":
+		_clip_gesture = pick_clip(_clips, "punch")
+	_clip_down = pick_clip(_clips, "death")
 	_body_kinds = choose_bodies(_clips, _walk_anim)
 	_use_model = not _body_kinds.is_empty()
 	if _use_model:
@@ -620,6 +649,41 @@ static func _bone_names(sk: Skeleton3D) -> Dictionary:
 	return out
 
 
+## O carro do jogador atropelou o pedestre? Rapido o bastante e perto o bastante.
+## Puro: o teste confere os limites sem cena.
+static func car_hit(car_pos: Vector3, car_speed: float, ped_pos: Vector2) -> bool:
+	if car_speed <= HIT_SPEED:
+		return false
+	return Vector2(car_pos.x - ped_pos.x, car_pos.z - ped_pos.y).length() < HIT_RADIUS
+
+
+## Qual animacao o pedestre toca AGORA, em papeis: "down" (no chao), "gesture"
+## (gesticulando parado), "run", "walk" ou "idle". Puro e testado: e aqui que se
+## decide a vida dele, nao no meio da escrita de transformacoes.
+static func clip_for(down: bool, gesture: bool, moving: bool, sp: float,
+		has_down: bool, has_gesture: bool, has_run: bool, has_walk: bool) -> String:
+	if down and has_down:
+		return "down"
+	if gesture and has_gesture:
+		return "gesture"
+	if moving:
+		if sp >= RUN_FROM and has_run:
+			return "run"
+		if has_walk:
+			return "walk"
+	return "idle"
+
+
+## Com que velocidade o clipe toca para o corpo nao "patinar" no chao: o passo
+## cobre ~1,4 m/s no compasso 1 e a corrida ~4,6 m/s.
+static func clip_pace(role: String, sp: float) -> float:
+	if role == "run":
+		return clampf(sp / 4.6, 0.70, 2.00)
+	if role == "walk":
+		return clampf(sp / 1.40, 0.60, 1.80)
+	return 1.0
+
+
 ## Altura do esqueleto POSADO (pe ate a cabeca), no mundo. E a medida certa para
 ## escalar: o AABB da malha e o do bind pose e mente quando a animacao encolhe.
 static func posed_height(sk: Skeleton3D) -> float:
@@ -753,6 +817,15 @@ func _build_models() -> void:
 		var k := 1.0
 		if not box.has_volume():
 			box = AABB(Vector3(-0.3, 0.0, -0.3), Vector3(0.6, 1.8, 0.6))
+		# Clipes de UMA vez so (gesto, queda, pulo) ficam em LOOP_NONE: em loop, o
+		# gesto viraria uma dancinha eterna e a queda levantaria sozinha (B-64).
+		if ap != null:
+			for role in ["gesture", "down", "jump"]:
+				var nm := _clip_name(role)
+				if nm != "" and ap.has_animation(StringName(nm)):
+					var an := ap.get_animation(StringName(nm))
+					if an != null:
+						an.loop_mode = Animation.LOOP_NONE
 		var walk_nm := StringName(_walk_anim)
 		var plays: bool = ap != null and ap.has_animation(walk_nm)
 		# Escala: 1) posa a caminhada, 2) mede o esqueleto posado, 3) aplica.
@@ -862,6 +935,17 @@ func _follow(focus: Vector3, delta: float) -> void:
 
 func _step(p: Dictionary, dt: float, player_pos: Vector3, car_pos: Vector3,
 		car_speed: float) -> void:
+	# No chao (atropelado): nao anda, nao desvia, nao espera — so levanta quando
+	# o tempo passa. Quem decide o clipe e `_write_models` (queda).
+	if float(p["down_until"]) > _clock:
+		return
+	# Carro do jogador em cima: cai. So acontece se o modelo tem clipe de queda.
+	if _clip_down != "" and car_hit(car_pos, car_speed, p["pos"]):
+		p["down_until"] = _clock + DOWN_TIME
+		p["gesture_until"] = -1.0
+		p["kind"] = KIND_WALK
+		p["wait"] = 0.0
+		return
 	var kind: int = p["kind"]
 	if kind == KIND_WAIT:
 		_dodge(p, player_pos)
@@ -869,6 +953,12 @@ func _step(p: Dictionary, dt: float, player_pos: Vector3, car_pos: Vector3,
 		return
 	if kind == KIND_IDLE:
 		_dodge(p, player_pos)
+		var rng: RandomNumberGenerator = p["rng"]
+		# Quem para nao fica estátua: de tempos em tempos gesticula (olhar o
+		# celular, falar com alguem) com o clipe "work"/"punch" do modelo.
+		if _clip_gesture != "" and _clock > float(p["gesture_next"]):
+			p["gesture_until"] = _clock + GESTURE_TIME
+			p["gesture_next"] = _clock + rng.randf_range(6.0, 16.0)
 		var left: float = float(p["wait"]) - dt
 		p["wait"] = left
 		if left <= 0.0:
@@ -1002,19 +1092,45 @@ func _write_models() -> void:
 			continue
 		var kind: int = p["kind"]
 		var moving := kind == KIND_WALK or kind == KIND_CROSS
-		if moving:
-			if ap.current_animation != StringName(_walk_anim):
-				ap.play(_walk_anim)
-			# O ciclo do modelo cobre ~1,4 m/s; anda mais rapido, anda mais rapido.
-			ap.speed_scale = clampf(float(p["speed"]) / 1.40, 0.60, 2.20)
-		elif _idle_anim != "":
-			if ap.current_animation != StringName(_idle_anim):
-				ap.speed_scale = 1.0
-				ap.play(_idle_anim)
-		elif ap.speed_scale != 0.0:
-			# Sem clipe de parado: congela a caminhada (velocidade 0). Nao usa
-			# pause/play: o play() recomeca o ciclo e a pessoa da um salto de pose.
-			ap.speed_scale = 0.0
+		# Vida (B-64): atropelado, gesticulando, correndo ou andando — quem decide
+		# e uma funcao pura, e a troca de clipe e SUAVE (blend), nao um corte seco.
+		var role := clip_for(float(p["down_until"]) > _clock,
+				float(p["gesture_until"]) > _clock, moving, float(p["speed"]),
+				_clip_down != "", _clip_gesture != "", _clip_run != "", _walk_anim != "")
+		var nm := _clip_name(role)
+		if nm == "":
+			continue
+		var once := role == "down" or role == "gesture"
+		_play_on(ap, nm, clip_pace(role, float(p["speed"])),
+				BLEND_ONCE if once else BLEND_WALK)
+
+
+## Nome do clipe de um papel ("idle", "walk", "run", "gesture", "down").
+func _clip_name(role: String) -> String:
+	match role:
+		"walk":
+			return _walk_anim
+		"run":
+			return _clip_run
+		"gesture":
+			return _clip_gesture
+		"down":
+			return _clip_down
+		"jump":
+			return _clip_jump
+		_:
+			return _idle_anim
+
+
+## Troca (ou mantem) o clipe com transicao suave. `blend` em segundos.
+func _play_on(ap: AnimationPlayer, nm: String, spd: float, blend: float) -> void:
+	if nm == "":
+		return
+	if ap.current_animation == StringName(nm):
+		ap.speed_scale = spd
+		return
+	ap.play(StringName(nm), blend)
+	ap.speed_scale = spd
 
 
 ## Escreve as instancias das caixas: corpo e cabeca usam a MESMA transformacao
@@ -1056,6 +1172,16 @@ func _write_boxes() -> void:
 
 func describe() -> String:
 	if _use_model:
-		return "pedestres: %d pessoas, %d corpo(s) animado(s) CC0 Quaternius, 1 desenho cada" % [
-			_visible, _body_kinds.size()]
+		return "pedestres: %d pessoas com corpo CC0 Quaternius (1 desenho cada) - clipes: %s" % [
+			_visible, _roles_text()]
 	return "pedestres: %d pessoas em caixas (3 desenhos por quadro) - modelo nao carregou" % _visible
+
+
+## Quais animacoes estao de fato em uso (as que faltaram aparecem com "-").
+func _roles_text() -> String:
+	var parts: PackedStringArray = []
+	for pair in [["parado", _idle_anim], ["andar", _walk_anim], ["correr", _clip_run],
+			["gesto", _clip_gesture], ["queda", _clip_down]]:
+		var nm := String(pair[1])
+		parts.append(String(pair[0]) if nm != "" else "-" + String(pair[0]))
+	return " ".join(parts)
