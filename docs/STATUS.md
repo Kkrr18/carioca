@@ -1038,6 +1038,25 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   aparelho qual dos tres (a cabeca e o resto do corpo podem se sobrepor de
   formas que so o olho ve).
 
+- B-78: Fase 3 — CABELO NA CABECA 3D (o print mostrou o protagonista CARECA). O
+  autor mandou o print rodando o B-77. O que ele PROVOU: `cabeca=sim 17684 tris`
+  na telemetria (a cabeca 3D carregou), console limpo (so as linhas `[log]`),
+  `som: motor sintetizado ligado`, e a linha nova de render funcionando
+  (`render 1280x800   escala 1.00   tela 3840x2400` — essa rodada foi num
+  navegador de mesa, entao a escala 1,40 do B-75 nem entrou, que e o esperado em
+  paisagem). O que ele mostrou de ERRADO: a cabeca escaneada e CARECA, e o
+  personagem pedido na B-63 e "homem de 1,80, branco, de CABELO PRETO" — o
+  cabelo pintado por vertice ficou para tras quando a cabeca lisa do corpo saiu
+  de cena. CORRECAO: uma calota escura (`HAIR_COL`) por cima do cranio, feita com
+  um `SphereMesh` hemisferico e dimensionada pela LARGURA da cabeca
+  (`Player.hair_layout`), com o topo apoiado pelo AABB (nao dependo da convencao
+  de origem do SphereMesh). Custo: 1 desenho, ~200 triangulos. Testes novos: o
+  cabelo e mais largo que alto, passa do topo do cranio e cresce com a cabeca.
+  O QUE OLHAR NO PROXIMO PRINT: se a calota cobre a testa/sobrancelha (base
+  baixa demais) ou se parece um capacete flutuando — o ajuste e
+  `hair_layout` (hoje: 1,08 de largura, 0,70 de altura e topo em
+  cranio + 0,05 da largura).
+
 ## Proximas tarefas (Fase 1 -> Fase 2)1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
 2. Medir FPS no iPhone jogando uma sessao real (B-09): o botao PERF grava CSV.
 3. Pedir ao usuario que toque em SALVAR e CARREGAR no jogo e confirme que o save volta (valida o B-08 no aparelho).

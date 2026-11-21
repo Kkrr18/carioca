@@ -1456,6 +1456,15 @@ func _test_head_model() -> void:
 		"cabeca escala para %.2f m num corpo de 1,80 m" % (box.size.y * k))
 	var k_menor := Player.head_scale(box.size.y, 1.60)
 	check(k_menor < k, "corpo menor tem cabeca menor (%.3f x %.3f)" % [k_menor, k])
+	# B-78: cabelo (a cabeca escaneada e careca; o protagonista e de cabelo preto).
+	var lay := Player.hair_layout(0.20, 1.82)
+	var hs: Vector3 = lay["scale"]
+	check(hs.x > hs.y and hs.y > 0.08,
+		"cabelo mais largo que alto (%.3f x %.3f m)" % [hs.x, hs.y])
+	check(float(lay["top"]) > 1.82, "cabelo passa do topo do cranio (%.3f)" % float(lay["top"]))
+	var lay2 := Player.hair_layout(0.26, 1.82)
+	var hs2: Vector3 = lay2["scale"]
+	check(hs2.x > hs.x, "cabeca maior tem cabelo maior (%.3f x %.3f)" % [hs2.x, hs.x])
 	inst.queue_free()
 
 

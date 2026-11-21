@@ -213,6 +213,47 @@ func _build_head() -> void:
 	# Custo na telemetria: a cabeca e um escaneamento denso; se pescar o FPS no
 	# aparelho, este numero diz se ele e o culpado.
 	_head_tris = ModelProp.count_tris(inst)
+	_build_hair(box.size.x * k)
+
+
+## Medidas do cabelo (B-78) a partir da largura da cabeca, em metros: a calota e
+## um pouco mais larga que o cranio, mais baixa que larga, e o topo passa um tico
+## do topo da cabeca. Fracao da largura = acompanha o TAMANHO do personagem.
+static func hair_layout(head_width: float, crown_y: float) -> Dictionary:
+	var w := maxf(0.05, head_width)
+	return {
+		"scale": Vector3(w * 1.08, w * 0.70, w * 1.10),
+		"top": crown_y + w * 0.05,
+		"z": -w * 0.03,
+	}
+
+
+## Cabelo do protagonista (B-78). A cabeca escaneada e CARECA, e o personagem
+## pedido na B-63 e homem de CABELO PRETO: uma calota escura por cima do cranio
+## devolve o cabelo (e cobre o topo da cabeca lisa do corpo). Um desenho so, ~200
+## triangulos.
+func _build_hair(head_width: float) -> void:
+	if avatar == null or head_width <= 0.0:
+		return
+	var lay := hair_layout(head_width, HEAD_TOP_FRAC * AVATAR_HEIGHT)
+	var dome := SphereMesh.new()
+	dome.is_hemisphere = true
+	dome.radius = 0.5
+	dome.height = 0.5
+	dome.radial_segments = 16
+	dome.rings = 6
+	var mi := MeshInstance3D.new()
+	mi.name = "Cabelo"
+	mi.mesh = dome
+	mi.material_override = _mat(HAIR_COL)
+	var s: Vector3 = lay["scale"]
+	mi.scale = s
+	# O AABB da calota resolve a convencao de origem do SphereMesh: o TOPO dela
+	# tem de ficar no topo calculado do cranio.
+	var ha := dome.get_aabb()
+	mi.position = Vector3(0.0, float(lay["top"]) - ha.end.y * s.y, float(lay["z"]))
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	avatar.add_child(mi)
 
 
 ## Boneco de caixas: a reserva de sempre, usada so se o modelo nao carregar.

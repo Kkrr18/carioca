@@ -24,8 +24,9 @@ Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
   vêm dentro do arquivo. O corpo tem a cabeça lisa, então o **rosto é uma cabeça
   3D de verdade** (escaneada por Lee Perry-Smith, CC-BY 3.0 — crédito em
   [data/ATTRIBUTION.md](data/ATTRIBUTION.md)), escalada pela altura do
-  personagem. Se o modelo não carregar, volta para o boneco de caixas — o jogo
-  nunca fica sem personagem.
+  personagem, com uma calota de **cabelo preto** por cima do crânio (a cabeça
+  escaneada é careca). Se o modelo não carregar, volta para o boneco de caixas —
+  o jogo nunca fica sem personagem.
 - Personagem em terceira pessoa com câmera orbital, colisão por retângulos e
   chão analítico (sem corpos físicos estáticos).
 - Controles de toque: joystick na esquerda, arrasto para olhar na direita,
