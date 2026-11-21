@@ -434,14 +434,17 @@ func _play_anim(nm: String, spd: float) -> void:
 	_ap.speed_scale = spd
 
 
-## Parado: se o clipe de parado nao se mexe, o corpo ganha um balanco minimo
-## (1,5 grau de giro e 1 cm de sobe e desce) para nao parecer estátua.
+## Parado: o corpo SEMPRE ganha um balanco minimo (giro de ~1,7 grau e 1 cm de
+## sobe e desce). O clipe de parado da Quaternius mexe pouco (0,118 rad no osso
+## que mais gira) e a 250 px de tela ele parece congelado — o autor viu o
+## protagonista "parado numa pose" (B-63). Com o clipe animando, o balanco e
+## menor (so para nao parecer estatua); sem movimento no clipe, ele e maior.
 func _idle_sway(delta: float) -> void:
-	if _model_holder == null or not _idle_static:
-		_idle_hold()
+	if _model_holder == null:
 		return
 	_sway += delta
-	_model_holder.rotation.y = PI + sin(_sway * 1.1) * 0.03
+	var amp := 0.030 if _idle_static else 0.016
+	_model_holder.rotation.y = PI + sin(_sway * 1.1) * amp
 	_model_holder.position.y = sin(_sway * 2.0) * 0.010
 
 
