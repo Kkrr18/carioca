@@ -14,6 +14,7 @@ const CityGen = preload("res://scripts/world/city_gen.gd")
 const SaveManager = preload("res://scripts/autoload/save_manager.gd")
 const PropFactory = preload("res://scripts/world/prop_factory.gd")
 const Car = preload("res://scripts/vehicles/car.gd")
+const VehiclePhysics = preload("res://scripts/vehicles/vehicle_physics.gd")
 const ModelProp = preload("res://scripts/world/model_prop.gd")
 const Player = preload("res://scripts/player/player.gd")
 const TouchControls = preload("res://scripts/ui/touch_controls.gd")
@@ -381,21 +382,114 @@ func _test_props() -> void:
 		"copa da arvore fica acima do meio do tronco")
 
 
+## Quadros a 60 Hz ate o carro parar freando, para comparar pisos (B-67).
+func _brake_frames(sp: Dictionary, speed: float, mu: float) -> int:
+	var st := {"speed": speed, "gear": 3, "shift_cool": 0.0}
+	var dt := 1.0 / 60.0
+	for i in 900:
+		st = VehiclePhysics.step(sp, st, -1.0, 0.0, mu, dt)
+		if float(st["speed"]) == 0.0:
+			return i + 1
+	return 0
+
+
 func _test_car_physics() -> void:
-	# Nucleo puro de scripts/vehicles/car.gd (sem cena, sem GPU).
-	check(Car.advance_speed(0.0, 1.0, 0.1) > 0.0, "carro acelera com o acelerador")
-	check(absf(Car.advance_speed(10.0, -1.0, 0.1) - 8.4) < 0.001,
-		"freio tira 1,6 m/s em 0,1 s (16 m/s2)")
-	check(Car.advance_speed(0.05, -1.0, 0.1) == 0.0,
-		"freio para exatamente em zero, sem engatar a re")
-	check(Car.advance_speed(0.0, -1.0, 1.0) == -Car.REVERSE_MAX,
-		"marcha a re satura em REVERSE_MAX")
-	check(Car.advance_speed(10.0, 0.0, 0.1) < 10.0,
-		"acelerador solto perde velocidade (atrito)")
-	var s := 0.0
+	# Nucleos PUROS (sem cena, sem GPU): vehicle_physics.gd (B-67) e o que sobrou
+	# de puro em car.gd. E o MESMO step() que roda no jogo com o dedo no pedal,
+	# entao um numero errado aqui e um carro errado na mao do jogador.
+	var sp := VehiclePhysics.sedan()
+	var mass := float(sp["mass"])
+	check(mass >= 1400.0 and mass <= 1500.0, "sedan de 1450 kg")
+	check(absf(float(sp["wheelbase"]) - Car.WHEELBASE) < 0.01,
+		"entre-eixos da fisica casa com o desenho do carro")
+	check(absf(float(sp["wheel_radius"]) - Car.WHEEL_RADIUS) < 0.01,
+		"raio da fisica casa com a roda que gira")
+	# Motor: pico no meio do giro, fraco na lenta e no corte.
+	var t_idle := VehiclePhysics.engine_torque(sp, 800.0)
+	var t_peak := VehiclePhysics.engine_torque(sp, 4000.0)
+	var t_red := VehiclePhysics.engine_torque(sp, 6500.0)
+	check(t_peak > t_idle and t_peak > t_red,
+		"curva de torque tem pico no meio (%.0f/%.0f/%.0f Nm)" % [t_idle, t_peak, t_red])
+	# Cambio: a mesma velocidade gira mais alto na 1a que na 4a, e a 1a puxa mais.
+	check(VehiclePhysics.rpm_for(sp, 10.0, 1) > VehiclePhysics.rpm_for(sp, 10.0, 4),
+		"1a marcha gira mais alto que a 4a na mesma velocidade")
+	var f1 := VehiclePhysics.drive_force(sp, 1, 1.0, 3000.0)
+	var f4 := VehiclePhysics.drive_force(sp, 4, 1.0, 3000.0)
+	check(f1 > f4 * 2.5, "1a marcha tem mais forca que a 4a (%.0f x %.0f N)" % [f1, f4])
+	# Arrasto cresce com o quadrado da velocidade.
+	var d10 := VehiclePhysics.drag_force(sp, 10.0)
+	var d20 := VehiclePhysics.drag_force(sp, 20.0)
+	check(absf(d20 - d10 * 4.0) < 0.01,
+		"arrasto quadruplica ao dobrar a velocidade (%.0f N a 72 km/h)" % d20)
+	# Peso: as 4 cargas somam m*g; frear carrega a frente; curva carrega o lado
+	# de fora (curva para a esquerda joga o peso nas rodas da direita).
+	var still: Array = VehiclePhysics.normal_loads(sp, 0.0, 0.0)
+	var total_load := 0.0
+	for l in still:
+		total_load += float(l)
+	check(absf(total_load - mass * VehiclePhysics.GRAVITY) < 1.0,
+		"soma das cargas nas rodas = peso (%.0f N)" % total_load)
+	var brake_loads: Array = VehiclePhysics.normal_loads(sp, -8.0, 0.0)
+	check(float(brake_loads[0]) > float(still[0]) and float(brake_loads[2]) < float(still[2]),
+		"frear joga peso para a frente")
+	var curve_loads: Array = VehiclePhysics.normal_loads(sp, 0.0, 8.0)
+	var front_outer := float(curve_loads[1]) > float(curve_loads[0])
+	var rear_outer := float(curve_loads[3]) > float(curve_loads[2])
+	check(front_outer and rear_outer, "curva carrega as rodas de fora")
+	# Circulo de aderencia: o pneu nunca passa de mu*carga (ABS/TCS de graca).
+	var tf := VehiclePhysics.tire_force(30000.0, 0.0, 5000.0, VehiclePhysics.MU_ASPHALT, 8.0)
+	check(absf(tf.length() - 5000.0) < 0.5, "pedido acima do limite e cortado em mu*carga")
+	var tf2 := VehiclePhysics.tire_force(1000.0, 0.0, 5000.0, VehiclePhysics.MU_ASPHALT, 8.0)
+	check(absf(tf2.x - 1000.0) < 0.5, "pedido abaixo do limite e atendido inteiro")
+	# 0-100 km/h com o step() do jogo: asfalto, plano, pedal em baixo.
+	var dt := 1.0 / 60.0
+	var run := {"speed": 0.0, "gear": 1, "shift_cool": 0.0}
+	var t100 := -1.0
+	for i in 2400:
+		run = VehiclePhysics.step(sp, run, 1.0, 0.0, VehiclePhysics.MU_ASPHALT, dt)
+		if t100 < 0.0 and float(run["speed"]) >= 100.0 / 3.6:
+			t100 = (i + 1) * dt
+	check(t100 > 4.0 and t100 < 16.0, "0-100 km/h em %.1f s" % t100)
+	check(int(run["gear"]) >= 3,
+		"cambio automatico subiu de marcha (marcha %d)" % int(run["gear"]))
+	var top := float(run["speed"]) * 3.6
+	check(top > 108.0, "passa de 108 km/h em 40 s (%.0f km/h)" % [top])
+	# Pisos: areia freia mais longe que asfalto (mu menor, ABS corta antes).
+	var brake_asp := _brake_frames(sp, 20.0, VehiclePhysics.MU_ASPHALT)
+	var brake_sand := _brake_frames(sp, 20.0, VehiclePhysics.MU_SAND)
+	check(brake_asp > 0 and brake_sand > brake_asp + 20,
+		"areia freia mais longe que asfalto (%d x %d quadros)" % [brake_sand, brake_asp])
+	# O freio leva a velocidade a EXATAMENTE zero (nao engata a re sozinho).
+	var stop := {"speed": 5.0, "gear": 2, "shift_cool": 0.0}
+	var frames := 0
+	while frames < 300 and float(stop["speed"]) > 0.0:
+		stop = VehiclePhysics.step(sp, stop, -1.0, 0.0, VehiclePhysics.MU_ASPHALT, dt)
+		frames += 1
+	check(float(stop["speed"]) == 0.0 and frames > 1,
+		"freio para exatamente em zero (em %d quadros)" % frames)
+	# Acelerador solto perde velocidade (arrasto + rolamento).
+	var coast := {"speed": 10.0, "gear": 3, "shift_cool": 0.0}
+	for i in 60:
+		coast = VehiclePhysics.step(sp, coast, 0.0, 0.0, VehiclePhysics.MU_ASPHALT, dt)
+	check(float(coast["speed"]) < 9.9,
+		"acelerador solto perde velocidade (%.2f m/s em 1 s)" % float(coast["speed"]))
+	# Marcha a re satura em REVERSE_MAX.
+	var rev := {"speed": 0.0, "gear": 1, "shift_cool": 0.0}
 	for i in 1200:
-		s = Car.advance_speed(s, 1.0, 1.0 / 30.0)
-	check(absf(s - Car.MAX_SPEED) < 0.01, "acelerador satura em MAX_SPEED (%.2f)" % s)
+		rev = VehiclePhysics.step(sp, rev, -1.0, 0.0, VehiclePhysics.MU_ASPHALT, dt)
+	check(absf(float(rev["speed"]) + VehiclePhysics.REVERSE_MAX) < 0.05,
+		"marcha a re satura em REVERSE_MAX (%.2f m/s)" % float(rev["speed"]))
+	# Subida freia mais que o plano (gravidade no sentido do movimento).
+	var flat := {"speed": 12.0, "gear": 2, "shift_cool": 0.0}
+	var up := {"speed": 12.0, "gear": 2, "shift_cool": 0.0}
+	for i in 60:
+		flat = VehiclePhysics.step(sp, flat, 1.0, 0.0, VehiclePhysics.MU_ASPHALT, dt)
+		up = VehiclePhysics.step(sp, up, 1.0, 0.08, VehiclePhysics.MU_ASPHALT, dt)
+	var up_speed := float(up["speed"])
+	var flat_speed := float(flat["speed"])
+	var slope_note := "subida de 8 por cento freia mais que o plano (%.1f x %.1f m/s)" % [up_speed, flat_speed]
+	check(up_speed < flat_speed - 0.3, slope_note)
+	# Guinada (modelo bicycle) continua em car.gd e inverte na re.
 	check(Car.yaw_rate(10.0, 0.3) > 0.0 and Car.yaw_rate(-10.0, 0.3) < 0.0,
 		"taxa de guinada inverte na marcha a re (modelo bicycle)")
 	check(Car.steer_limit(20.0) < Car.steer_limit(0.0) * 0.7,
@@ -1488,6 +1582,7 @@ func _test_scripts_compile() -> void:
 		"res://scripts/world/sector_streamer.gd",
 		"res://scripts/world/day_night.gd",
 		"res://scripts/vehicles/car.gd",
+		"res://scripts/vehicles/vehicle_physics.gd",
 		"res://scripts/player/player.gd",
 		"res://scripts/ui/touch_controls.gd",
 		"res://scripts/ui/hud.gd",

@@ -37,9 +37,17 @@ Leia [docs/STATUS.md](docs/STATUS.md) antes de acreditar em qualquer coisa aqui.
   e carros estacionados (plano completo em docs/DETALHES_VISUAIS.md).
 - Carro dirigível (primeiro incremento da Fase 4): nasce perto do ponto de
   nascimento com um marcador flutuante; entre pelo botão ENTRAR (ou tecla E) e
-  dirija com o volante no joystick e os pedais ACEL/FREIO; direção cinemática
-  estável, rodas que giram e estercam, carroceria que acompanha o relevo e
-  câmera própria.
+  dirija com o volante no joystick e os pedais ACEL/FREIO; rodas que giram e
+  estercam, carroceria que acompanha o relevo e câmera própria.
+- Física automotiva do carro: massa de 1450 kg, curva de torque, câmbio
+  automático de 5 marchas, freio com ABS e controle de tração, peso que passa de
+  eixo para eixo (o carro mergulha ao frear, levanta ao acelerar e rola para fora
+  na curva), arrasto aerodinâmico e aderência por piso — asfalto, areia da praia
+  e pedra do calçadão. Em curva rápida o carro **subesterça** em vez de girar no
+  próprio eixo, como um carro de verdade. O HUD mostra marcha, rotação e
+  aderência; o som do motor acompanha o giro. Nada de `RigidBody3D`: a física
+  roda sobre o chão analítico, sem nenhuma malha de colisão — é o que cabe no
+  iPhone.
 - Tráfego: 12 carros de passeio (4 modelos CC0) pela grade de ruas, um desenho
   por modelo. Eles colidem com o seu carro, mantêm distância entre si e
   acompanham você pela cidade. O carro que você dirige é o sedã CC0, com rodas

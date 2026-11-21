@@ -1,20 +1,26 @@
 extends Node3D
-## Car: veiculo dirigivel — primeiro incremento jogavel da Fase 4 (carro).
+## Car: veiculo dirigivel do jogador — fisica automotiva (B-67).
 ##
-## - Cinematica propria (sem VehicleBody3D): modelo "bicycle" — o volante vira
-##   taxa de guinada proporcional a velocidade e a posicao avanca no rumo.
-##   Previsivel, barato no iPhone e identico em qualquer frame rate (a mesma
-##   filosofia de player.gd: chao analitico, sem fisica de motor).
-## - Chao analitico (Cfg.height_at) com carroceria que inclina (pitch/roll)
-##   amostrando o relevo; colisao por retangulos (SectorStreamer.push_out) e
-##   bloqueio de agua funda, no mesmo padrao do personagem.
+## - FISICA DE VERDADE sobre o chao ANALITICO: `vehicle_physics.gd` (puro) cuida
+##   de massa, motor com curva de torque, cambio automatico de 5 marchas, freio
+##   com ABS, tracao limitada (TCS), arrasto aerodinamico, resistencia de
+##   rolamento, gravidade no declive e aderencia por piso (asfalto/areia/pedra).
+## - Nada de RigidBody3D: este mundo NAO tem corpos de fisica (o chao e
+##   Cfg.height_at/surface_at e os predios sao retangulos consultados por
+##   push_out). RigidBody3D com raios nas rodas cairia no vazio, e criar colisao
+##   para os setores de 512 m estouraria o iPhone. Ver docs/ARQUITETURA.md.
+## - Guinada pelo modelo "bicycle", mas LIMITADA pela aderencia lateral
+##   (mu*g): pedir curva demais em alta velocidade faz o carro SUBESTERAR em vez
+##   de girar no proprio eixo.
+## - Carroceria inclina com o relevo E com a transferencia de peso: mergulha ao
+##   frear, levanta ao acelerar e rola para fora na curva.
 ## - Entrar/sair: botao CARRO do HUD quando perto do veiculo (ou tecla E no
 ##   desktop). Ao entrar, a fisica do jogador desliga e a camera do carro
 ##   assume; ao sair, o jogador volta do lado direito do carro.
 ## - Animacao: rodas giram com a velocidade, as dianteiras estercam com o
 ##   volante, farois e lanternas emissivos (acendem a noite junto do ciclo).
-## - A Fase 4 completa (trafego, faixas, semaforos, moto) cresce a partir
-##   deste nucleo; o estado do carro ainda NAO entra no save (schema 1).
+## - O trafego (traffic.gd) continua CINEMATICO de proposito: 12 carros com
+##   fisica completa nao cabem no iPhone. A fisica e do carro do jogador.
 
 ## Emitido quando o carro bate em outro veiculo (o main liga ao som e ao HUD).
 signal crashed(strength: float)
@@ -23,14 +29,13 @@ const Cfg = preload("res://scripts/core/cfg.gd")
 const TouchControls = preload("res://scripts/ui/touch_controls.gd")
 const PropFactory = preload("res://scripts/world/prop_factory.gd")
 const ModelProp = preload("res://scripts/world/model_prop.gd")
+const VehiclePhysics = preload("res://scripts/vehicles/vehicle_physics.gd")
 const MODEL_LENGTH := 4.3      # comprimento do sedan CC0 (m); frente em -Z
 
-const MAX_SPEED := 22.0        # ~80 km/h a pleno acelerador
-const REVERSE_MAX := 7.0       # |velocidade| maxima em marcha a re
-const ENGINE_ACCEL := 7.5      # m/s^2
-const BRAKE_DECEL := 16.0      # m/s^2 (o freio e mais forte que o motor)
-const ROLL_FRICTION := 3.0     # m/s^2 com o acelerador solto
-const WHEELBASE := 2.6         # distancia entre eixos (m)
+# Motor, freio, cambio e aderencia saíram daqui para vehicle_physics.gd (B-67).
+# MAX_SPEED fica porque normaliza a forca da batida no HUD e no som.
+const MAX_SPEED := 22.0        # ~80 km/h: referencia de "batida forte"
+const WHEELBASE := 2.6         # distancia entre eixos (m), igual ao preset sedan
 const STEER_MAX := 0.55        # rad de esterco maximo, parado
 const STEER_SPEED := 3.5       # resposta do volante (rad/s)
 const STEER_DROP := 0.55       # quanto o esterco maximo cai com a velocidade
@@ -41,8 +46,21 @@ const PROXIMITY := 12.0
 const COLLIDE_RADIUS := 1.5    # raio do carro para colisao com o transito (m)
 
 var speed := 0.0               # m/s assinada (+ frente, - re)
-var steer := 0.0               # rad assinado (+ esquerda)
+var steer := 0.0               # rad assinado
 var occupied := false
+## Configuracao do veiculo (vehicle_physics.gd). Vazio = sedan.
+var vehicle_spec: Dictionary = {}
+var gear := 1
+var rpm := 800.0
+## Rotacao normalizada (0 = marcha lenta, 1 = corte): e o que o som do motor usa
+## para a troca de marcha ser AUDIVEL (B-67).
+var engine_ratio := 0.0
+## 0 = pneu agarrado, 1 = derrapando (a curva pedida passou de mu*g).
+var slip := 0.0
+var accel_long := 0.0
+var accel_lat := 0.0
+# Estado interno da fisica longitudinal (velocidade, marcha e espera de troca).
+var _st: Dictionary = {"speed": 0.0, "gear": 1, "shift_cool": 0.0}
 # Entrada do ultimo quadro, somente para a telemetria do HUD: e por ela que se
 # ve, no aparelho, se o carro nao anda por falta de toque ou por outra coisa.
 var input_throttle := 0.0
@@ -72,18 +90,11 @@ var _e_latch := false
 
 # --- Nucleo puro (sem cena; testado em tests/runner.gd) ----------------------
 
-## Integra a velocidade por um passo. throttle: -1 = freio/re, 0 = solto,
-## +1 = acelerador. Freando, o carro para exatamente em 0 e so entao engata a re.
-static func advance_speed(speed: float, throttle: float, delta: float) -> float:
-	if throttle > 0.0:
-		if speed < 0.0:
-			return move_toward(speed, 0.0, BRAKE_DECEL * delta)
-		return minf(speed + ENGINE_ACCEL * throttle * delta, MAX_SPEED)
-	if throttle < 0.0:
-		if speed > 0.0:
-			return move_toward(speed, 0.0, BRAKE_DECEL * delta)
-		return maxf(speed - ENGINE_ACCEL * absf(throttle) * delta, -REVERSE_MAX)
-	return move_toward(speed, 0.0, ROLL_FRICTION * delta)
+## Configuracao efetiva do veiculo (sedan quando nada foi definido).
+func spec() -> Dictionary:
+	if vehicle_spec.is_empty():
+		return VehiclePhysics.sedan()
+	return vehicle_spec
 
 
 ## Esterco maximo util: em alta velocidade o volante fica mais curto, senao o
@@ -371,9 +382,34 @@ func _drive(delta: float) -> void:
 	# camera do personagem da um salto ao sair do carro.
 	TouchControls.consume_look()
 
-	speed = advance_speed(speed, throttle, delta)
+	# --- Motor, cambio e forcas (B-67): massa, torque, marchas, ABS/TCS, arrasto
+	# e peso. O declive entra no sentido do movimento (sobe freia, desce acelera).
+	var sp := spec()
+	var fwd2 := Vector2(-sin(rotation.y), -cos(rotation.y))
+	var h_front := Cfg.surface_at(position.x + fwd2.x * 1.6, position.z + fwd2.y * 1.6)
+	var h_back := Cfg.surface_at(position.x - fwd2.x * 1.6, position.z - fwd2.y * 1.6)
+	var slope := atan2(h_front - h_back, 3.2)
+	var mu := VehiclePhysics.surface_mu(position.x, position.z)
+	_st["speed"] = speed
+	_st["gear"] = gear
+	_st = VehiclePhysics.step(sp, _st, throttle, slope, mu, delta)
+	speed = float(_st["speed"])
+	gear = int(_st["gear"])
+	rpm = float(_st["rpm"])
+	accel_long = float(_st["accel"])
+	var redline := maxf(1.0, float(sp["redline"]))
+	engine_ratio = clampf((rpm - float(sp["idle"])) / maxf(1.0, redline - float(sp["idle"])),
+			0.0, 1.0)
+	# Esterco e guinada: o volante pede uma curva, a ADERENCIA diz quanta cabe.
 	steer = move_toward(steer, -steer_in * steer_limit(speed), STEER_SPEED * delta)
-	rotation.y = wrapf(rotation.y + yaw_rate(speed, steer) * delta, -PI, PI)
+	var radius := WHEELBASE / maxf(0.02, tan(absf(steer)))
+	var lat_req := speed * speed / maxf(1.0, radius)
+	var lat_max := VehiclePhysics.lateral_limit(sp, mu)
+	var grip := clampf(lat_max / maxf(0.1, lat_req), 0.0, 1.0)
+	slip = 1.0 - grip
+	var turn := yaw_rate(speed, steer) * grip
+	accel_lat = speed * turn
+	rotation.y = wrapf(rotation.y + turn * delta, -PI, PI)
 
 	var forward := Vector3(-sin(rotation.y), 0.0, -cos(rotation.y))
 	var next := position + forward * speed * delta
@@ -430,6 +466,10 @@ func _inclinar(delta: float) -> void:
 	var hl := Cfg.surface_at(position.x - r.x * s, position.z - r.z * s)
 	var pitch := atan2(hf - hb, 2.0 * s)
 	var roll := atan2(hr - hl, 2.0 * s)
+	# Transferencia de peso VISIVEL (B-67): acelerar levanta o nariz, frear
+	# mergulha, e na curva a carroceria rola para fora.
+	pitch += clampf(accel_long * 0.010, -0.06, 0.06)
+	roll -= clampf(accel_lat * 0.008, -0.07, 0.07)
 	var k := clampf(6.0 * delta, 0.0, 1.0)
 	rotation.x = lerp_angle(rotation.x, pitch, k)
 	rotation.z = lerp_angle(rotation.z, roll, k)

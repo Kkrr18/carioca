@@ -9,6 +9,7 @@ extends Node3D
 
 const Cfg = preload("res://scripts/core/cfg.gd")
 const Car = preload("res://scripts/vehicles/car.gd")
+const VehiclePhysics = preload("res://scripts/vehicles/vehicle_physics.gd")
 const CityGen = preload("res://scripts/world/city_gen.gd")
 const SectorStreamer = preload("res://scripts/world/sector_streamer.gd")
 const DayNight = preload("res://scripts/world/day_night.gd")
@@ -130,6 +131,10 @@ func _ready() -> void:
 	car.name = "Car"
 	car.player = player
 	car.streamer = streamer
+	# B-67: a ficha do veiculo vem de vehicle_physics.gd. Trocar esta linha por
+	# VehiclePhysics.compact() ou suv() muda massa, motor, cambio e pneus de uma
+	# vez — e o HUD passa a mostrar esses numeros.
+	car.vehicle_spec = VehiclePhysics.sedan()
 	car.model_path = "res://assets/models/quaternius-car.glb"
 	car.position = Vector3(1604.0, Cfg.height_at(1604.0, 96.0), 96.0)
 	car.rotation.y = PI * 0.5

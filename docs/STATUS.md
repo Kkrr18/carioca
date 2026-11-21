@@ -23,7 +23,7 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
 | Controles por toque | Escrito | scripts/ui/touch_controls.gd |
 | HUD e telemetria | Escrito | scripts/ui/hud.gd, scripts/core/perf_log.gd |
 | Luz do Rio (4 momentos de ceu) e clima (claro/nublado/chuva) | Escrito, nao validado | scripts/world/day_night.gd |
-| Veiculo dirigivel (carro — Fase 4, incremento minimo) | Escrito | scripts/vehicles/car.gd |
+| Veiculo dirigivel (fisica automotiva B-67) | Escrito | scripts/vehicles/car.gd, scripts/vehicles/vehicle_physics.gd |
 | Piloto de asset externo (.glb CC0 normalizado pelo AABB) | Escrito | scripts/world/model_prop.gd, assets/models/ |
 | Salvamento versionado (schema 1, sha256, gzip) | Escrito | scripts/autoload/save_manager.gd |
 | Testes headless | Escrito | tests/runner.gd |
@@ -683,6 +683,51 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   a rua, o setor publica as lojas e o LOD far nao. NAO validado no aparelho:
   falta ver o balconista dentro da loja e o aviso do nome ao entrar.
 
+- B-67: Fase 4 — FISICA AUTOMOTIVA DE VERDADE. O autor colou uma especificacao de
+  "Realistic Physics Engine — Godot 4" (RigidBody3D + 4 RayCast3D de suspensao,
+  mola/amortecedor, circulo de aderencia, transferencia de peso, arrasto, FWD/
+  RWD/AWD) e pediu para implementar otimizada para o iPhone 12. A ARQUITETURA
+  nao pode ser copiada, e o motivo esta em docs/ARQUITETURA.md: este mundo NAO
+  TEM corpos de fisica. O chao e analitico (`Cfg.height_at`/`surface_at`) e
+  predio e uma lista de retangulos (`push_out`), entao nao existe malha para os
+  raios do RigidBody3D encostarem — ele cairia para sempre. Dar colisao aos 9
+  setores carregados (512 m cada) estoura memoria e CPU no iPhone, que e
+  exatamente o que a premissa "realismo maximo DENTRO do orcamento" proibe.
+  ENTREGUE: o MESMO conjunto de quantidades fisicas, integrado sobre o chao
+  analitico, num modulo PURO — `scripts/vehicles/vehicle_physics.gd`
+  (`extends RefCounted`, sem no, sem cena, sem aleatoriedade) — que recebe o
+  estado e devolve o proximo. E literalmente o codigo que roda no jogo
+  (`car.gd::_drive` chama `step()`), e o CI mede os numeros, nao a intencao.
+  O que entrou: massa (1450 kg no sedan; presets compacto 1100 kg e SUV 2200 kg
+  AWD prontos em `compact()`/`suv()`), curva de torque (pico em 4000 rpm,
+  0,55x na lenta 0,72x no corte), forca na roda = torque x marcha x diferencial /
+  raio, cambio AUTOMATICO de 5 marchas (sobe a 5900, desce a 1700, com espera de
+  0,55/0,40 s para nao "cacar" marcha), freio com ABS e tracao com TCS — os dois
+  saem de graca do CIRCULO DE ADERENCIA (`tire_force`: o pneu nunca transmite
+  mais que mu x carga normal), transferencia de peso por eixo e por lado
+  (`normal_loads`: frear carrega a frente, curva carrega o lado de fora),
+  arrasto aerodinamico 1/2 rho Cd A v^2 (Cd 0,32 e A 2,2 m2 no sedan) e
+  rolamento, gravidade no declive (o carro perde velocidade na subida e ganha na
+  descida, medido em `Cfg.surface_at` a +-1,6 m na frente e atras), aderencia POR
+  PISO (asfalto 1,0 na cidade, areia 0,55 na praia, pedra 0,85 no calcadao) e
+  LIMITE LATERAL mu*g: pedir curva demais a 80 km/h agora faz o carro SUBESTERAR
+  (o volante perde autoridade e o HUD mostra a aderencia em %), em vez de girar
+  no proprio eixo como antes. A carroceria tambem mergulha ao frear e levanta ao
+  acelerar (accel_long) e rola para fora na curva (accel_lat). O som do motor
+  passou a usar o GIRO (nao a velocidade), entao a troca de marcha e audivel; o
+  HUD ganhou a linha "marcha N  R rpm  aderencia X%" — e por ela que se ve no
+  aparelho se o cambio esta subindo e se o carro morre na areia. O trafego
+  continua CINEMATICO de proposito: 12 carros com fisica completa nao cabem no
+  iPhone, e a fisica e do carro do jogador. Testes novos no CI: torque com pico
+  no meio, 1a girando mais alto e puxando mais que a 4a, arrasto quadruplicando
+  ao dobrar a velocidade, cargas somando m*g, freio carregando a frente, curva
+  carregando o lado de fora, pneu cortado em mu*carga, 0-100 km/h entre 4 e 16 s
+  com o cambio chegando a 5a, mais de 108 km/h em 40 s, areia freando mais longe
+  que asfalto, freio parando EXATAMENTE em zero (sem engatar a re), re saturando
+  em REVERSE_MAX e subida de 8% freando mais que o plano. NAO validado no
+  aparelho: falta dirigir e dizer se o carro "pesa" como carro (se estiver mole,
+  mexer em torque/massas do preset; se estiver duro demais, no `brake`).
+
 ## Proximas tarefas (Fase 1 -> Fase 2)1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
 2. Medir FPS no iPhone jogando uma sessao real (B-09): o botao PERF grava CSV.
 3. Pedir ao usuario que toque em SALVAR e CARREGAR no jogo e confirme que o save volta (valida o B-08 no aparelho).
@@ -712,3 +757,10 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
    sombra: precisa de uma captura com a posicao do HUD (`pos x, y, z`) para eu
    achar o par de quads.
 
+
+12. B-67: dirigir no iPhone e ler a linha "marcha / rpm / aderencia" do HUD.
+   O que conferir: a marcha sobe sozinha (1a -> 2a por volta dos 55 km/h), o som
+   do motor CAI de tom na troca, o carro freia forte e nao gira no proprio eixo
+   em curva rapida, e na areia ele sai mais devagar que no asfalto. Se estiver
+   "mole", aumentar torque/massas em `VehiclePhysics.sedan()`; se estiver duro,
+   diminuir `brake`.

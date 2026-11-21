@@ -221,6 +221,11 @@ func _refresh_stats() -> void:
 			absf(float(car.speed)) * 3.6,
 			float(car.input_throttle) * 100.0,
 			float(car.input_steer) * 100.0])
+		# Marcha e giro (B-67): e por esta linha que se ve, no aparelho, se o
+		# cambio esta subindo e se o motor nao morre na areia.
+		lines.append("marcha %d   %d rpm   aderencia %.0f%%" % [
+			int(car.gear), int(round(float(car.rpm))),
+			(1.0 - float(car.slip)) * 100.0])
 	if not _model_note.is_empty():
 		lines.append(_model_note)
 	if not _bench_result.is_empty():

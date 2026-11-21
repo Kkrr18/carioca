@@ -173,8 +173,14 @@ func _push(n: int) -> void:
 	var driving := false
 	if car != null:
 		driving = bool(car.occupied)
-		ratio = clampf(absf(float(car.speed)) / MAX_SPEED, 0.0, 1.0)
 		gas = clampf(absf(float(car.input_throttle)), 0.0, 1.0)
+		# Com a fisica nova (B-67) o som segue o MOTOR, nao a velocidade: e a
+		# troca de marcha que se ouve (o giro cai ao subir a marcha).
+		var er: Variant = car.get("engine_ratio")
+		if er != null:
+			ratio = clampf(float(er), 0.0, 1.0)
+		else:
+			ratio = clampf(absf(float(car.speed)) / MAX_SPEED, 0.0, 1.0)
 	var inc := engine_hz(ratio) / MIX_RATE
 	var amp := (0.10 + 0.20 * ratio + 0.08 * gas) if driving else 0.0
 	var buf := PackedVector2Array()
