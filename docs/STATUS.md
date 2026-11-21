@@ -814,6 +814,37 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   salta para o cruzeiro num quadro e vai ganhando velocidade; carro sem ficha
   continua no modelo antigo. NAO validado no aparelho.
 
+- B-71: Fase 4 — PRIMEIRO TESTE "JOGANDO" (inspetor de navegador) E 3 CORRECOES.
+  Tentei jogar o build Web de verdade (kkrr18.github.io/carioca) com o inspetor
+  de navegador desta sessao. LIMITE HONESTO DA FERRAMENTA: a aba fica em segundo
+  plano, o loop do Godot congela (`FPS 1 / frame 1000 ms`, tudo travado no
+  primeiro quadro: `pos 1600, 1, 100`, `relogio 09:30`, `carro livre 0 km/h`) e
+  a ferramenta nao envia teclas nem segura botao — entao ENTRAR, ACEL e o
+  joystick nao foram acionaveis. Ou seja: DIRIGIR continua nao testado por mim;
+  a sensacao de volante/motor/freio so o dedo do autor resolve.
+  O QUE DEU PARA VERIFICAR no quadro real: o jogo carrega sem tela preta (barra
+  de progresso, WebGL 2.0/WebKit), o painel de console nao mostra erro de script
+  (so um `[error] (end of list)` sem mensagem, que nao e do jogo — nao ha stack
+  nem texto de engine), os 4 modelos do transito e o caminhao CC0 carregam, o
+  avatar aparece de camiseta laranja/jeans com sombra de contato, os pedestres
+  estao na cena (12 pessoas, 4 desenhos cada), o HUD lista `props 20`, e os
+  objetos fisicos ESTAO na cena (caixote de madeira, lixeira verde, cone laranja)
+  apoiados no chao — nenhum flutuando ou enterrado.
+  TRES PROBLEMAS ACHADOS E CORRIGIDOS: (1) o AVISO central do HUD ficava em
+  cima da telemetria e tapava justamente o valor de "aderencia" — o aviso agora
+  fica a 32% da altura da tela, abaixo do bloco de telemetria e acima dos botoes
+  de toque; (2) `draw calls 0  primitivas 0  objetos 0  mem 0 MB`: no build Web
+  os monitores de rendering do Godot voltam todos 0, entao a linha era lixo —
+  `_metric_ok()` agora exige draw calls > 0 e, quando indisponivel, a linha
+  simplesmente nao aparece; (3) `props 20 (20 acordados)` num quadro PARADO: os
+  objetos nasciam acordados e integravam sem motivo — `place_on_ground()` agora
+  deixa o objeto DORMINDO, e o CI verifica que dormindo ele nao afunda nem
+  treme. ANOTADO PARA O PROXIMO PASSO VISUAL (pre-existente, nao e bug de
+  codigo): o guarda-sol/quiosque da praia e uma laje fina sobre um mastro — sem
+  um modelo CC0 de guarda-sol ou de quiosque ele vai continuar "feinho"; e o
+  HUD anuncia `som: toque na tela para ligar` porque o toque do inspetor nao e
+  um gesto de verdade do Safari.
+
 ## Proximas tarefas (Fase 1 -> Fase 2)1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
 2. Medir FPS no iPhone jogando uma sessao real (B-09): o botao PERF grava CSV.
 3. Pedir ao usuario que toque em SALVAR e CARREGAR no jogo e confirme que o save volta (valida o B-08 no aparelho).

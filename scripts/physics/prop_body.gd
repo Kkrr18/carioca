@@ -75,12 +75,18 @@ static func make(kind: String, pos: Vector3, yaw: float) -> Dictionary:
 	}
 
 
-## Coloca o objeto apoiado no chao (y do centro = chao + meia altura).
+## Coloca o objeto apoiado no chao (y do centro = chao + meia altura) e DORME.
+## Nascer dormindo importa: no build Web a telemetria mostrava "props 20 (20
+## acordados)" num quadro parado, com 20 corpos integrando sem precisar (B-71).
+## Qualquer impulso (impulse) ou mudanca de chao (wake) acorda.
 static func place_on_ground(b: Dictionary, ground: float) -> void:
 	var pos: Vector3 = b["pos"]
 	pos.y = ground + half_height(String(b["kind"]))
 	b["pos"] = pos
 	b["vel"] = Vector3.ZERO
+	b["spin"] = 0.0
+	b["rest"] = true
+	b["sleep_t"] = SLEEP_TIME
 
 
 ## Um passo de fisica. `ground` = altura do chao analitico embaixo dele e

@@ -124,8 +124,13 @@ func _ready() -> void:
 	var half := minf(330.0 * _ui, vs.x * 0.44)
 	_toast.offset_left = -half
 	_toast.offset_right = half
-	_toast.offset_top = -400.0 * _ui
-	_toast.offset_bottom = -332.0 * _ui
+	# B-71: o aviso ficava a 332-400 px do rodape, ou seja EM CIMA da telemetria
+	# (no print do build Web o texto central tapava justamente o valor de
+	# "aderencia"). Agora ele fica a 32% da altura da tela, sempre abaixo do
+	# bloco de telemetria e acima dos botoes de toque.
+	var toast_h := 34.0 * _ui
+	_toast.offset_bottom = -vs.y * 0.32
+	_toast.offset_top = _toast.offset_bottom - toast_h
 	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_toast.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_toast.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -249,7 +254,13 @@ func _percentile(p: int) -> float:
 
 func _metric_ok() -> bool:
 	# Em headless o monitor de rendering nao existe.
-	return not DisplayServer.get_name().contains("headless")
+	if DisplayServer.get_name().contains("headless"):
+		return false
+	# B-71: no build Web (renderer Compatibility) os monitores de rendering
+	# voltam TODOS 0 — a telemetria mostrava "draw calls 0 primitivas 0 objetos 0
+	# mem 0 MB", que era lixo e nao media nada. Se o quadro desenhou, draw calls
+	# e maior que zero; se der 0, os monitores nao estao disponiveis.
+	return Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME) > 0.0
 
 
 # --- Botoes -------------------------------------------------------------------

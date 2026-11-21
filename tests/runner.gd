@@ -635,6 +635,15 @@ func _test_prop_physics() -> void:
 	PropBody.apply_damage(safe, Damage.hit_power(80.0, 3.0))
 	check(bool(safe["alive"]) and int(safe["state"]) == Damage.INTACT,
 		"empurrao de pedestre nao destroi a caixa")
+	# B-71: objeto posicionado no chao nasce DORMINDO e, dormindo, nao integra
+	# (era o "props 20 (20 acordados)" que aparecia no build Web parado).
+	var snoozing := PropBody.make("caixa", Vector3(100.0, 0.0, 500.0), 0.0)
+	PropBody.place_on_ground(snoozing, ground)
+	check(bool(snoozing["rest"]), "objeto posto no chao nasce dormindo")
+	for i in 120:
+		PropBody.step(snoozing, 1.0 / 60.0, ground, 0.62, 0.1)
+	check(absf(float(snoozing["pos"].y) - (ground + half)) < 0.001,
+		"e dormindo nao afunda nem treme (y %.2f)" % float(snoozing["pos"].y))
 	# Avaria do carro: o `power` que o car.gd passa ao step tira aceleracao.
 	var sp := VehiclePhysics.sedan()
 	var fresh := {"speed": 0.0, "gear": 1, "shift_cool": 0.0}
