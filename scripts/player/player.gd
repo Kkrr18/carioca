@@ -56,6 +56,9 @@ var _arms: Array[Node3D] = []
 var contact_shadow: MeshInstance3D
 var _using_model := false
 var _ap: AnimationPlayer
+var _model_holder: Node3D
+var _idle_static := false      # clipe de parado sem movimento (pose parada)
+var _sway := 0.0
 var _walk_anim := ""
 var _idle_anim := ""
 var _run_anim := ""
@@ -96,6 +99,7 @@ func _build_model_avatar() -> bool:
 	var holder := Node3D.new()
 	holder.rotation.y = PI
 	avatar.add_child(holder)
+	_model_holder = holder
 	var inst: Node3D = scene.instantiate()
 	holder.add_child(inst)
 	var painted := 0
@@ -130,6 +134,10 @@ func _build_model_avatar() -> bool:
 	for nm in [_walk_anim, _idle_anim, _run_anim]:
 		if nm != "" and clips.has(nm):
 			(clips[nm] as Animation).loop_mode = Animation.LOOP_LINEAR
+	# O clipe de parado da Quaternius pode ser uma pose ESTATICA: nesse caso o
+	# protagonista fica plantado como estátua (era o que se via no jogo), e a
+	# solucao e um balanco minimo por codigo (ESTILO.md: nada fica imovel).
+	_idle_static = _idle_anim == "" or Pedestrians.clip_motion(clips[_idle_anim]) < 0.02
 	if _idle_anim != "":
 		_ap.play(StringName(_idle_anim))
 	# Escala: posa um clipe, mede a altura do esqueleto POSADO (o AABB da malha e
@@ -377,25 +385,29 @@ func _physics_process(delta: float) -> void:
 		var want_angle := atan2(hv.x, hv.y)
 		avatar.rotation.y = lerp_angle(avatar.rotation.y, want_angle, clampf(TURN_SPEED * delta, 0.0, 1.0))
 	_bob += delta * maxf(1.0, hv.length())
-	_update_anim(hv)
+	_update_anim(hv, delta)
 
 	_update_camera(delta)
 
 
 ## Animacao: clipes do MODELO quando ele existe (parado / andando / correndo /
 ## pulando) e, no boneco de caixas, o balanco antigo de bracos e pernas.
-func _update_anim(hv: Vector2) -> void:
+func _update_anim(hv: Vector2, delta: float) -> void:
 	if _using_model and _ap != null:
 		var sp := hv.length()
 		if not _grounded and _jump_anim != "":
 			_play_anim(_jump_anim, 1.0)
+			_idle_hold()
 		elif sp > 2.2 and _run_anim != "":
 			# O clipe de corrida cobre ~4,6 m/s no compasso 1.
 			_play_anim(_run_anim, clampf(sp / 4.6, 0.55, 2.0))
+			_idle_hold()
 		elif sp > 0.35 and _walk_anim != "":
 			_play_anim(_walk_anim, clampf(sp / 1.5, 0.60, 1.70))
+			_idle_hold()
 		else:
 			_play_anim(_idle_anim, 1.0)
+			_idle_sway(delta)
 		return
 	if hv.length() > 0.4:
 		var swing := sin(_bob) * clampf(hv.length() / RUN_SPEED, 0.0, 1.0) * 0.7
@@ -415,9 +427,42 @@ func _update_anim(hv: Vector2) -> void:
 func _play_anim(nm: String, spd: float) -> void:
 	if _ap == null or nm == "":
 		return
-	if _ap.current_animation != StringName(nm):
+	# `is_playing()` falso = o clipe acabou (pulo, por exemplo): recomeca, senao o
+	# personagem fica congelado no ultimo quadro daquele clipe para sempre.
+	if _ap.current_animation != StringName(nm) or not _ap.is_playing():
 		_ap.play(StringName(nm))
 	_ap.speed_scale = spd
+
+
+## Parado: se o clipe de parado nao se mexe, o corpo ganha um balanco minimo
+## (1,5 grau de giro e 1 cm de sobe e desce) para nao parecer estátua.
+func _idle_sway(delta: float) -> void:
+	if _model_holder == null or not _idle_static:
+		_idle_hold()
+		return
+	_sway += delta
+	_model_holder.rotation.y = PI + sin(_sway * 1.1) * 0.03
+	_model_holder.position.y = sin(_sway * 2.0) * 0.010
+
+
+func _idle_hold() -> void:
+	if _model_holder == null:
+		return
+	_model_holder.rotation.y = PI
+	_model_holder.position.y = 0.0
+
+
+## Estado do avatar na telemetria: e por esta linha que se sabe, no aparelho, se
+## o modelo carregou e se a animacao esta mesmo tocando (nao ha console no Safari).
+func describe() -> String:
+	if not _using_model:
+		return "avatar: boneco de caixas (modelo nao carregou)"
+	var playing := "parada"
+	if _ap != null and _ap.is_playing():
+		playing = "tocando"
+	return "avatar: modelo 1,80 m (%s; idle=%s walk=%s run=%s jump=%s; parado=%s)" % [
+		playing, _idle_anim, _walk_anim, _run_anim, _jump_anim,
+		"estatico+balanco" if _idle_static else "animado"]
 
 
 func _update_camera(delta: float) -> void:

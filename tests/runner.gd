@@ -1180,9 +1180,16 @@ func _test_player_model() -> void:
 	check(sk != null and tris > 200, "protagonista tem esqueleto e geometria")
 	var walk := Pedestrians.pick_clip(clips, "walk")
 	check(walk != "", "clipe de andar no modelo")
-	check(Pedestrians.pick_clip(clips, "idle") != "", "clipe de parado no modelo")
+	var idle := Pedestrians.pick_clip(clips, "idle")
+	check(idle != "", "clipe de parado no modelo")
 	check(walk != "" and Pedestrians.clip_motion(clips[walk]) > 0.05,
 		"clipe de andar do protagonista tem movimento de verdade")
+	if idle != "":
+		# O clipe de parado pode ser uma pose estatica: nesse caso o jogo poe um
+		# balanco por codigo (`_idle_static`). Aqui so se mede o que veio do arquivo.
+		print("  info: protagonista parado: clipe %s com movimento %.3f %s" % [
+			idle, Pedestrians.clip_motion(clips[idle]),
+			"(estatico: o jogo balanca por codigo)" if Pedestrians.clip_motion(clips[idle]) < 0.02 else "(animado)"])
 	inst.free()
 	# Frente: o avatar gira por atan2(dir.x, dir.y) e o modelo leva PI (ele olha
 	# para -Z). O -Z do modelo tem que apontar no sentido do passo — sem isso ele

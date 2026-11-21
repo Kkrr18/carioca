@@ -159,7 +159,7 @@ func _ready() -> void:
 	add_child(pedestrians)
 	pedestrians.setup(world_seed, player.position)
 	hud.set_model_note(model_prop.describe() + "\n" + traffic.describe()
-			+ "\n" + pedestrians.describe())
+			+ "\n" + pedestrians.describe() + "\n" + player.describe())
 
 	# Som (Fase 4): motor sintetizado que sobe de tom com o giro + impacto CC0.
 	_boot_step("som")
@@ -351,6 +351,8 @@ func _process(delta: float) -> void:
 				all += "\n" + traffic.describe()
 			if pedestrians != null:
 				all += "\n" + pedestrians.describe()
+			if player != null:
+				all += "\n" + player.describe()
 			hud.set_model_note(all + "\n" + note)
 	perf_log.sample(delta)
 
