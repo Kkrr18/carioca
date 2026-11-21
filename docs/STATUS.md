@@ -845,6 +845,42 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   HUD anuncia `som: toque na tela para ligar` porque o toque do inspetor nao e
   um gesto de verdade do Safari.
 
+- B-71 (CORRECAO, depois de rodar em PRIMEIRO PLANO): dois dos tres problemas
+  acima eram artefato do PRIMEIRO QUADRO CONGELADO, nao do build. Com o loop
+  rodando, os monitores de rendering do Web funcionam (draw calls 145,
+  primitivas 76.503, objetos 1.404 — so `mem` fica 0) e os objetos dormem
+  sozinhos 0,45 s depois (`props 20 (0 acordados) + 0 destrocos` em todas as
+  leituras). O aviso em cima da telemetria era real e ficou corrigido; o
+  `_metric_ok()` novo continua valendo (com draw calls 0 os numeros sao lixo),
+  mas o comentario "no Web os monitores voltam 0" estava ERRADO: voltam 0
+  quando NADA foi desenhado ainda. O teste em primeiro plano NAO conseguiu
+  provar: ENTRAR e MEDIR nao recebem o "toque" do inspetor (ele clica no
+  canvas, o Safari nao trata como gesto), entao nao houve medicao de 15 s nem
+  carro dirigindo. E a HUD apareceu com a primeira fileira de botoes cortada no
+  topo e o console cortado embaixo no viewport de telefone do inspetor: isso
+  precisa ser conferido no iPhone de verdade ANTES de mexer no layout.
+
+- B-72: Fase 4 — O CUSTO QUE APARECEU JOGANDO: SOMBRA DO SOL E CEU POR QUADRO.
+  Rodando o build Web em primeiro plano, com o jogador PARADO na praia, a
+  telemetria mostrou ao longo de 7 minutos de relogio de jogo (09:47 -> 16:53):
+  FPS 29 -> 9-15, draw calls 145 -> 263, primitivas 76.503 -> 175.909, objetos
+  1.404 -> 1.528. O quadro ficava MAIS CARO conforme o sol baixava, sem nada se
+  mexer: com o sol baixo a sombra fica comprida, o frustum da sombra cobre muito
+  mais cidade e cada objeto entra no passe de sombra OUTRA vez (por isso draw
+  calls e primitivas dobram). Pior: `day_night.apply()` re-apontava o sol TODO
+  QUADRO, e no ceu procedural quem desenha o sol e o MATERIAL do ceu — cada
+  mudanca de direcao manda o Godot refazer o mapa de radiancia do ambiente
+  (`ambient_light_source = SKY`), caro no WebGL. CORRECOES: (1) sombra de 2048
+  para 1024 px (project.godot); (2) distancia de sombra de 120 m para 80 m
+  (`Cfg.SUN_SHADOW_DISTANCE`, usado pelo main); (3) sol e lua so sao
+  re-apontados quando andam mais de 0,004 rad (~0,23 grau, ~1 vez por segundo)
+  em vez de a cada quadro. O que o jogador ve de perto nao muda — a sombra
+  continua na rua em volta dele; sai a sombra inutil de 100 m de distancia.
+  Testes novos no CI travam o orcamento: sombra <= 1024 px, distancia <= 80 m e
+  epsilon >= 0,002 rad. NAO medido ainda: o FPS depois destas tres mudancas — o
+  proximo teste e repetir a MESMA cena parada no fim da tarde e comparar draw
+  calls/primitivas/FPS com os numeros acima.
+
 ## Proximas tarefas (Fase 1 -> Fase 2)1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
 2. Medir FPS no iPhone jogando uma sessao real (B-09): o botao PERF grava CSV.
 3. Pedir ao usuario que toque em SALVAR e CARREGAR no jogo e confirme que o save volta (valida o B-08 no aparelho).

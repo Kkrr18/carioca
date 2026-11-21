@@ -38,6 +38,13 @@ const ROAD_WIDTH := 10.0
 const SIDEWALK_WIDTH := 3.0
 const HILL_START_Z := 2000.0
 
+# --- Orcamento de render -----------------------------------------------------
+## Distancia (m) das sombras do sol. B-72: com 120 m o "shadow pass" puxava
+## metade da cidade quando o sol baixava (draw calls 145 -> 263 e primitivas
+## 76k -> 176k sem o jogador sair do lugar) e o FPS caia de 29 para 9 no build
+## Web. 80 m mantem sombra onde o jogador ve e corta o custo.
+const SUN_SHADOW_DISTANCE := 80.0
+
 # --- Agua --------------------------------------------------------------------
 const SEA_LEVEL := 0.0
 const MIN_WADE_DEPTH := -0.6           # terreno mais fundo que isso: intransponivel

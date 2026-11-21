@@ -270,7 +270,7 @@ func _build_environment() -> void:
 	# emenda sai do primeiro plano e a resolucao perto do jogador continua alta.
 	_sun.directional_shadow_split_1 = 0.45
 	_sun.directional_shadow_split_2 = 0.75
-	_sun.directional_shadow_max_distance = 120.0
+	_sun.directional_shadow_max_distance = Cfg.SUN_SHADOW_DISTANCE
 	_sun.directional_shadow_blend_splits = true
 	add_child(_sun)
 

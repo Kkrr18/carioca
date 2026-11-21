@@ -48,7 +48,10 @@ textures/vram_compression/import_etc2_astc=true
 anti_aliasing/quality/msaa_3d=1
 environment/defaults/default_clear_color=Color(0.42, 0.58, 0.72, 1)
 limits/opengl/max_renderable_elements=131072
-lights_and_shadows/directional_shadow/size=2048
+; B-72: 1024 em vez de 2048. No teste do build Web a sombra era metade do custo
+; de quadro com o sol baixo (draw calls 145 -> 263 parado); no iPhone 12, com
+; sombra a 80 m, 1024 da ~8 cm por texel e sustenta os 30 FPS.
+lights_and_shadows/directional_shadow/size=1024
 ; PCF (1 = PCF5) em vez de sombra dura: a borda serrilhada da sombra piscando
 ; com a camera era parte do "granulado" que o autor viu (B-52).
 lights_and_shadows/directional_shadow/soft_shadow_filter_quality=1

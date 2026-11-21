@@ -72,6 +72,7 @@ func _initialize() -> void:
 	_test_traffic_spacing_and_follow()
 	_test_audio_pure()
 	_test_sky()
+	_test_render_budget()
 	_test_pedestrians()
 	_test_pedestrian_model()
 	_test_pedestrian_life()
@@ -1289,6 +1290,20 @@ func _test_sky() -> void:
 		"aim_basis e uma base valida (determinante 1, sem espelho)")
 	check(DayNight.aim_basis(Vector3.UP).z.is_equal_approx(Vector3.UP),
 		"aim_basis aguenta o sol exatamente no zenite")
+
+
+## B-72: orcamento de sombra e de ceu travado por constante. O teste que rodei
+## no build Web viu draw calls 145 -> 263 e primitivas 76k -> 176k (FPS 29 -> 9)
+## com o sol baixo e o jogador PARADO; estas checagens impedem o orcamento
+## voltar a subir sem alguem perceber.
+func _test_render_budget() -> void:
+	var size := int(ProjectSettings.get_setting(
+		"rendering/lights_and_shadows/directional_shadow/size", 0))
+	check(size > 0 and size <= 1024, "sombra do sol em %d px (teto 1024)" % size)
+	check(Cfg.SUN_SHADOW_DISTANCE <= 80.0,
+		"distancia de sombra em %.0f m (teto 80)" % Cfg.SUN_SHADOW_DISTANCE)
+	check(DayNight.AIM_EPSILON >= 0.002,
+		"sol nao e re-apontado a cada quadro (%.3f rad)" % DayNight.AIM_EPSILON)
 
 
 func _test_pedestrians() -> void:

@@ -66,6 +66,14 @@ var _weather_timer := 180.0
 ## reescritos todo quadro: cada mudanca no material do ceu manda o Godot refazer
 ## o mapa de radiancia do ambiente, e isso pesa no iPhone.
 var _last_key := -1
+## B-72: re-apontar o sol TODO quadro obriga o Godot a refazer o mapa de
+## radiancia do ceu procedural (quem desenha o sol no ceu e o material do ceu,
+## nao a luz). No teste do build Web o FPS caia de 29 para 9 conforme o sol
+## baixava. 0,004 rad (~0,23 grau) de desvio da ~1 atualizacao por segundo,
+## invisivel a olho nu e muito mais barato.
+const AIM_EPSILON := 0.004
+var _sun_dir := Vector3.ZERO
+var _moon_dir := Vector3.ZERO
 
 
 func setup(sun_light: DirectionalLight3D, moon_light: DirectionalLight3D, environment: Environment) -> void:
@@ -240,7 +248,10 @@ func _aim_lights(l: Dictionary) -> void:
 		# Escondendo o no, quem virava a luz do ceu era a LUA, e o disco dela
 		# (do mesmo tamanho do sol) aparecia como um bolo branco no ceu (B-52).
 		sun.visible = true
-		aim_light(sun, to_sun)
+		# B-72: so re-aponta quando o sol andou o bastante (ver AIM_EPSILON).
+		if _sun_dir.length() < 0.5 or _sun_dir.angle_to(to_sun) > AIM_EPSILON:
+			_sun_dir = to_sun
+			aim_light(sun, to_sun)
 		_write(sun, "light_color", l["sun_color"])
 		_write(sun, "light_energy", l["sun_energy"])
 		# Sombra sempre que o sol ilumina de verdade: a sombra comprida da hora
@@ -250,7 +261,9 @@ func _aim_lights(l: Dictionary) -> void:
 		var to_moon: Vector3 = l["moon_dir"]
 		moon.visible = to_moon.y > 0.04
 		if moon.visible:
-			aim_light(moon, to_moon)
+			if _moon_dir.length() < 0.5 or _moon_dir.angle_to(to_moon) > AIM_EPSILON:
+				_moon_dir = to_moon
+				aim_light(moon, to_moon)
 			_write(moon, "light_color", MOON_COL)
 			_write(moon, "light_energy", l["moon_energy"])
 
