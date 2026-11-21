@@ -76,6 +76,7 @@ var _using_model := false
 var _ap: AnimationPlayer
 var _model_holder: Node3D
 var _head: Node3D             # cabeca 3D (B-77); null se o modelo nao carregar
+var _head_tris := 0           # custo da cabeca na telemetria
 var _idle_static := false      # clipe de parado sem movimento (pose parada)
 var _sway := 0.0
 var _walk_anim := ""
@@ -209,6 +210,9 @@ func _build_head() -> void:
 		mi.material_override = skin
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	_head = inst
+	# Custo na telemetria: a cabeca e um escaneamento denso; se pescar o FPS no
+	# aparelho, este numero diz se ele e o culpado.
+	_head_tris = ModelProp.count_tris(inst)
 
 
 ## Boneco de caixas: a reserva de sempre, usada so se o modelo nao carregar.
@@ -521,10 +525,10 @@ func describe() -> String:
 	var playing := "parada"
 	if _ap != null and _ap.is_playing():
 		playing = "tocando"
-	return "avatar: modelo 1,80 m (%s; idle=%s walk=%s run=%s jump=%s; parado=%s; cabeca=%s)" % [
+	return "avatar: modelo 1,80 m (%s; idle=%s walk=%s run=%s jump=%s; parado=%s; cabeca=%s %d tris)" % [
 		playing, _idle_anim, _walk_anim, _run_anim, _jump_anim,
 		"estatico+balanco" if _idle_static else "animado",
-		"sim" if _head != null else "nao"]
+		"sim" if _head != null else "nao", _head_tris]
 
 
 func _update_camera(delta: float) -> void:
