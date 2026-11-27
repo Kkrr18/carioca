@@ -175,13 +175,13 @@ static func rounded_points(r: Rect2, radius: float, segments: int = 6) -> Packed
 		pts.append(r.position + r.size)
 		pts.append(r.position + Vector2(0.0, r.size.y))
 		return pts
-	var centers := [
+	var centers: Array[Vector2] = [
 		r.position + Vector2(r.size.x - rad, rad),
 		r.position + Vector2(r.size.x - rad, r.size.y - rad),
 		r.position + Vector2(rad, r.size.y - rad),
 		r.position + Vector2(rad, rad),
 	]
-	var starts := [-PI * 0.5, 0.0, PI * 0.5, PI]
+	var starts: Array[float] = [-PI * 0.5, 0.0, PI * 0.5, PI]
 	for i in 4:
 		for s in segments + 1:
 			var a := starts[i] + PI * 0.5 * float(s) / float(segments)
