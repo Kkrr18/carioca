@@ -40,6 +40,9 @@ static var weapon_press_s := false
 var _stick_index := NONE
 var _stick_origin := Vector2.ZERO
 var _look_index := NONE
+## Ultima posicao do dedo de olhar: o delta da camera e calculado por nos,
+## de posicao em posicao do MESMO dedo (ver comentario em _drag).
+var _look_last := Vector2.ZERO
 var _jump_index := NONE
 var _sprint_index := NONE
 var _fire_index := NONE
@@ -313,18 +316,30 @@ func _touch(index: int, pos: Vector2, pressed: bool) -> void:
 		# olhar — era o que fazia a camera girar sozinha ao usar o analogico e
 		# a camera ao mesmo tempo. Dedos alem de joystick + olhar sao ignorados.
 		_look_index = index
+		_look_last = pos
 
 
 func _drag(index: int, pos: Vector2, relative: Vector2) -> void:
 	if index == _stick_index:
 		var d := pos - _stick_origin
-		if d.length() > STICK_MAX:
-			d = d.normalized() * STICK_MAX
+		# O clamp usa o raio DESENHADO (_stick_max), nao a constante: com o
+		# raio escalado pelo iPhone o stick_vec travava em ~0.4-0.9 — andava
+		# fraco e o botao do stick nunca chegava na borda do circulo.
+		if d.length() > _stick_max:
+			d = d.normalized() * _stick_max
 			_stick_origin = pos - d
 		stick_vec = d / maxf(1.0, _stick_max)
 		queue_redraw()
 	elif index == _look_index:
-		look_delta += relative
+		# Delta calculado de posicao em posicao do MESMO dedo — e nao pelo
+		# `relative` do evento. No build web o relative e reconstruido pelo
+		# Godot a partir das posicoes que o navegador manda, e com DOIS dedos
+		# na tela ele nao e confiavel (pode vir contra a posicao do OUTRO
+		# dedo): a camera virava louca so quando anal e camera andavam juntos.
+		# A posicao chega certa (os botoes funcionam por posicao), entao o
+		# delta proprio e a leitura segura — um dedo ou dois, o valor e igual.
+		look_delta += pos - _look_last
+		_look_last = pos
 
 
 # --- Desenho ------------------------------------------------------------------
