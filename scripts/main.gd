@@ -327,9 +327,13 @@ func _build_environment() -> void:
 	environment.adjustment_saturation = 1.14
 	environment.adjustment_brightness = 1.0
 	environment.glow_enabled = true
-	environment.glow_intensity = 0.18
+	# Menos halo e limiar mais alto: o buffer do glow e de meia resolucao e,
+	# com a camera em movimento, o halo tremia em volta de tudo que e claro
+	# (o granulado em movimento que o autor viu). So o que brilha de verdade
+	# (sol, lampada, janela acesa) pega halo agora.
+	environment.glow_intensity = 0.12
 	environment.glow_bloom = 0.0
-	environment.glow_hdr_threshold = 1.35
+	environment.glow_hdr_threshold = 1.55
 
 	var we := WorldEnvironment.new()
 	we.environment = environment
