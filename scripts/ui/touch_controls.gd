@@ -20,6 +20,11 @@ extends Control
 ## tamanhos aqui sao multiplicados por _ui, derivado da altura logica.
 
 const STICK_MAX := 90.0
+## Safari pode engolir o touchend/touchcancel de um dedo (gesto do sistema,
+## notificacao, janela saindo de foco). Sem o prazo abaixo, a "reivindicacao"
+## ficava presa para sempre: o joystick continuava andando e a camera girando
+## sozinhas depois de o dedo ter saido da tela — o bug da camera que o autor viu.
+const FINGER_TIMEOUT := 2.0
 const TOP_UI := 0.17
 const BUTTON_RADIUS := 46.0
 const NONE := -99
@@ -40,6 +45,8 @@ static var weapon_press_s := false
 var _stick_index := NONE
 var _stick_origin := Vector2.ZERO
 var _look_index := NONE
+var _stick_seen := 0.0
+var _look_seen := 0.0
 var _jump_index := NONE
 var _sprint_index := NONE
 var _fire_index := NONE
@@ -65,6 +72,7 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_font = ThemeDB.fallback_font
+	set_process(true)
 	_layout_buttons()
 
 
@@ -86,6 +94,29 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED or what == NOTIFICATION_ENTER_TREE:
 		_layout_buttons()
 		queue_redraw()
+
+
+## Dede que nao manda evento nenhum dentro do prazo é tratada como levantada:
+## solta a reivindicacao, para o joystick e devolve a camera ao controle.
+func _process(_delta: float) -> void:
+	if _stick_index == NONE and _look_index == NONE:
+		return
+	var now := float(Time.get_ticks_msec()) / 1000.0
+	if _stick_index != NONE and now - _stick_seen > FINGER_TIMEOUT:
+		_stick_index = NONE
+		stick_vec = Vector2.ZERO
+		queue_redraw()
+	if _look_index != NONE and now - _look_seen > FINGER_TIMEOUT:
+		_look_index = NONE
+		queue_redraw()
+
+
+## Qualquer evento de um dedo reivindicado renova o prazo dele.
+func _touch_seen(index: int) -> void:
+	if index == _stick_index or index == _look_index:
+		var now := float(Time.get_ticks_msec()) / 1000.0
+		_stick_seen = now
+		_look_seen = now
 
 
 # --- API estatica (usada por player.gd) --------------------------------------
@@ -223,6 +254,7 @@ func _input(event: InputEvent) -> void:
 
 
 func _touch(index: int, pos: Vector2, pressed: bool) -> void:
+	_touch_seen(index)
 	if not pressed:
 		if index == _stick_index:
 			_stick_index = NONE
@@ -308,6 +340,7 @@ func _touch(index: int, pos: Vector2, pressed: bool) -> void:
 
 
 func _drag(index: int, pos: Vector2, relative: Vector2) -> void:
+	_touch_seen(index)
 	if index == _stick_index:
 		var d := pos - _stick_origin
 		if d.length() > STICK_MAX:
