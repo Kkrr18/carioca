@@ -28,6 +28,9 @@ const EYE_HEIGHT := 1.5
 ## retarget nenhum. Pintado por vertice: homem BRANCO, de CABELO PRETO, 1,80 m,
 ## camiseta laranja e calca jeans (a identidade do boneco antigo).
 const AVATAR_PATH := "res://assets/models/ped-walk.glb"
+## Modelo do autor. Entra ANTES do corpo CC0; se nao trouxer animacao de
+## andar de verdade, o corpo CC0 segue valendo (ver _build_avatar).
+const PROTAGONISTA_PATH := "res://assets/models/PROTAGONISTA.fbx"
 const AVATAR_HEIGHT := 1.80
 const SKIN_COL := Color(0.96, 0.84, 0.75)
 const SHIRT_COL := Color(0.92, 0.45, 0.25)
@@ -130,16 +133,20 @@ func _ready() -> void:
 func _build_avatar() -> void:
 	avatar = Node3D.new()
 	add_child(avatar)
-	if not _build_model_avatar():
-		_build_block_avatar()
+	# Fila de avatares: primeiro o modelo do autor (PROTAGONISTA.fbx), depois o
+	# corpo CC0 que sempre traz as animacoes, e no fim o boneco de caixas — o
+	# jogo nunca fica sem personagem.
+	if not _build_model_avatar(PROTAGONISTA_PATH):
+		if not _build_model_avatar(AVATAR_PATH):
+			_build_block_avatar()
 	_build_contact_shadow()
 
 
 ## Avatar de MODELO (B-63). Devolve false se o arquivo nao carregar ou nao der
-## para pintar, e ai o jogador continua com o boneco de caixas: o jogo nunca fica
-## sem personagem.
-func _build_model_avatar() -> bool:
-	var scene := Pedestrians.load_scene(AVATAR_PATH)
+## para usar, e ai o jogador passa para o modelo seguinte da fila (e, no fim,
+## para o boneco de caixas): o jogo nunca fica sem personagem.
+func _build_model_avatar(path: String) -> bool:
+	var scene := Pedestrians.load_scene(path)
 	if scene == null:
 		return false
 	# O avatar gira em Y pelo codigo de movimento (atan2(hv.x, hv.y)) e o modelo
@@ -159,17 +166,32 @@ func _build_model_avatar() -> bool:
 			continue
 		if Pedestrians.paint_body(mi, SKIN_COL, SHIRT_COL, PANTS_COL, HAIR_COL):
 			painted += 1
-		var mat := StandardMaterial3D.new()
-		mat.vertex_color_use_as_albedo = true
-		mat.vertex_color_is_srgb = false
-		mat.roughness = 0.92
-		mat.metallic_specular = 0.1
-		mi.material_override = mat
+			# Pintura por vertice: o material le a cor gravada na malha.
+			var mat := StandardMaterial3D.new()
+			mat.vertex_color_use_as_albedo = true
+			mat.vertex_color_is_srgb = false
+			mat.roughness = 0.92
+			mat.metallic_specular = 0.1
+			mi.material_override = mat
+		elif mi.material == null and mi.material_override == null:
+			# Sem pintura e sem material proprio (o caso de um .fbx sem
+			# textura): um chapado neutro, nunca o branco do material padrao.
+			var plain := StandardMaterial3D.new()
+			plain.albedo_color = SHIRT_COL
+			plain.roughness = 0.92
+			plain.metallic_specular = 0.1
+			mi.material_override = plain
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	if painted == 0:
+	# O corpo CC0 se pinta por vertice: sem pintura nenhuma, o arquivo nao e o
+	# esperado. O .fbx do autor pode vir sem cores de vertice e e aceito assim.
+	if painted == 0 and path == AVATAR_PATH:
 		holder.queue_free()
+		_model_holder = null
+		_ap = null
 		return false
-	# Animacoes: o walker traz idle/walk/run/jump no proprio arquivo.
+	# Animacoes: clipe de andar e OBRIGATORIO para um modelo entrar. Sem ele o
+	# personagem desliza em T-pose, e o corpo seguinte (que sempre traz as
+	# animacoes) segue valendo.
 	_ap = Pedestrians._find_anim(inst)
 	var clips := {}
 	if _ap != null:
@@ -178,6 +200,11 @@ func _build_model_avatar() -> bool:
 			if a != null:
 				clips[String(nm)] = a
 	_walk_anim = Pedestrians.pick_clip(clips, "walk")
+	if path != AVATAR_PATH and _walk_anim == "":
+		holder.queue_free()
+		_model_holder = null
+		_ap = null
+		return false
 	_idle_anim = Pedestrians.pick_clip(clips, "idle")
 	_run_anim = Pedestrians.pick_clip(clips, "run")
 	_jump_anim = Pedestrians.pick_clip(clips, "jump")
@@ -200,9 +227,10 @@ func _build_model_avatar() -> bool:
 	inst.scale = Vector3.ONE * k
 	inst.position = Vector3(-box.get_center().x, -box.position.y, -box.get_center().z) * k
 	_using_model = _ap != null
-	# Cabeca 3D (B-77): o corpo CC0 tem a cabeca lisa, entao o rosto vem de um
-	# MODELO de cabeca escalado pela altura do personagem.
-	_build_head()
+	# Cabeca 3D (B-77): so para o corpo CC0, que vem de cabeca lisa. O
+	# PROTAGONISTA.fbx traz o rosto dele — uma cabeca por cima seria a segunda.
+	if path == AVATAR_PATH:
+		_build_head()
 	return true
 
 

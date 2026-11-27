@@ -52,15 +52,16 @@ de acreditar em qualquer coisa aqui.
   palmeiras, quiosques.
 - Streaming de setores em `WorkerThreadPool`: só arrays na thread, a malha é
   criada na thread principal, 2 setores por frame.
-- Protagonista de modelo: o mesmo corpo CC0 da Quaternius que roda nos
+- Protagonista de modelo: entra primeiro o **PROTAGONISTA.fbx** (modelo do
+  autor, em `assets/models/`) — mas só fica se o arquivo trouxer animação de
+  andar de verdade. Sem isso, volta o corpo CC0 da Quaternius que roda nos
   pedestres, pintado por vértice (homem branco, de cabelo preto, 1,80 m,
   camiseta laranja e jeans), com as animações de parado/andar/correr/pular que
-  vêm dentro do arquivo. O corpo tem a cabeça lisa, então o **rosto é uma cabeça
-  3D de verdade** (escaneada por Lee Perry-Smith, CC-BY 3.0 — crédito em
+  vêm dentro do arquivo. O corpo CC0 tem a cabeça lisa, então o **rosto é uma
+  cabeça 3D de verdade** (escaneada por Lee Perry-Smith, CC-BY 3.0 — crédito em
   [data/ATTRIBUTION.md](data/ATTRIBUTION.md)), escalada pela altura do
-  personagem, com uma calota de **cabelo preto** por cima do crânio (a cabeça
-  escaneada é careca). Se o modelo não carregar, volta para o boneco de caixas —
-  o jogo nunca fica sem personagem.
+  personagem, com uma calota de **cabelo preto** por cima do crânio. Se nenhum
+  modelo carregar, volta o boneco de caixas — o jogo nunca fica sem personagem.
 - Personagem em terceira pessoa com câmera orbital, colisão por retângulos e
   chão analítico (sem corpos físicos estáticos).
 - Controles de toque: joystick na esquerda, arrasto para olhar na direita,
