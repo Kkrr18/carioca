@@ -299,7 +299,11 @@ func _touch(index: int, pos: Vector2, pressed: bool) -> void:
 		_stick_origin = pos
 		stick_vec = Vector2.ZERO
 		queue_redraw()
-	elif _look_index == NONE:
+	elif pos.x >= vs.x * 0.5 and _look_index == NONE:
+		# A camera e so na metade direita. Um segundo toque na metade esquerda
+		# (regrip do polegar no joystick, palma encostando na tela) nunca vira
+		# olhar — era o que fazia a camera girar sozinha ao usar o analogico e
+		# a camera ao mesmo tempo. Dedos alem de joystick + olhar sao ignorados.
 		_look_index = index
 
 
