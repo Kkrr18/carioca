@@ -348,16 +348,34 @@ func _draw() -> void:
 	var vs := get_viewport_rect().size
 	var hint := Vector2(110.0 * _ui, vs.y - 120.0 * _ui)
 	if _stick_index != NONE:
-		draw_circle(_stick_origin, _stick_max + 8.0 * _ui, Color(1, 1, 1, 0.07))
-		draw_arc(_stick_origin, _stick_max, 0.0, TAU, 40, Color(1, 1, 1, 0.35), 2.0 * _ui)
-		draw_circle(_stick_origin + stick_vec * _stick_max, 28.0 * _ui, Color(1, 1, 1, 0.42))
+		# Base do stick: disco + dois aneis, legivel contra qualquer piso.
+		draw_circle(_stick_origin, _stick_max + 10.0 * _ui, Color(0, 0, 0, 0.22))
+		draw_circle(_stick_origin, _stick_max, Color(1, 1, 1, 0.08))
+		draw_arc(_stick_origin, _stick_max, 0.0, TAU, 40, Color(1, 1, 1, 0.40), 2.0 * _ui)
+		draw_arc(_stick_origin, _stick_max * 0.55, 0.0, TAU, 28, Color(1, 1, 1, 0.16), 2.0 * _ui)
+		# Bola: sombra + vidro + filete + centro — o toque fica legivel.
+		var knob := _stick_origin + stick_vec * _stick_max
+		draw_circle(knob, 30.0 * _ui, Color(0, 0, 0, 0.25))
+		draw_circle(knob, 27.0 * _ui, Color(1, 1, 1, 0.42))
+		draw_arc(knob, 27.0 * _ui, 0.0, TAU, 32, Color(1, 1, 1, 0.65), 2.0 * _ui)
+		draw_circle(knob, 10.0 * _ui, Color(1, 1, 1, 0.50))
 	else:
-		draw_circle(hint, 62.0 * _ui, Color(1, 1, 1, 0.05))
-		draw_circle(hint, 26.0 * _ui, Color(1, 1, 1, 0.12))
+		# Base sempre visivel, com um convite que respira devagar.
+		var t := float(Time.get_ticks_msec()) / 1000.0
+		var breathe := 0.05 + 0.03 * (0.5 + 0.5 * sin(t * 1.8))
+		draw_circle(hint, 64.0 * _ui, Color(0, 0, 0, 0.18))
+		draw_arc(hint, 60.0 * _ui, 0.0, TAU, 40, Color(1, 1, 1, breathe + 0.12), 2.0 * _ui)
+		draw_circle(hint, 22.0 * _ui, Color(1, 1, 1, breathe + 0.08))
 
 	if car_available:
+		var car_col := Color(1.0, 0.78, 0.20, 0.60)
+		if not car_occupied:
+			# O ENTRAR respira: e o unico convite do mundo que muda de lugar,
+			# e o olho precisa ser puxado para ele sem piscar na cara.
+			var t := float(Time.get_ticks_msec()) / 1000.0
+			car_col.a = 0.45 + 0.25 * (0.5 + 0.5 * sin(t * 3.0))
 		_draw_button(_car_pos, "SAIR" if car_occupied else "ENTRAR",
-			Color(1.0, 0.78, 0.20, 0.60), car_press_s)
+			car_col, car_press_s)
 
 	if _driving:
 		_draw_button(_jump_pos, "ACEL", Color(0.30, 0.72, 0.40, 0.55), pedal_gas_s)
@@ -371,13 +389,29 @@ func _draw() -> void:
 
 
 func _draw_button(center: Vector2, label: String, col: Color, active: bool) -> void:
-	var c := col
-	c.a = col.a + (0.25 if active else 0.0)
-	draw_circle(center, _radius, c)
-	draw_arc(center, _radius, 0.0, TAU, 32, Color(1, 1, 1, 0.55), 2.0 * _ui)
+	var r := _radius
+	# Halo escuro: o botao le contra ceu claro e contra o asfalto.
+	draw_circle(center, r * 1.12, Color(0, 0, 0, 0.30))
+	# Disco: pressionado ele acende.
+	var fill := col
+	if active:
+		fill = Color(minf(1.0, col.r * 1.30), minf(1.0, col.g * 1.30), minf(1.0, col.b * 1.30),
+				minf(1.0, col.a + 0.20))
+	else:
+		fill.a = col.a * 0.82
+	draw_circle(center, r, fill)
+	# Vidro no topo (meia-lua clara dentro do disco): le como relevo, sem custo.
+	draw_circle(center + Vector2(0.0, -r * 0.26), r * 0.58, Color(1, 1, 1, 0.15))
+	# Anel: mais claro e apertado no toque (a sensacao de afundar).
+	draw_arc(center, r * (0.93 if active else 1.0), 0.0, TAU, 40,
+		Color(1, 1, 1, 0.75 if active else 0.45), maxf(2.0, 2.2 * _ui))
 	if _font == null:
 		return
 	var size := int(13.0 * _ui)
 	var w := _font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, size).x
-	draw_string(_font, center + Vector2(-w * 0.5, 5.0 * _ui), label,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(1, 1, 1, 0.95))
+	var tp := center + Vector2(-w * 0.5, 5.0 * _ui)
+	# Sombra do texto: o fallback de fonte nao tem outline de tema, entao a
+	# sombra vai desenhada por baixo — o rotulo le contra qualquer fundo.
+	draw_string(_font, tp + Vector2(0.0, 1.5 * _ui), label,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(0, 0, 0, 0.65))
+	draw_string(_font, tp, label, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(1, 1, 1, 0.97))
