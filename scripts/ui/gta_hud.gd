@@ -164,6 +164,38 @@ func _label(sz: float, col: Color, align: int) -> Label:
 	return l
 
 
+## Poligono fechado de um retangulo com cantos arredondados (arcos de circulo),
+## no sentido horario — paineis, barras e botoes do HUD.
+static func rounded_points(r: Rect2, radius: float, segments: int = 6) -> PackedVector2Array:
+	var rad := clampf(radius, 0.0, minf(r.size.x, r.size.y) * 0.5)
+	var pts := PackedVector2Array()
+	if rad <= 0.01:
+		pts.append(r.position)
+		pts.append(r.position + Vector2(r.size.x, 0.0))
+		pts.append(r.position + r.size)
+		pts.append(r.position + Vector2(0.0, r.size.y))
+		return pts
+	var centers := [
+		r.position + Vector2(r.size.x - rad, rad),
+		r.position + Vector2(r.size.x - rad, r.size.y - rad),
+		r.position + Vector2(rad, r.size.y - rad),
+		r.position + Vector2(rad, rad),
+	]
+	var starts := [-PI * 0.5, 0.0, PI * 0.5, PI]
+	for i in 4:
+		for s in segments + 1:
+			var a := starts[i] + PI * 0.5 * float(s) / float(segments)
+			pts.append(centers[i] + Vector2(cos(a), sin(a)) * rad)
+	return pts
+
+
+## Painel translucido arredondado: fundo escuro + filete claro.
+func _panel(r: Rect2, radius: float) -> void:
+	var pts := rounded_points(r, radius)
+	draw_colored_polygon(pts, PANEL)
+	draw_polyline(_closed(pts), Color(1, 1, 1, 0.14), maxf(1.0, 1.0 * _ui))
+
+
 # --- Textos puros (testados no CI) -------------------------------------------
 
 ## Dinheiro no formato brasileiro: 1500 -> "1.500".
@@ -280,6 +312,22 @@ func _refresh_texts() -> void:
 
 func _draw() -> void:
 	var sz := size
+	# Painéis translucidos atras dos textos. O desenho deste Control fica ATRAS
+	# dos Labels filhos — os paineis aparecem atras do dinheiro, do local, da
+	# arma, do objetivo e da legenda por construcao.
+	if _robjective != null and not _robjective.text.is_empty():
+		_panel(Rect2(Vector2(sz.x * 0.5 - 478.0 * _ui, 10.0 * _ui),
+				Vector2(956.0 * _ui, 76.0 * _ui)), 12.0 * _ui)
+	_panel(Rect2(Vector2(sz.x - 330.0 * _ui, 50.0 * _ui),
+			Vector2(318.0 * _ui, 56.0 * _ui)), 12.0 * _ui)
+	_panel(Rect2(Vector2(sz.x - 430.0 * _ui, sz.y - 258.0 * _ui),
+			Vector2(416.0 * _ui, 108.0 * _ui)), 12.0 * _ui)
+	if _sub_t > 0.0:
+		var sub := PANEL
+		sub.a = clampf(_sub_t, 0.0, 1.0) * 0.5
+		draw_colored_polygon(rounded_points(
+				Rect2(Vector2(sz.x * 0.5 - 540.0 * _ui, sz.y - 342.0 * _ui),
+						Vector2(1080.0 * _ui, 90.0 * _ui)), 12.0 * _ui), sub)
 	# Barras de vida e colete (canto superior esquerdo).
 	if player != null:
 		var w := 200.0 * _ui
@@ -298,11 +346,13 @@ func _draw() -> void:
 	for i in Wanted.MAX_STARS:
 		var c := Vector2(sz.x - (30.0 + float(Wanted.MAX_STARS - 1 - i) * 26.0) * _ui, 32.0 * _ui)
 		var pts := star_points(c, 11.0 * _ui, 4.6 * _ui)
+		# Halo escuro atras da estrela: ela le contra ceu claro e contra predio.
+		draw_colored_polygon(star_points(c, 14.5 * _ui, 6.1 * _ui), Color(0.02, 0.03, 0.05, 0.45))
 		if i < stars:
 			# A estrela mais recente pisca: e o aviso de que subiu de nivel.
 			var hot := (i == stars - 1) and fmod(_pulse, 0.8) < 0.45
 			draw_colored_polygon(pts, STAR_COL if not hot else Color(1, 0.55, 0.25))
-			draw_polyline(_closed(pts), Color(0.35, 0.24, 0.02, 0.9), maxf(1.0, 1.2 * _ui))
+			draw_polyline(_closed(pts), Color(0.45, 0.30, 0.02, 0.95), maxf(1.0, 1.2 * _ui))
 		else:
 			draw_colored_polygon(pts, STAR_OFF)
 	# Dano: pisca vermelho nas bordas da tela.
@@ -311,11 +361,11 @@ func _draw() -> void:
 	# Botao DEV (toque): abre e fecha a telemetria. Vive no rodape, longe dos
 	# controles de toque, e e lido por _input (Button do Godot nao funciona no
 	# iPhone — B-38).
-	var dev_w := 54.0 * _ui
-	var dev_h := 22.0 * _ui
+	var dev_w := 58.0 * _ui
+	var dev_h := 24.0 * _ui
 	_dev_rect = Rect2(Vector2(sz.x * 0.5 - dev_w * 0.5, sz.y - dev_h - 8.0 * _ui), Vector2(dev_w, dev_h))
-	draw_rect(_dev_rect, PANEL)
-	draw_rect(_dev_rect, Color(1, 1, 1, 0.18), false, maxf(1.0, 1.0 * _ui))
+	draw_colored_polygon(rounded_points(_dev_rect, 8.0 * _ui), Color(0.05, 0.05, 0.06, 0.60))
+	draw_polyline(_closed(rounded_points(_dev_rect, 8.0 * _ui)), Color(1, 1, 1, 0.22), maxf(1.0, 1.0 * _ui))
 	var f := ThemeDB.fallback_font
 	if f != null:
 		var fs := int(11.0 * _ui)
@@ -325,9 +375,23 @@ func _draw() -> void:
 
 
 func _bar(r: Rect2, fill: float, col: Color) -> void:
-	draw_rect(r, Color(0.04, 0.04, 0.05, 0.72))
-	draw_rect(Rect2(r.position, Vector2(r.size.x * clampf(fill, 0.0, 1.0), r.size.y)), col)
-	draw_rect(r, Color(1, 1, 1, 0.22), false, maxf(1.0, 1.0 * _ui))
+	var rad := r.size.y * 0.5
+	draw_colored_polygon(rounded_points(r, rad), Color(0.04, 0.04, 0.05, 0.78))
+	var w := r.size.x * clampf(fill, 0.0, 1.0)
+	if w > rad * 1.2:
+		var fr := Rect2(r.position, Vector2(w, r.size.y))
+		var low := Rect2(r.position + Vector2(0.0, r.size.y * 0.45),
+				Vector2(w, r.size.y * 0.55))
+		# Degrau de luz: fundo mais escuro embaixo e brilho no topo — a barra
+		# le como vidro, nao como retangulo chapado.
+		draw_colored_polygon(rounded_points(fr, rad), col)
+		draw_colored_polygon(rounded_points(low, rad * 0.6),
+				Color(col.r * 0.72, col.g * 0.72, col.b * 0.72, col.a))
+		var shine := Rect2(r.position + Vector2(rad * 0.3, rad * 0.28),
+				Vector2(maxf(0.0, w - rad * 0.6), r.size.y * 0.30))
+		if shine.size.x > 1.0:
+			draw_colored_polygon(rounded_points(shine, rad * 0.4), Color(1, 1, 1, 0.20))
+	draw_polyline(_closed(rounded_points(r, rad)), Color(1, 1, 1, 0.24), maxf(1.0, 1.0 * _ui))
 
 
 static func _closed(pts: PackedVector2Array) -> PackedVector2Array:

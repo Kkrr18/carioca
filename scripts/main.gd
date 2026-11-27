@@ -323,8 +323,8 @@ func _build_environment() -> void:
 	# motor" das fachadas e da areia. E o mesmo passe de tonemap, sem custo de
 	# geometria.
 	environment.adjustment_enabled = true
-	environment.adjustment_contrast = 1.06
-	environment.adjustment_saturation = 1.10
+	environment.adjustment_contrast = 1.08
+	environment.adjustment_saturation = 1.14
 	environment.adjustment_brightness = 1.0
 	environment.glow_enabled = true
 	environment.glow_intensity = 0.18

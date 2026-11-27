@@ -96,10 +96,12 @@ fora do espectre definido:
 - **AO por vertice** (`PropMesh.ao_shade`): a base de todo prop escurece perto
   do chao. E o unico "SSAO" que o Compatibility tem de graca — AO de tela nao
   existe neste renderer, entao o peso do objeto no chao vem da cor do vertice.
-- **Normais de grao em codigo** (`sector_streamer._grain_normal_texture`):
-  senoides com frequencia inteira (repetem sem emenda) viradas em normal map
-  para asfalto, calcada, areia e calcadao. Normal map fotografado e bem-vindo;
-  `ShaderMaterial` custom no caminho critico continua proibido (B-25).
+- **Normais de grao em codigo — SAÍRAM** (era `sector_streamer._grain_normal_texture`):
+  o mapa de grao do B-81 dava relevo ao piso, mas no aparelho era a granulacao
+  que o autor viu sobre asfalto, calcada e areia, e foi removido. O piso fica
+  com o relevo da propria textura; o mar mantem o normal map de ondas. Se um dia
+  entrar normal map fotografado, ele e bem-vindo; `ShaderMaterial` custom no
+  caminho critico continua proibido (B-25).
 - **Varanda e embasamento** fazem parte da silhueta, nao do enfeite: a laje com
   guarda-corpo na face da rua e a faixa de pedra no pe do predio sao o que
   separa um predio de Ipanema de uma caixa de janelas. Entram no buffer de cor

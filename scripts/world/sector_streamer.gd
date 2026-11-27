@@ -72,19 +72,19 @@ func _ready() -> void:
 	_win_mat.emission_energy_multiplier = 0.0
 	# Superficies texturadas do chao (asfalto, calcada, areia). UV em escala de
 	# mundo ja vem pronto do city_gen; aqui so entra a textura e o material.
-	# B-81: um unico mapa de normais de grao gerado em codigo da RELEVO a todas
-	# as superficies (asfalto, pedra e areia deixam de ser chapas lisas), com
-	# escala propria por piso. Sem shader custom e sem textura extra no build.
-	var grain := _grain_normal_texture(128)
-	_mat_road = _tex_material(TEX_ROAD, Color(0.21, 0.22, 0.24), grain, 0.55)
-	_mat_walk = _tex_material(TEX_WALK, Color(0.63, 0.62, 0.59), grain, 0.42)
-	_mat_sand = _tex_material(TEX_SAND, Color(0.86, 0.79, 0.64), grain, 0.50)
+	# O mapa de normais de grao do B-81 saiu: no aparelho ele era justamente a
+	# granulacao que o autor viu sobre asfalto, calcada e areia. O piso volta a
+	# ser limpo; o relevo que fica e o da propria textura, e o mar segue com
+	# ondas de verdade no seu normal map proprio.
+	_mat_road = _tex_material(TEX_ROAD, Color(0.21, 0.22, 0.24))
+	_mat_walk = _tex_material(TEX_WALK, Color(0.63, 0.62, 0.59))
+	_mat_sand = _tex_material(TEX_SAND, Color(0.86, 0.79, 0.64))
 	# Calcadao: pedra portuguesa de verdade (textura CC0 do OpenGameArt). O
 	# padrao de ondas gerado antes ficou ruim na tela e foi trocado por pedra.
-	_mat_caladao = _tex_material(TEX_CALCADA, Color(0.72, 0.70, 0.66), grain, 0.38)
+	_mat_caladao = _tex_material(TEX_CALCADA, Color(0.72, 0.70, 0.66))
 	# Areia molhada (B-80): a mesma textura de areia, escurecida e com brilho de
 	# agua — a faixa que o mar lava separa a praia do mar na tela.
-	_mat_wet = _tex_material(TEX_SAND, Color(0.56, 0.54, 0.48), grain, 0.26)
+	_mat_wet = _tex_material(TEX_SAND, Color(0.56, 0.54, 0.48), null, 0.0)
 	_mat_wet.albedo_color = Color(0.70, 0.70, 0.74)
 	_mat_wet.roughness = 0.42
 	_mat_wet.metallic_specular = 0.55
@@ -115,8 +115,8 @@ func _ready() -> void:
 
 
 ## Material de superficie texturada. Sem a textura, cai na cor de reserva.
-## `grain` e o mapa de normais de grao (B-81): quando existe, ele da relevo ao
-## piso com `grain_scale` de intensidade (asfalto mais forte, areia mais suave).
+## `grain` (opcional) da relevo por normal map — hoje nenhuma superficie de
+## piso usa: o mapa de grao do B-81 era a granulacao que o autor viu.
 func _tex_material(path: String, fallback: Color, grain: Texture2D = null,
 		grain_scale: float = 0.45) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
@@ -135,38 +135,6 @@ func _tex_material(path: String, fallback: Color, grain: Texture2D = null,
 			m.albedo_color = Color.WHITE
 			m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	return m
-
-
-## Mapa de normais de GRAO, gerado em codigo: soma de senoides com frequencias
-## inteiras (repete sem emenda) virada em normal. Da relevo a asfalto, calcada,
-## areia e calçadao sem normal map fotografado e sem ShaderMaterial — a regra
-## do B-25 (shader custom congelou o WebGL no Safari) continua valendo.
-static func _grain_normal_texture(size: int) -> ImageTexture:
-	var heights := PackedFloat32Array()
-	heights.resize(size * size)
-	for y in size:
-		for x in size:
-			var u := float(x) / float(size)
-			var v := float(y) / float(size)
-			var hh := sin((u * 7.0 + v * 4.0) * TAU) * 0.50
-			hh += sin((u * 13.0 - v * 11.0) * TAU) * 0.28
-			hh += sin((u * 23.0 + v * 19.0) * TAU) * 0.14
-			heights[y * size + x] = hh
-	var img := Image.create(size, size, true, Image.FORMAT_RGBA8)
-	var strength := 1.7
-	for y in size:
-		for x in size:
-			var hl := heights[y * size + posmod(x - 1, size)]
-			var hr := heights[y * size + posmod(x + 1, size)]
-			var hd := heights[posmod(y - 1, size) * size + x]
-			var hu := heights[posmod(y + 1, size) * size + x]
-			var nx := (hl - hr) * strength
-			var ny := (hd - hu) * strength
-			var inv := 1.0 / sqrt(nx * nx + ny * ny + 1.0)
-			img.set_pixel(x, y, Color(nx * inv * 0.5 + 0.5, ny * inv * 0.5 + 0.5,
-					inv * 0.5 + 0.5, 1.0))
-	img.generate_mipmaps()
-	return ImageTexture.create_from_image(img)
 
 
 ## Fachada em coordenadas de textura: devolve Vector2(tom da parede, brilho da
