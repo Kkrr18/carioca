@@ -136,8 +136,12 @@ func _build_avatar() -> void:
 	# Fila de avatares: primeiro o modelo do autor (PROTAGONISTA.fbx), depois o
 	# corpo CC0 que sempre traz as animacoes, e no fim o boneco de caixas — o
 	# jogo nunca fica sem personagem.
-	if not _build_model_avatar(PROTAGONISTA_PATH):
-		if not _build_model_avatar(AVATAR_PATH):
+	# A frente de cada modelo define a rotacao do filho: o avatar olha para +Z
+	# (nariz em +Z, convencao do boneco antigo). O corpo CC0 olha para -Z no
+	# arquivo e entra com PI; o .fbx do autor veio olhando para +Z e entra com 0
+	# — com PI ele andava de costas (moonwalk, visto no playtest).
+	if not _build_model_avatar(PROTAGONISTA_PATH, 0.0):
+		if not _build_model_avatar(AVATAR_PATH, PI):
 			_build_block_avatar()
 	_build_contact_shadow()
 
@@ -145,16 +149,13 @@ func _build_avatar() -> void:
 ## Avatar de MODELO (B-63). Devolve false se o arquivo nao carregar ou nao der
 ## para usar, e ai o jogador passa para o modelo seguinte da fila (e, no fim,
 ## para o boneco de caixas): o jogo nunca fica sem personagem.
-func _build_model_avatar(path: String) -> bool:
+func _build_model_avatar(path: String, model_yaw: float) -> bool:
 	var scene := Pedestrians.load_scene(path)
 	if scene == null:
 		return false
-	# O avatar gira em Y pelo codigo de movimento (atan2(hv.x, hv.y)) e o modelo
-	# olha para -Z: um filho com PI deixa a frente no +Z do avatar, que e o que o
-	# resto do codigo ja esperava do boneco antigo (nariz em +Z). Sem esse PI o
-	# protagonista anda de costas (o mesmo erro que a B-62 corrigiu nos pedestres).
+	# A rotacao do filho e a FRENTE do modelo (comentario em _build_avatar).
 	var holder := Node3D.new()
-	holder.rotation.y = PI
+	holder.rotation.y = model_yaw
 	avatar.add_child(holder)
 	_model_holder = holder
 	var inst: Node3D = scene.instantiate()
