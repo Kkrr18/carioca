@@ -108,6 +108,13 @@ var contact_shadow: MeshInstance3D
 var _using_model := false
 var _ap: AnimationPlayer
 var _model_holder: Node3D
+## A frente do modelo ligado (o filho que o balanco de idle mexe). O corpo CC0
+## olha para -Z no arquivo e entra com PI; o .fbx do autor olha para +Z e entra
+## com 0 — forcar PI aqui era o que fazia o protagonista voltar a andar de
+## costas sempre que ele parava: o balanco de idle re-grudava o PI no holder.
+var _model_yaw := PI
+## Nome do arquivo do avatar ligado, para a telemetria DEV.
+var _avatar_source := ""
 var _head: Node3D             # cabeca 3D (B-77); null se o modelo nao carregar
 var _head_tris := 0           # custo da cabeca na telemetria
 var _idle_static := false      # clipe de parado sem movimento (pose parada)
@@ -156,6 +163,7 @@ func _build_model_avatar(path: String, model_yaw: float) -> bool:
 	# A rotacao do filho e a FRENTE do modelo (comentario em _build_avatar).
 	var holder := Node3D.new()
 	holder.rotation.y = model_yaw
+	_model_yaw = model_yaw
 	avatar.add_child(holder)
 	_model_holder = holder
 	var inst: Node3D = scene.instantiate()
@@ -232,6 +240,7 @@ func _build_model_avatar(path: String, model_yaw: float) -> bool:
 	# PROTAGONISTA.fbx traz o rosto dele — uma cabeca por cima seria a segunda.
 	if path == AVATAR_PATH:
 		_build_head()
+	_avatar_source = path.get_file()
 	return true
 
 
@@ -620,14 +629,14 @@ func _idle_sway(delta: float) -> void:
 		return
 	_sway += delta
 	var amp := 0.030 if _idle_static else 0.016
-	_model_holder.rotation.y = PI + sin(_sway * 1.1) * amp
+	_model_holder.rotation.y = _model_yaw + sin(_sway * 1.1) * amp
 	_model_holder.position.y = sin(_sway * 2.0) * 0.010
 
 
 func _idle_hold() -> void:
 	if _model_holder == null:
 		return
-	_model_holder.rotation.y = PI
+	_model_holder.rotation.y = _model_yaw
 	_model_holder.position.y = 0.0
 
 
@@ -639,9 +648,10 @@ func describe() -> String:
 	var playing := "parada"
 	if _ap != null and _ap.is_playing():
 		playing = "tocando"
-	return "avatar: modelo 1,80 m (%s; idle=%s walk=%s run=%s jump=%s; parado=%s; cabeca=%s %d tris)" % [
-		playing, _idle_anim, _walk_anim, _run_anim, _jump_anim,
+	return "avatar: %s 1,80 m (%s; idle=%s walk=%s run=%s jump=%s; parado=%s; frente=%.0f°; cabeca=%s %d tris)" % [
+		_avatar_source, playing, _idle_anim, _walk_anim, _run_anim, _jump_anim,
 		"estatico+balanco" if _idle_static else "animado",
+		rad_to_deg(_model_yaw),
 		"sim" if _head != null else "nao", _head_tris]
 
 
