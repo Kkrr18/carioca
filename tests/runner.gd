@@ -94,6 +94,7 @@ func _initialize() -> void:
 	_test_gta_hud_pure()
 	_test_player_combat()
 	_test_player_model()
+	_test_protagonista_fbx()
 	_test_head_model()
 	_test_shops()
 	_test_windows()
@@ -1762,6 +1763,41 @@ func _test_pedestrian_life() -> void:
 	check(absf(Pedestrians.fall_pitch(Pedestrians.DOWN_TIME - 0.5) + PI * 0.5) < 0.01,
 		"queda termina deitado (-90 graus)")
 	check(absf(Pedestrians.fall_pitch(0.0) + PI * 0.5) < 0.01, "continua deitado ate levantar")
+
+
+func _test_protagonista_fbx() -> void:
+	# O modelo do autor (PROTAGONISTA.fbx) entra primeiro no jogador. O CI abre
+	# o arquivo e RELATA o que ha dentro — esqueleto, clipes de animacao e
+	# movimento — porque binario ninguem le de fora. Sem animacao de andar nele,
+	# o jogo cai para o corpo CC0; este bloco e o raio-x que mostra o por que.
+	var scene := Pedestrians.load_scene(Player.PROTAGONISTA_PATH)
+	check(scene != null, "PROTAGONISTA.fbx carrega")
+	if scene == null:
+		return
+	var inst: Node3D = scene.instantiate()
+	var sk := Pedestrians._find_skel(inst)
+	var tris := ModelProp.count_tris(inst)
+	var box := ModelProp.mesh_aabb(inst)
+	var ap := Pedestrians._find_anim(inst)
+	print("  info: PROTAGONISTA.fbx: %d tris, %.2f m de bind pose, rig %s, %s" % [
+		tris, box.size.y, "sim" if sk != null else "NAO",
+		"com AnimationPlayer" if ap != null else "SEM AnimationPlayer"])
+	var clips := {}
+	if ap != null:
+		for nm in ap.get_animation_list():
+			var a := ap.get_animation(String(nm))
+			if a != null:
+				clips[String(nm)] = a
+	print("  info: PROTAGONISTA.fbx: %d clipes" % clips.size())
+	for nm in clips.keys():
+		print("  info:   clipe '%s': movimento %.3f" % [nm, Pedestrians.clip_motion(clips[nm])])
+	if not clips.is_empty():
+		print("  info: PROTAGONISTA.fbx papeis: { 'andar': '%s', 'parado': '%s', 'correr': '%s', 'pulo': '%s' }" % [
+			Pedestrians.pick_clip(clips, "walk"),
+			Pedestrians.pick_clip(clips, "idle"),
+			Pedestrians.pick_clip(clips, "run"),
+			Pedestrians.pick_clip(clips, "jump")])
+	inst.free()
 
 
 func _test_player_model() -> void:
