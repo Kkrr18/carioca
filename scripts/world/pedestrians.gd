@@ -1393,7 +1393,8 @@ func _acts_text() -> String:
 			parts.append(String(k))
 		parts.sort()
 		return " + atividades: " + " ".join(parts)
-	return " + atividades: nenhuma (rig nao reconhecido)"
+	# Sem atividade: a nota diz POR QUE (sem player, sem esqueleto, sem caminho).
+	return " + " + act_note
 
 
 ## Quais animacoes estao de fato em uso (as que faltaram aparecem com "-").
