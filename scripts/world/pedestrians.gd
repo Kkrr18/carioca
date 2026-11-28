@@ -879,7 +879,10 @@ func _build_models() -> void:
 				for cname in _clips.keys():
 					var a := retarget(_clips[cname], skel_path, bones)
 					if a.get_track_count() > 0:
-						ap.add_animation(StringName(cname), a)
+						# Godot 4: o clipe entra na BIBLIOTECA do player (o
+						# `add_animation(nome, clipe)` do Godot 3 nao existe mais
+						# e abortava esta montagem em silencio — B-82).
+						BoneAnim.add_clip(ap, String(cname), a)
 		var k := 1.0
 		if not box.has_volume():
 			box = AABB(Vector3(-0.3, 0.0, -0.3), Vector3(0.6, 1.8, 0.6))

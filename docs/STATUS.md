@@ -19,6 +19,7 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
 | Geracao de setor (predios, ruas, orla, props) | Escrito | scripts/world/city_gen.gd |
 | Streaming por setores (threads) | Escrito | scripts/world/sector_streamer.gd |
 | Props com malha própria (B-80/B-81) | Escrito | scripts/world/prop_mesh.gd, scripts/world/prop_factory.gd |
+| Animações de atividade de NPC e protagonista (B-82) | Escrito, verificado no CI | scripts/world/bone_anim.gd |
 | Personagem em terceira pessoa + colisao simples | Escrito | scripts/player/player.gd |
 | Controles por toque | Escrito | scripts/ui/touch_controls.gd |
 | HUD e telemetria | Escrito | scripts/ui/hud.gd, scripts/core/perf_log.gd |
@@ -1176,6 +1177,67 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
   `rendering/limits/opengl/max_renderable_elements` no project.godot
   (131072 hoje): e o teto de elementos por quadro do renderer Compatibility.
 
+- B-82: ANIMACOES DE ATIVIDADE (NPC e protagonista). Pedido: "agora quero
+  animacoes para as atividades dos npcs e do personagem".
+  O PROBLEMA: os arquivos do repositorio trazem SO parado/andar/correr. Nao
+  existe clipe de celular, conversa, olhar o mar, balcao, sentar, soco, mira nem
+  pulo (o PROTAGONISTA.fbx tem Idle/Walk/Run). Na tela isso aparecia como NPC
+  parado numa pose fixa e um soco que nao existia — bater de punho nao mudava o
+  corpo do protagonista. Baixar mais um pacote nao resolve: os packs vem em .zip,
+  que nao abre no iPhone (B-21).
+  O QUE ENTROU (`scripts/world/bone_anim.gd`, 1 arquivo novo):
+  1. Reconhecimento do PAPEL do osso pelo nome (coxa, canela, antebraco, cabeca,
+     tronco...), cobrindo o rig Quaternius ("UpperArm.L") e o Mixamo
+     ("mixamorig:LeftArm"). Osso sem papel fica no repouso.
+  2. A rotacao autoral e dada no ESPACO DO ESQUELETO (X = direita -> membro vai
+     para a frente, Y = cima -> torce o tronco, Z -> levanta o braco para o
+     lado) e convertida para a pose local por `pose = Bp^-1 * r * Bb`, com Bp e
+     Bb medidos no repouso. A formula sai da composicao do proprio Godot 4.4
+     (`global_pose = global_pose(pai) * pose`, conferida em
+     scene/3d/skeleton_3d.cpp e skeleton_3d.h: a pose de cada osso e o proprio
+     repouso ate alguem animar). Com r = identidade ela devolve o rest do osso —
+     e essa igualdade que o CI prova.
+  3. O "braco caido" e MEDIDO: a direcao de repouso do braco vem da posicao do
+     osso filho, e a correcao e o arco dessa direcao para baixo. Rig em T-pose ou
+     em A-pose cai igual, sem numero magico.
+  4. Atividades dos NPCs: celular (cabeca baixa, antebraco dobrado), conversa
+     (gestos e tronco girando), olhar o mar (mao na testa), trabalhar no balcao,
+     esperar o sinal (olha os lados e bate o pe), SENTAR na areia (coxa 95°,
+     canela -100°, corpo desce 0,50 m) e acenar. Quem escolhe e `activity_for()`
+     (puro): areia senta/olha o mar, calcada celular/conversa/espera; balconista
+     trabalha; quem espera atravessar entra no clipe de espera.
+  5. Acoes do protagonista: soco, mira de pistola (as duas maos), pulo no ar e
+     dano. O soco/mira entram em `consume_fire()` e o dano em `add_damage()`, com
+     mistura de 0,12 s (corte seco de pose aparece na tela).
+  6. O personagem que olha para +Z (o .fbx do autor, B-62) tem a pose autoral
+     girada 180° em Y — senao o soco dele sairia para tras.
+  CUSTO: os clipes sao montados UMA vez por corpo (cache em `pedestrians.gd`) e
+  compartilhados; os ossos que a atividade nao usa entram presos no repouso (o
+  AnimationPlayer nao zera o que o clipe nao anima, senao sobrava pedaco do passo
+  grudado no corpo). Chaves de posicao so nas duas pontas.
+  CI: `_test_bone_activities` prova o reconhecimento nos dois rigs, a formula
+  (giro zero = repouso), o braco apontando para baixo, o ciclo fechado, o clipe
+  montado nos 8 corpos e as acoes no PROTAGONISTA.fbx.
+  NAO VALIDADO NO APARELHO: o angulo exato de cada gesto (95° de coxa ao sentar,
+  0,50 m de descida) e calibragem de olho — se o NPC sentar no ar ou afundar na
+  areia, o botao e `SIT_DROP` e os angulos em `BoneAnim.pose()`. O log do CI diz
+  quantos papeis cada corpo reconheceu (`info: papeis reconhecidos ...`): se um
+  corpo aparecer com poucos, e o classificador de nome de osso que precisa de
+  mais um sinonimo.
+  DOIS ERROS QUE O CI PEGOU (e a licao de cada um):
+  1. `AnimationPlayer.add_animation(nome, clipe)` NAO EXISTE no Godot 4 — o
+     clipe entra numa biblioteca (`add_animation_library("" , lib)` +
+     `lib.add_animation`). A chamada antiga abortava a montagem EM SILENCIO: os
+     12 pedestres ficavam sem atividade e, pior, o `_build_model_avatar` do
+     protagonista abortava no meio e devolvia `null`, o que fazia o jogo cair
+     para o corpo CC0 (o modelo do autor "desaparecia"). Agora ha um
+     `BoneAnim.add_clip()` usado pelos tres caminhos (atividade do NPC, atividade
+     do jogador e o retarget antigo, que tinha o mesmo defeito desde antes).
+  2. O medidor do teste (`_anim_span`) comparava cada chave com a MAIOR
+     semelhanca entre as chaves — que e sempre 1.0, porque toda chave e igual a
+     si mesma — e por isso acusava "0,00 rad" em clipe que mexia. O certo e a
+     MENOR semelhanca (|dot|). O clipe estava bom desde a primeira versao.
+
 ## Proximas tarefas (Fase 1 -> Fase 2)1. Refazer o poligono a partir de dados OSM validados e rodar o CI ate verde (B-14, B-16).
 2. Medir FPS no iPhone jogando uma sessao real (B-09): o botao PERF grava CSV.
 3. Pedir ao usuario que toque em SALVAR e CARREGAR no jogo e confirme que o save volta (valida o B-08 no aparelho).
@@ -1236,3 +1298,12 @@ primeiro teste real acontece no GitHub Actions (.github/workflows/tests.yml).
     posicao no `city_gen`, nao de malha); (d) se o mar tem ondulacao visivel de
     perto e nao vira granulado no horizonte. Se o FPS cair, `PROP_RANGE` de 480
     para 300 em `sector_streamer.gd` corta metade dos setores com props.
+16. B-82: olhar os NPCs parados na calcada e na areia e o protagonista batendo
+    de punho. O que conferir: (a) tem gente SENTADA na areia (joelhos dobrados) e
+    gente com a mao na testa olhando o mar; (b) quem espera o sinal bate o pe e
+    olha os lados; (c) o balconista se mexe atras do balcao; (d) o soco aparece
+    (o braco estica para a frente, nao para tras) e o dano sacode o corpo. Se o
+    corpo afundar ou flutuar ao sentar, `SIT_DROP` em `pedestrians.gd`; se um
+    gesto estiver exagerado ou torto, os angulos em `BoneAnim.pose()`. A
+    telemetria (`describe()`) diz "atividades: N clipes em '<caminho>'" quando
+    entrou e o motivo quando nao entrou.
