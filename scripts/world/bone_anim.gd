@@ -395,6 +395,28 @@ static func build(kind: String, sk: Skeleton3D, skel_path: String,
 	return out
 
 
+## Instala um clipe num AnimationPlayer. Godot 4 tirou o `add_animation(nome,
+## clipe)` do Godot 3: a animacao entra numa BIBLIOTECA, e a biblioteca padrao
+## chama-se "" (StringName vazio). Chamar o metodo antigo aborta a funcao em
+## tempo de execucao — foi o que deixava os pedestres sem atividade e devolvia o
+## protagonista para o corpo de reserva, sem nenhuma mensagem no Safari.
+## Devolve true se o clipe ficou disponivel no player.
+static func add_clip(ap: AnimationPlayer, name: String, anim: Animation) -> bool:
+	if ap == null or anim == null or name == "":
+		return false
+	var nm := StringName(name)
+	if ap.has_animation(nm):
+		return true
+	var lib_name := StringName("")
+	var lib := ap.get_animation_library(lib_name)
+	if lib == null:
+		lib = AnimationLibrary.new()
+		if ap.add_animation_library(lib_name, lib) != OK:
+			return false
+	lib.add_animation(nm, anim)
+	return ap.has_animation(nm)
+
+
 ## Quantos ossos deste esqueleto tem papel (telemetria e testes).
 static func covered(sk: Skeleton3D) -> int:
 	return (rig(sk)["bone"] as Dictionary).size()

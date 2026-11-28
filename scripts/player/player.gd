@@ -267,9 +267,8 @@ func _build_model_avatar(path: String, model_yaw: float) -> bool:
 				if a == null or a.get_track_count() == 0:
 					continue
 				var nm := "act_" + String(kind)
-				if not _ap.has_animation(StringName(nm)):
-					_ap.add_animation(StringName(nm), a)
-				_act[String(kind)] = nm
+				if BoneAnim.add_clip(_ap, nm, a):
+					_act[String(kind)] = nm
 	# Cabeca 3D (B-77): so para o corpo CC0, que vem de cabeca lisa. O
 	# PROTAGONISTA.fbx traz o rosto dele — uma cabeca por cima seria a segunda.
 	if path == AVATAR_PATH:

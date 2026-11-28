@@ -147,8 +147,11 @@ func known(cond: bool, what: String) -> void:
 ## primeira chave de uma trilha de rotacao e qualquer outra. `clip_motion` olha
 ## so o meio e o fim, e as atividades respiram em seno (a volta passa pelo zero):
 ## com ele, o clipe do celular mediria zero.
+## Cuidado que ja custou um CI vermelho: a chave tem de ser comparada com as
+## OUTRAS, entao o que interessa e a MENOR semelhanca (|dot|), nao a maior — a
+## maior e sempre 1.0, porque toda chave e identica a si mesma.
 func _anim_span(anim: Animation) -> float:
-	var best := 0.0
+	var least := 1.0
 	if anim == null:
 		return 0.0
 	for ti in anim.get_track_count():
@@ -160,8 +163,8 @@ func _anim_span(anim: Animation) -> float:
 		var a: Quaternion = anim.track_get_key_value(ti, 0)
 		for k in n:
 			var b: Quaternion = anim.track_get_key_value(ti, k)
-			best = maxf(best, absf(a.dot(b)))
-	return 2.0 * acos(clampf(best, -1.0, 1.0))
+			least = minf(least, absf(a.dot(b)))
+	return 2.0 * acos(clampf(least, -1.0, 1.0))
 
 
 ## Quanto a POSE de uma atividade sai do repouso (o maior giro entre os ossos).
@@ -1955,7 +1958,10 @@ func _test_bone_activities() -> void:
 	peds.setup(4242, Vector3(1600.0, 1.2, 100.0))
 	var with_acts := 0
 	for d in peds._acts:
-		if not (d as Dictionary).is_empty():
+		if d == null:
+			continue
+		var acts: Dictionary = d
+		if not acts.is_empty():
 			with_acts += 1
 	check(with_acts > 0, "pessoas na rua receberam atividades (%d de %d; %s; papeis=%d)" % [
 		with_acts, peds._acts.size(), peds.act_note, BoneAnim.covered(sk0)])

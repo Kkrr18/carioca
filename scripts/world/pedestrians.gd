@@ -918,30 +918,33 @@ func _build_models() -> void:
 func _install_activities(ap: AnimationPlayer, sk: Skeleton3D, inst: Node3D,
 		body_path: String) -> Dictionary:
 	var out := {}
-	act_note = "atividades: 0 clipes"
+	act_note = "atividades: sem AnimationPlayer"
 	if ap == null:
-		act_note = "atividades: corpo sem AnimationPlayer"
 		return out
+	act_note = "atividades: sem esqueleto"
 	if sk == null:
-		act_note = "atividades: corpo sem esqueleto"
 		return out
+	act_note = "atividades: sem caminho para o esqueleto"
 	var skel_path := anim_skel_path(ap, inst)
 	if skel_path == "":
-		act_note = "atividades: sem caminho para o esqueleto"
 		return out
-	var key := body_path + "|" + skel_path + "|" + String(sk.get_concatenated_bone_names())
+	act_note = "atividades: caminho '%s'" % skel_path
+	var key := body_path + "|" + skel_path + "|" + str(sk.get_bone_count())
 	var clips: Dictionary = _act_cache.get(key, {})
 	if clips.is_empty():
 		for kind in BoneAnim.NPC_ACTIVITIES:
-			var a := BoneAnim.build(String(kind), sk, skel_path)
+			var a: Animation = BoneAnim.build(String(kind), sk, skel_path)
+			act_note = "atividades: montando '%s' (%s)" % [
+				kind, "nulo" if a == null else str(a.get_track_count())]
 			if a != null and a.get_track_count() > 0:
 				clips[String(kind)] = a
 		_act_cache[key] = clips
+	act_note = "atividades: %d clipes montados" % clips.size()
 	for kind in clips.keys():
 		var nm := "act_" + String(kind)
-		if not ap.has_animation(StringName(nm)):
-			ap.add_animation(StringName(nm), clips[kind])
-		out[String(kind)] = nm
+		act_note = "atividades: instalando '%s'" % nm
+		if BoneAnim.add_clip(ap, nm, clips[kind]):
+			out[String(kind)] = nm
 	act_note = "atividades: %d clipes em '%s'" % [out.size(), skel_path]
 	return out
 
