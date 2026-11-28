@@ -158,6 +158,9 @@ var _anims: Array = []          # AnimationPlayer de cada pedestre
 ## B-82: atividade de cada pessoa, como {papel: nome do clipe} — so as que o
 ## esqueleto daquele corpo aceitou (corpo sem osso reconhecido fica sem nenhuma).
 var _acts: Array = []
+## Por que as atividades entraram (ou nao) no corpo — vai para a telemetria e
+## para o log do CI. Sem isso, "ninguem faz nada" e um misterio no Safari.
+var act_note := "atividades: nao montadas"
 ## Cache por corpo dos clipes construidos: Animation e recurso, e o mesmo clipe
 ## serve para todas as pessoas que usam aquele corpo.
 var _act_cache: Dictionary = {}
@@ -915,10 +918,16 @@ func _build_models() -> void:
 func _install_activities(ap: AnimationPlayer, sk: Skeleton3D, inst: Node3D,
 		body_path: String) -> Dictionary:
 	var out := {}
-	if ap == null or sk == null:
+	act_note = "atividades: 0 clipes"
+	if ap == null:
+		act_note = "atividades: corpo sem AnimationPlayer"
+		return out
+	if sk == null:
+		act_note = "atividades: corpo sem esqueleto"
 		return out
 	var skel_path := anim_skel_path(ap, inst)
 	if skel_path == "":
+		act_note = "atividades: sem caminho para o esqueleto"
 		return out
 	var key := body_path + "|" + skel_path + "|" + String(sk.get_concatenated_bone_names())
 	var clips: Dictionary = _act_cache.get(key, {})
@@ -933,6 +942,7 @@ func _install_activities(ap: AnimationPlayer, sk: Skeleton3D, inst: Node3D,
 		if not ap.has_animation(StringName(nm)):
 			ap.add_animation(StringName(nm), clips[kind])
 		out[String(kind)] = nm
+	act_note = "atividades: %d clipes em '%s'" % [out.size(), skel_path]
 	return out
 
 

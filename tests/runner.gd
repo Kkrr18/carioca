@@ -1874,11 +1874,25 @@ func _test_bone_activities() -> void:
 	# O clipe montado de verdade: trilhas para o corpo todo e chaves ao longo do
 	# tempo. `_anim_span` olha TODAS as chaves (as atividades respiram em seno e
 	# a volta passa pelo zero, entao `clip_motion` daria zero no celular).
+	# A mensagem carrega os numeros do clipe: e por ela que o log do CI diz onde
+	# a montagem parou (trilha? chave? valor?).
 	for kind in BoneAnim.NPC_ACTIVITIES:
 		var a: Animation = BoneAnim.build(String(kind), sk0, "Skeleton3D")
+		var nt := 0
+		var kc := 0
+		var v0 := "?"
+		var v1 := "?"
+		if a != null:
+			nt = a.get_track_count()
+			if nt > 0:
+				kc = a.track_get_key_count(0)
+				if kc >= 2:
+					v0 = str(a.track_get_key_value(0, 0))
+					v1 = str(a.track_get_key_value(0, 1))
 		var span := _anim_span(a)
-		check(a != null and a.get_track_count() > 10 and span > 0.02,
-			"clipe '%s' montado do esqueleto (%.2f rad se mexendo)" % [kind, span])
+		check(a != null and nt > 10 and span > 0.02,
+			"clipe '%s': %s, %d trilhas, trilha0 com %d chaves, %.3f rad (%s -> %s), %d ossos" % [
+				kind, "NULO" if a == null else "montado", nt, kc, span, v0, v1, bones.size()])
 	# E a pose de cada atividade sai mesmo do repouso (senao o NPC "faria" o
 	# gesto com o corpo reto, que era o defeito).
 	var posed := 0
@@ -1943,8 +1957,8 @@ func _test_bone_activities() -> void:
 	for d in peds._acts:
 		if not (d as Dictionary).is_empty():
 			with_acts += 1
-	check(with_acts > 0, "pessoas na rua receberam atividades (%d de %d)" % [
-		with_acts, peds._acts.size()])
+	check(with_acts > 0, "pessoas na rua receberam atividades (%d de %d; %s; papeis=%d)" % [
+		with_acts, peds._acts.size(), peds.act_note, BoneAnim.covered(sk0)])
 	var has_phone := false
 	var has_sit := false
 	for d in peds._acts:
@@ -1953,7 +1967,7 @@ func _test_bone_activities() -> void:
 			has_phone = true
 		if acts.has("sit"):
 			has_sit = true
-	check(has_phone and has_sit, "clipes de celular e de sentar estao instalados")
+	check(has_phone and has_sit, "clipes de celular e de sentar instalados (%s)" % peds.act_note)
 	peds.free()
 	inst0.free()
 	# O protagonista: o .fbx do autor nao traz Jump nem soco — essas acoes sao
