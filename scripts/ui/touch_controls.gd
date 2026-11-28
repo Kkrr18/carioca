@@ -349,16 +349,16 @@ func _draw() -> void:
 	var hint := Vector2(110.0 * _ui, vs.y - 120.0 * _ui)
 	if _stick_index != NONE:
 		# Base do stick: disco + dois aneis, legivel contra qualquer piso.
-		draw_circle(_stick_origin, _stick_max + 10.0 * _ui, Color(0, 0, 0, 0.22))
-		draw_circle(_stick_origin, _stick_max, Color(1, 1, 1, 0.08))
-		draw_arc(_stick_origin, _stick_max, 0.0, TAU, 40, Color(1, 1, 1, 0.40), 2.0 * _ui)
-		draw_arc(_stick_origin, _stick_max * 0.55, 0.0, TAU, 28, Color(1, 1, 1, 0.16), 2.0 * _ui)
+		draw_circle(_stick_origin, _stick_max + 6.0 * _ui, Color(0, 0, 0, 0.20))
+		draw_circle(_stick_origin, _stick_max, Color(0, 0, 0, 0.10))
+		draw_arc(_stick_origin, _stick_max, 0.0, TAU, 48, Color(1, 1, 1, 0.55), 2.0 * _ui)
+		draw_arc(_stick_origin, _stick_max * 0.55, 0.0, TAU, 32, Color(1, 1, 1, 0.14), 2.0 * _ui)
 		# Bola: sombra + vidro + filete + centro — o toque fica legivel.
 		var knob := _stick_origin + stick_vec * _stick_max
-		draw_circle(knob, 30.0 * _ui, Color(0, 0, 0, 0.25))
-		draw_circle(knob, 27.0 * _ui, Color(1, 1, 1, 0.42))
-		draw_arc(knob, 27.0 * _ui, 0.0, TAU, 32, Color(1, 1, 1, 0.65), 2.0 * _ui)
-		draw_circle(knob, 10.0 * _ui, Color(1, 1, 1, 0.50))
+		draw_circle(knob, 30.0 * _ui, Color(0, 0, 0, 0.18))
+		draw_circle(knob, 28.0 * _ui, Color(0.92, 0.93, 0.95, 0.55))
+		draw_arc(knob, 28.0 * _ui, 0.0, TAU, 32, Color(1, 1, 1, 0.80), 2.0 * _ui)
+		draw_circle(knob + Vector2(-8.0 * _ui, -8.0 * _ui), 9.0 * _ui, Color(1, 1, 1, 0.50))
 	else:
 		# Base sempre visivel, com um convite que respira devagar.
 		var t := float(Time.get_ticks_msec()) / 1000.0
@@ -374,7 +374,9 @@ func _draw() -> void:
 			# e o olho precisa ser puxado para ele sem piscar na cara.
 			var t := float(Time.get_ticks_msec()) / 1000.0
 			car_col.a = 0.45 + 0.25 * (0.5 + 0.5 * sin(t * 3.0))
-		_draw_button(_car_pos, "SAIR" if car_occupied else "ENTRAR",
+		# Acao contextual como o "Drive"/"Get in" do PUBG: pílula com borda de
+		# acento, nao mais um disco de acao.
+		_draw_pill(_car_pos, "SAIR" if car_occupied else "ENTRAR",
 			car_col, car_press_s)
 
 	if _driving:
@@ -388,30 +390,93 @@ func _draw() -> void:
 		_draw_button(_weapon_pos, "TROCAR", Color(0.62, 0.62, 0.68, 0.42), false)
 
 
+## Poligono fechado de retangulo com cantos arredondados (o idioma das píluas
+## de ação contextual do PUBG). Pontos em sentido horario.
+static func _rounded_points(r: Rect2, radius: float, segments: int = 6) -> PackedVector2Array:
+	var rad := clampf(radius, 0.0, minf(r.size.x, r.size.y) * 0.5)
+	var pts := PackedVector2Array()
+	if rad <= 0.01:
+		pts.append(r.position)
+		pts.append(r.position + Vector2(r.size.x, 0.0))
+		pts.append(r.position + r.size)
+		pts.append(r.position + Vector2(0.0, r.size.y))
+		return pts
+	var centers: Array[Vector2] = [
+		r.position + Vector2(r.size.x - rad, rad),
+		r.position + Vector2(r.size.x - rad, r.size.y - rad),
+		r.position + Vector2(rad, r.size.y - rad),
+		r.position + Vector2(rad, rad),
+	]
+	var starts: Array[float] = [-PI * 0.5, 0.0, PI * 0.5, PI]
+	for i in 4:
+		for s in segments + 1:
+			var a := starts[i] + PI * 0.5 * float(s) / float(segments)
+			pts.append(centers[i] + Vector2(cos(a), sin(a)) * rad)
+	return pts
+
+
 func _draw_button(center: Vector2, label: String, col: Color, active: bool) -> void:
 	var r := _radius
-	# Halo escuro: o botao le contra ceu claro e contra o asfalto.
-	draw_circle(center, r * 1.12, Color(0, 0, 0, 0.30))
-	# Disco: pressionado ele acende.
-	var fill := col
+	# Halo escuro sempre: e ele que faz o botao ler contra ceu claro e asfalto
+	# (o padrao comum das referencias: o interior nunca decide a leitura sozinho).
+	draw_circle(center, r * 1.16, Color(0, 0, 0, 0.26))
+	# No toque, um halo NA COR da acao — o destaque que o PUBG da ao selecionar.
 	if active:
-		fill = Color(minf(1.0, col.r * 1.30), minf(1.0, col.g * 1.30), minf(1.0, col.b * 1.30),
-				minf(1.0, col.a + 0.20))
-	else:
-		fill.a = col.a * 0.82
-	draw_circle(center, r, fill)
-	# Vidro no topo (meia-lua clara dentro do disco): le como relevo, sem custo.
-	draw_circle(center + Vector2(0.0, -r * 0.26), r * 0.58, Color(1, 1, 1, 0.15))
-	# Anel: mais claro e apertado no toque (a sensacao de afundar).
-	draw_arc(center, r * (0.93 if active else 1.0), 0.0, TAU, 40,
-		Color(1, 1, 1, 0.75 if active else 0.45), maxf(2.0, 2.2 * _ui))
+		draw_circle(center, r * 1.24, Color(col.r, col.g, col.b, 0.16))
+	# Interior escuro translucido (25-45% no PUBG): o jogo aparece por tras.
+	# A cor da acao entra como uma tinta leve; no toque ela sobe.
+	var fill := Color(0.06, 0.07, 0.09, 0.42 + (0.14 if active else 0.0))
+	var tint := 0.22 if active else 0.14
+	fill.r = lerp(fill.r, col.r, tint)
+	fill.g = lerp(fill.g, col.g, tint)
+	fill.b = lerp(fill.b, col.b, tint)
+	draw_circle(center, r * (0.95 if active else 1.0), fill)
+	# Meia-lua de vidro no topo: relevo sem custo de pixel.
+	draw_circle(center + Vector2(0.0, -r * 0.26), r * 0.55, Color(1, 1, 1, 0.10))
+	# ARO fino quase branco (o idioma comum) com UM acento da cor da acao;
+	# no toque ele acende, engrossa e o disco encolhe um tico (afunda).
+	var ring := Color(
+		lerp(0.86, col.r, 0.35 if active else 0.20),
+		lerp(0.87, col.g, 0.35 if active else 0.20),
+		lerp(0.89, col.b, 0.35 if active else 0.20),
+		0.90 if active else 0.55)
+	draw_arc(center, r * (0.94 if active else 1.0), 0.0, TAU, 40, ring, maxf(2.0, 2.4 * _ui))
+	_draw_label(center, label, 14.0)
+
+
+## Acao contextual (ENTRAR/SAIR) como as píluas "Drive"/"Get in" do PUBG:
+## retangulo translucido de cantos redondos, borda fina na cor de acento,
+## rotulo branco com sombra. Nada de disco aqui — e um convite, nao um pedais.
+func _draw_pill(center: Vector2, label: String, col: Color, active: bool) -> void:
+	var pad := 10.0 * _ui
+	var size := int(14.0 * _ui)
+	var tw := 0.0
+	if _font != null:
+		tw = _font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, size).x
+	var w := maxf(_radius * 1.8, tw + pad * 2.0)
+	var h := _radius * 1.05
+	var rect := Rect2(center - Vector2(w * 0.5, h * 0.5), Vector2(w, h))
+	draw_colored_polygon(_rounded_points(rect.grow(3.0 * _ui), h * 0.5), Color(0, 0, 0, 0.30))
+	var fill := Color(0.06, 0.07, 0.09, 0.55 + (0.15 if active else 0.0))
+	if active:
+		fill.r = lerp(fill.r, col.r, 0.30)
+		fill.g = lerp(fill.g, col.g, 0.30)
+		fill.b = lerp(fill.b, col.b, 0.30)
+	var pts := _rounded_points(rect, h * 0.45)
+	draw_colored_polygon(pts, fill)
+	pts.append(pts[0])
+	draw_polyline(pts, col, maxf(2.0, 2.4 * _ui))
+	_draw_label(center, label, 14.0)
+
+
+## Rotulo branco com sombra desenhada por baixo (o fallback de fonte nao tem
+## outline de tema): le sobre ceu, asfalto e areia.
+func _draw_label(center: Vector2, label: String, font_size: float) -> void:
 	if _font == null:
 		return
-	var size := int(13.0 * _ui)
+	var size := int(font_size * _ui)
 	var w := _font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, size).x
-	var tp := center + Vector2(-w * 0.5, 5.0 * _ui)
-	# Sombra do texto: o fallback de fonte nao tem outline de tema, entao a
-	# sombra vai desenhada por baixo — o rotulo le contra qualquer fundo.
+	var tp := center + Vector2(-w * 0.5, size * 0.38)
 	draw_string(_font, tp + Vector2(0.0, 1.5 * _ui), label,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(0, 0, 0, 0.65))
-	draw_string(_font, tp, label, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(1, 1, 1, 0.97))
+		HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(0, 0, 0, 0.70))
+	draw_string(_font, tp, label, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(1, 1, 1, 0.98))
