@@ -28,6 +28,7 @@ const SectorStreamer = preload("res://scripts/world/sector_streamer.gd")
 const Traffic = preload("res://scripts/world/traffic.gd")
 const DayNight = preload("res://scripts/world/day_night.gd")
 const Pedestrians = preload("res://scripts/world/pedestrians.gd")
+const BoneAnim = preload("res://scripts/world/bone_anim.gd")
 const Wanted = preload("res://scripts/game/wanted.gd")
 const Ipanema = preload("res://scripts/game/ipanema.gd")
 const Missions = preload("res://scripts/game/missions.gd")
@@ -86,6 +87,7 @@ func _initialize() -> void:
 	_test_pedestrians()
 	_test_pedestrian_model()
 	_test_pedestrian_life()
+	_test_bone_activities()
 	_test_wanted()
 	_test_ipanema()
 	_test_missions()
@@ -139,6 +141,37 @@ func known(cond: bool, what: String) -> void:
 	else:
 		_known += 1
 		_msgs.append("  DESVIO " + what)
+
+
+## Quanto uma animacao MEXE o esqueleto: a maior diferenca angular entre a
+## primeira chave de uma trilha de rotacao e qualquer outra. `clip_motion` olha
+## so o meio e o fim, e as atividades respiram em seno (a volta passa pelo zero):
+## com ele, o clipe do celular mediria zero.
+func _anim_span(anim: Animation) -> float:
+	var best := 0.0
+	if anim == null:
+		return 0.0
+	for ti in anim.get_track_count():
+		if anim.track_get_type(ti) != Animation.TYPE_ROTATION_3D:
+			continue
+		var n := anim.track_get_key_count(ti)
+		if n < 2:
+			continue
+		var a: Quaternion = anim.track_get_key_value(ti, 0)
+		for k in n:
+			var b: Quaternion = anim.track_get_key_value(ti, k)
+			best = maxf(best, absf(a.dot(b)))
+	return 2.0 * acos(clampf(best, -1.0, 1.0))
+
+
+## Quanto a POSE de uma atividade sai do repouso (o maior giro entre os ossos).
+## Prova que a atividade posa o corpo: sem isso o NPC "faria" o gesto reto.
+func _pose_top(kind: String, u: float) -> float:
+	var top := 0.0
+	var p: Dictionary = BoneAnim.pose(kind, u)
+	for role in p.keys():
+		top = maxf(top, (p[role] as Quaternion).get_angle())
+	return top
 
 
 func _load() -> void:
@@ -1765,6 +1798,197 @@ func _test_pedestrian_life() -> void:
 	check(absf(Pedestrians.fall_pitch(0.0) + PI * 0.5) < 0.01, "continua deitado ate levantar")
 
 
+func _test_bone_activities() -> void:
+	# B-82: animacoes de ATIVIDADE (celular, conversa, olhar o mar, balcao,
+	# esperar o sinal, sentar na areia, acenar) e as do protagonista (soco,
+	# mira, pulo, dano). Nenhuma delas vem em arquivo: sao construidas no
+	# esqueleto de cada corpo. O que se prova sem GPU:
+	#   1. o PAPEL do osso e reconhecido nos dois rigs do jogo (Quaternius
+	#      "UpperArm.L" e Mixamo "mixamorig:LeftArm");
+	#   2. a conta de conversao esta certa: com rotacao zero a pose devolve
+	#      exatamente o REST do osso (essa igualdade e a assinatura da formula);
+	#   3. o braco caido aponta para baixo (medido no repouso de cada rig);
+	#   4. o clipe monta de verdade, tem movimento e, nos que ciclam, fecha;
+	#   5. o modulo de pedestres instala as atividades nas pessoas da rua.
+	check(BoneAnim.role_of("mixamorig_LeftUpLeg") == "thigh_l", "osso LeftUpLeg = coxa esquerda")
+	check(BoneAnim.role_of("RightUpLeg") == "thigh_r", "osso RightUpLeg = coxa direita")
+	check(BoneAnim.role_of("UpperArm.L") == "upperarm_l", "osso UpperArm.L = braco esquerdo")
+	check(BoneAnim.role_of("LowerArm.R") == "forearm_r", "osso LowerArm.R = antebraco direito")
+	check(BoneAnim.role_of("LeftLeg") == "shin_l", "osso LeftLeg = canela esquerda")
+	check(BoneAnim.role_of("Hips") == "hips", "osso Hips = quadril")
+	check(BoneAnim.role_of("Head") == "head", "osso Head = cabeca")
+	check(BoneAnim.role_of("Fire") == "", "osso sem papel conhecido e ignorado")
+	check(BoneAnim.cycles("talk") and not BoneAnim.cycles("punch"),
+		"conversa cicla, soco toca uma vez")
+
+	var sc0 := Pedestrians.load_scene(Pedestrians.ANIM_PATH)
+	check(sc0 != null, "corpo do pedestre carrega para o teste de atividade")
+	if sc0 == null:
+		return
+	var inst0: Node3D = sc0.instantiate()
+	var sk0 := Pedestrians._find_skel(inst0)
+	check(sk0 != null, "corpo do pedestre tem esqueleto")
+	if sk0 == null:
+		return
+	var rg := BoneAnim.rig(sk0)
+	var bones: Dictionary = rg["bone"]
+	var names := PackedStringArray()
+	for r in bones.keys():
+		names.append(String(r))
+	names.sort()
+	print("  info: papeis reconhecidos no corpo do pedestre (%d): %s" % [
+		bones.size(), " ".join(names)])
+	for need in ["hips", "head", "upperarm_l", "upperarm_r", "thigh_l", "thigh_r"]:
+		check(bones.has(need), "corpo do pedestre tem o papel '%s'" % need)
+	# A prova da formula: rotacao zero tem de devolver o repouso do osso. Se a
+	# conversao estivesse errada, o corpo inteiro sairia torto em TODA atividade.
+	var id_ok := true
+	var n_id := 0
+	for role in bones.keys():
+		var rn := String(role)
+		if rn == "upperarm_l" or rn == "upperarm_r":
+			continue   # esses levam a correcao de "braco caido" (testada abaixo)
+		var rest_q := sk0.get_bone_rest(int(bones[role])).basis.get_rotation_quaternion().normalized()
+		var q := BoneAnim.bone_pose(rg, rn, {})
+		n_id += 1
+		if absf(q.dot(rest_q)) < 0.99:
+			id_ok = false
+	check(id_ok and n_id >= 3, "pose de rotacao zero devolve o rest do osso (%d ossos)" % n_id)
+	# Braco caido: a direcao de repouso e MEDIDA (osso -> filho) e a correcao
+	# tem de virar essa direcao para baixo. Sem isso o NPC gesticula com o braco
+	# esticado em T-pose.
+	var dirs: Dictionary = rg["dir"]
+	var n_arm := 0
+	var down_ok := true
+	for role in ["upperarm_l", "upperarm_r"]:
+		if not dirs.has(role):
+			continue
+		var d: Vector3 = dirs[role]
+		if d.length() < 0.5:
+			continue
+		n_arm += 1
+		var turned: Vector3 = BoneAnim.stand(rg, String(role)) * d
+		if turned.dot(Vector3.DOWN) < 0.9:
+			down_ok = false
+	check(n_arm >= 1 and down_ok, "braco caido aponta para baixo (%d bracos medidos)" % n_arm)
+	# O clipe montado de verdade: trilhas para o corpo todo e chaves ao longo do
+	# tempo. `_anim_span` olha TODAS as chaves (as atividades respiram em seno e
+	# a volta passa pelo zero, entao `clip_motion` daria zero no celular).
+	for kind in BoneAnim.NPC_ACTIVITIES:
+		var a: Animation = BoneAnim.build(String(kind), sk0, "Skeleton3D")
+		var span := _anim_span(a)
+		check(a != null and a.get_track_count() > 10 and span > 0.02,
+			"clipe '%s' montado do esqueleto (%.2f rad se mexendo)" % [kind, span])
+	# E a pose de cada atividade sai mesmo do repouso (senao o NPC "faria" o
+	# gesto com o corpo reto, que era o defeito).
+	var posed := 0
+	for kind in BoneAnim.NPC_ACTIVITIES:
+		if _pose_top(String(kind), 0.0) > 0.15:
+			posed += 1
+	check(posed == BoneAnim.NPC_ACTIVITIES.size(),
+		"%d de %d atividades posam o corpo longe do repouso" % [
+			posed, BoneAnim.NPC_ACTIVITIES.size()])
+	check(_anim_span(BoneAnim.build("wait", sk0, "Skeleton3D")) > 0.2,
+		"esperando o sinal: bate o pe no chao")
+	check(_pose_top("sit", 0.0) > 1.0, "sentado na areia: dobra as pernas (%.2f rad)" % _pose_top("sit", 0.0))
+	check(_pose_top("punch", 0.5) > 1.0, "o soco estica o braco de verdade")
+	# Ciclo fechado: a pose em u = 0 e a de u = 1 tem de ser a mesma, senao o
+	# NPC da um pulo de pose a cada volta do clipe.
+	var p0: Dictionary = BoneAnim.pose("talk", 0.0)
+	var p1: Dictionary = BoneAnim.pose("talk", 1.0)
+	var loop_ok := not p0.is_empty()
+	for k in p0.keys():
+		if not p1.has(k) or absf((p0[k] as Quaternion).dot(p1[k] as Quaternion)) < 0.999:
+			loop_ok = false
+	check(loop_ok, "a conversa fecha o ciclo (pose em u=0 = pose em u=1)")
+	# Os sete corpos da rua tem de reconhecer os ossos essenciais.
+	var bodies: Array = Pedestrians.BODY_PATHS.duplicate()
+	bodies.append(Pedestrians.ANIM_PATH)
+	var all_ok := true
+	for path in bodies:
+		var sc := Pedestrians.load_scene(path)
+		if sc == null:
+			continue
+		var bi: Node3D = sc.instantiate()
+		var bb: Dictionary = BoneAnim.rig(Pedestrians._find_skel(bi))["bone"]
+		bi.free()
+		var got := 0
+		for need in ["hips", "head", "upperarm_l", "upperarm_r", "thigh_l", "thigh_r"]:
+			if bb.has(need):
+				got += 1
+		if got < 6:
+			all_ok = false
+			print("  info: %s reconheceu so %d de 6 ossos essenciais" % [
+				String(path).get_file(), got])
+	check(all_ok, "os %d corpos tem quadril, cabeca, bracos e coxas reconhecidos" % bodies.size())
+	# Quem escolhe a atividade quando para: areia senta/olha o mar, calcada
+	# fala no celular/espera.
+	check(Pedestrians.activity_for(Pedestrians.MODE_BEACH, 0.10) == "sit", "na areia: senta")
+	check(Pedestrians.activity_for(Pedestrians.MODE_BEACH, 0.50) == "sea", "na areia: olha o mar")
+	check(Pedestrians.activity_for(Pedestrians.MODE_BLOCK, 0.10) == "phone", "na calcada: celular")
+	check(Pedestrians.activity_for(Pedestrians.MODE_BLOCK, 0.70) == "wait", "na calcada: espera")
+	check(Pedestrians.activity_for(Pedestrians.MODE_BLOCK, 0.95) == "",
+		"e as vezes so fica parado olhando a rua")
+	check(Pedestrians.clip_for(false, false, false, 0.0, true, true, true, true, "phone") == "phone",
+		"parado toca a atividade")
+	check(Pedestrians.clip_for(false, false, true, 1.2, true, true, true, true, "phone") == "walk",
+		"andando a atividade nao rouba o passo")
+	check(Pedestrians.clip_for(false, true, false, 0.0, true, true, true, true, "sit") == "sit",
+		"a atividade vale mais que o gesto antigo")
+	# Integracao: o modulo de pedestres instala os clipes nas pessoas da rua.
+	var peds := Pedestrians.new()
+	root.add_child(peds)
+	peds.setup(4242, Vector3(1600.0, 1.2, 100.0))
+	var with_acts := 0
+	for d in peds._acts:
+		if not (d as Dictionary).is_empty():
+			with_acts += 1
+	check(with_acts > 0, "pessoas na rua receberam atividades (%d de %d)" % [
+		with_acts, peds._acts.size()])
+	var has_phone := false
+	var has_sit := false
+	for d in peds._acts:
+		var acts: Dictionary = d
+		if acts.has("phone"):
+			has_phone = true
+		if acts.has("sit"):
+			has_sit = true
+	check(has_phone and has_sit, "clipes de celular e de sentar estao instalados")
+	peds.free()
+	inst0.free()
+	# O protagonista: o .fbx do autor nao traz Jump nem soco — essas acoes sao
+	# construidas no esqueleto dele. Se o rig nao for reconhecido, o teste diz
+	# exatamente quantos papeis casaram.
+	var psc := Pedestrians.load_scene(Player.PROTAGONISTA_PATH)
+	if psc == null:
+		known(false, "PROTAGONISTA.fbx importado para o teste das acoes do jogador")
+		return
+	var pin: Node3D = psc.instantiate()
+	var psk := Pedestrians._find_skel(pin)
+	var pb: Dictionary = BoneAnim.rig(psk)["bone"]
+	var pnames := PackedStringArray()
+	for r in pb.keys():
+		pnames.append(String(r))
+	pnames.sort()
+	print("  info: papeis reconhecidos no PROTAGONISTA.fbx (%d): %s" % [
+		pb.size(), " ".join(pnames)])
+	var pgot := 0
+	for need in ["hips", "head", "upperarm_l", "upperarm_r", "thigh_l", "thigh_r"]:
+		if pb.has(need):
+			pgot += 1
+	check(pgot == 6, "protagonista tem os 6 ossos essenciais (%d)" % pgot)
+	for kind in BoneAnim.PLAYER_ACTIVITIES:
+		var pa: Animation = BoneAnim.build(String(kind), psk, "Skeleton3D")
+		check(pa != null and pa.get_track_count() > 10 and _pose_top(String(kind), 0.5) > 0.25,
+			"acao '%s' montada e posando no protagonista" % kind)
+	var paim: Animation = BoneAnim.build("aim", psk, "Skeleton3D")
+	check(paim != null and paim.loop_mode == Animation.LOOP_LINEAR, "a mira cicla")
+	var ppunch: Animation = BoneAnim.build("punch", psk, "Skeleton3D")
+	check(ppunch != null and ppunch.loop_mode == Animation.LOOP_NONE,
+		"o soco toca uma vez e volta ao repouso")
+	pin.free()
+
+
 func _test_protagonista_fbx() -> void:
 	# O modelo do autor (PROTAGONISTA.fbx) entra primeiro no jogador. O CI abre
 	# o arquivo e RELATA o que ha dentro — esqueleto, clipes de animacao e
@@ -2084,6 +2308,7 @@ func _test_scripts_compile() -> void:
 		"res://scripts/audio/vehicle_audio.gd",
 		"res://scripts/world/traffic.gd",
 		"res://scripts/world/pedestrians.gd",
+		"res://scripts/world/bone_anim.gd",
 		"res://scripts/world/sector_streamer.gd",
 		"res://scripts/world/day_night.gd",
 		"res://scripts/vehicles/car.gd",

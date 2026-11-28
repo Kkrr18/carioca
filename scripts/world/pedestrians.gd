@@ -28,6 +28,7 @@ const Cfg = preload("res://scripts/core/cfg.gd")
 const CityGen = preload("res://scripts/world/city_gen.gd")
 const ModelProp = preload("res://scripts/world/model_prop.gd")
 const Traffic = preload("res://scripts/world/traffic.gd")
+const BoneAnim = preload("res://scripts/world/bone_anim.gd")
 
 const BLOCK := Cfg.BLOCK_SIZE
 ## Meio da calcada: 5 m de meia-rua + 1,5 m dentro da calcada de 3 m.
@@ -73,6 +74,9 @@ const HIT_SPEED := 3.0
 const HIT_RADIUS := 1.7
 const DOWN_TIME := 4.5          # s no chao antes de levantar
 const GESTURE_TIME := 1.6       # s de gesto de quem esta parado
+## Quanto o corpo DESCE ao sentar (B-82): com as pernas dobradas do clipe, quem
+## senta na areia nao alcanca o chao a partir da altura de quem esta em pe.
+const SIT_DROP := 0.50
 ## Quantos pedestres viram BALCONISTAS (ficam atras do balcao, dentro da loja).
 const SHOPKEEPERS := 3
 
@@ -151,6 +155,12 @@ var _clip_gesture := ""
 var _clip_down := ""
 var _holders: Array = []        # Node3D de cada pedestre (modelo animado)
 var _anims: Array = []          # AnimationPlayer de cada pedestre
+## B-82: atividade de cada pessoa, como {papel: nome do clipe} — so as que o
+## esqueleto daquele corpo aceitou (corpo sem osso reconhecido fica sem nenhuma).
+var _acts: Array = []
+## Cache por corpo dos clipes construidos: Animation e recurso, e o mesmo clipe
+## serve para todas as pessoas que usam aquele corpo.
+var _act_cache: Dictionary = {}
 var _mat: StandardMaterial3D
 var _mm_shadow: MultiMeshInstance3D
 var _mm_body: MultiMeshInstance3D
@@ -200,6 +210,28 @@ static func facing_yaw(dir: Vector2) -> float:
 	if dir.length_squared() < 0.000001:
 		return 0.0
 	return atan2(-dir.x, -dir.y) + MODEL_YAW
+
+
+## Qual ATIVIDADE a pessoa faz quando para (B-82). Puro e deterministico: `r` e
+## um numero sorteado em [0,1). "" = so fica parado, olhando a rua.
+## Na areia as pessoas SENTAM e OLHAM O MAR; na calcada falam no celular,
+## conversam e esperam alguem.
+static func activity_for(mode: int, r: float) -> String:
+	if mode == MODE_BEACH:
+		if r < 0.34:
+			return "sit"
+		if r < 0.62:
+			return "sea"
+		if r < 0.82:
+			return "talk"
+		return "phone"
+	if r < 0.34:
+		return "phone"
+	if r < 0.60:
+		return "talk"
+	if r < 0.78:
+		return "wait"
+	return ""
 
 
 ## Cruzamento que governa a travessia feita do canto `k`: e o semaforo da
@@ -280,6 +312,8 @@ static func spawn_ped(seed_value: int, index: int) -> Dictionary:
 		"down_until": -1.0,
 		"gesture_until": -1.0,
 		"gesture_next": rng.randf_range(4.0, 12.0),
+		# B-82: atividade que ele faz quando PARA ("" = so fica parado).
+		"activity": "",
 		# Os primeiros SHOPKEEPERS viram balconistas quando ha loja perto.
 		"shop": index < SHOPKEEPERS,
 		"scale": rng.randf_range(0.93, 1.07),
@@ -669,20 +703,27 @@ static func car_hit(car_pos: Vector3, car_speed: float, ped_pos: Vector2) -> boo
 	return Vector2(car_pos.x - ped_pos.x, car_pos.z - ped_pos.y).length() < HIT_RADIUS
 
 
-## Qual animacao o pedestre toca AGORA, em papeis: "down" (no chao), "gesture"
-## (gesticulando parado), "run", "walk" ou "idle". Puro e testado: e aqui que se
-## decide a vida dele, nao no meio da escrita de transformacoes.
+## Qual animacao o pedestre toca AGORA, em papeis: "down" (no chao), a ATIVIDADE
+## dele ("phone", "talk", "sit", "work", "wait", "wave"...), "gesture", "run",
+## "walk" ou "idle". Puro e testado: e aqui que se decide a vida dele, nao no
+## meio da escrita de transformacoes.
+## A atividade vale so para quem esta PARADO: quem anda usa o passo, senao o
+## pedestre sairia atravessando a rua olhando o celular.
 static func clip_for(down: bool, gesture: bool, moving: bool, sp: float,
-		has_down: bool, has_gesture: bool, has_run: bool, has_walk: bool) -> String:
+		has_down: bool, has_gesture: bool, has_run: bool, has_walk: bool,
+		act: String = "") -> String:
 	if down and has_down:
 		return "down"
-	if gesture and has_gesture:
-		return "gesture"
 	if moving:
 		if sp >= RUN_FROM and has_run:
 			return "run"
 		if has_walk:
 			return "walk"
+		return "idle"
+	if act != "":
+		return act
+	if gesture and has_gesture:
+		return "gesture"
 	return "idle"
 
 
@@ -776,6 +817,7 @@ static func paint_body(mi: MeshInstance3D, skin_c: Color, shirt_c: Color,
 func _build_models() -> void:
 	_holders.clear()
 	_anims.clear()
+	_acts.clear()
 	for i in peds.size():
 		var p: Dictionary = peds[i]
 		var kd: Dictionary = _body_kinds[i % _body_kinds.size()]
@@ -862,7 +904,36 @@ func _build_models() -> void:
 		# Apoio no chao: o ponto mais baixo da malha vai para y = 0.
 		inst.position = Vector3(-box.get_center().x, -box.position.y, -box.get_center().z) * k
 		_anims.append(ap if plays else null)
+		_acts.append(_install_activities(ap, sk, inst, String(kd["path"])))
 		_holders.append(root)
+
+
+## Instala os clipes de ATIVIDADE (B-82) no AnimationPlayer de um corpo e devolve
+## {papel: nome do clipe} do que este esqueleto aceitou. O trabalho e pago UMA vez
+## por corpo: os clipes vao para `_act_cache` e sao compartilhados por todas as
+## pessoas que usam aquele corpo (Animation e recurso, nao tem estado por dono).
+func _install_activities(ap: AnimationPlayer, sk: Skeleton3D, inst: Node3D,
+		body_path: String) -> Dictionary:
+	var out := {}
+	if ap == null or sk == null:
+		return out
+	var skel_path := anim_skel_path(ap, inst)
+	if skel_path == "":
+		return out
+	var key := body_path + "|" + skel_path + "|" + String(sk.get_concatenated_bone_names())
+	var clips: Dictionary = _act_cache.get(key, {})
+	if clips.is_empty():
+		for kind in BoneAnim.NPC_ACTIVITIES:
+			var a := BoneAnim.build(String(kind), sk, skel_path)
+			if a != null and a.get_track_count() > 0:
+				clips[String(kind)] = a
+		_act_cache[key] = clips
+	for kind in clips.keys():
+		var nm := "act_" + String(kind)
+		if not ap.has_animation(StringName(nm)):
+			ap.add_animation(StringName(nm), clips[kind])
+		out[String(kind)] = nm
+	return out
 
 
 static func _find_mesh(n: Node) -> MeshInstance3D:
@@ -873,6 +944,23 @@ static func _find_mesh(n: Node) -> MeshInstance3D:
 		if f != null:
 			return f
 	return null
+
+
+## Prefixo das trilhas de animacao: o caminho do esqueleto relativo a raiz do
+## AnimationPlayer (o mesmo que o retarget() sempre usou). Vale para os corpos do
+## mundo E para o modelo do protagonista, que tem o proprio AnimationPlayer.
+static func anim_skel_path(ap: AnimationPlayer, body: Node) -> String:
+	if ap == null or body == null:
+		return ""
+	var sk := _find_skel(body)
+	if sk == null:
+		return ""
+	var root: Node = ap.get_node_or_null(ap.root_node)
+	if root == null:
+		root = ap.get_parent()
+	if root == null:
+		root = body
+	return String(root.get_path_to(sk))
 
 
 static func _find_skel(n: Node) -> Skeleton3D:
@@ -958,6 +1046,7 @@ func _follow(focus: Vector3, delta: float) -> void:
 ## do balcao, olhando para a rua); o resto vai para a calcada ou a praia. Sem
 ## loja por perto, o balconista vira pedestre comum em vez de ficar perdido.
 func _place_one(p: Dictionary, focus: Vector3) -> void:
+	p["activity"] = ""
 	if bool(p.get("shop", false)) and streamer != null:
 		var spots: Array = streamer.shops_near(focus, RESPAWN_FAR)
 		if not spots.is_empty():
@@ -998,7 +1087,10 @@ func _step(p: Dictionary, dt: float, player_pos: Vector3, car_pos: Vector3,
 		_step_wait(p, dt)
 		return
 	if kind == KIND_IDLE:
-		_dodge(p, player_pos)
+		# Quem esta SENTADO nao desvia: sair da frente sentado viraria um
+		# deslize pelo chao (B-82).
+		if String(p.get("activity", "")) != "sit":
+			_dodge(p, player_pos)
 		var rng: RandomNumberGenerator = p["rng"]
 		# Quem para nao fica estátua: de tempos em tempos gesticula (olhar o
 		# celular, falar com alguem) com o clipe "work"/"punch" do modelo.
@@ -1081,12 +1173,14 @@ func _arrive(p: Dictionary) -> void:
 		# Na praia: caminha e as vezes para para olhar o mar.
 		if rng.randf() < 0.18:
 			p["kind"] = KIND_IDLE
+			p["activity"] = activity_for(MODE_BEACH, rng.randf())
 			p["wait"] = rng.randf_range(3.0, 9.0)
 		else:
 			_next_target(p)
 		return
 	if rng.randf() < IDLE_CHANCE:
 		p["kind"] = KIND_IDLE
+		p["activity"] = activity_for(MODE_BLOCK, rng.randf())
 		p["wait"] = rng.randf_range(2.5, 7.0)
 		return
 	if rng.randf() < CROSS_CHANCE:
@@ -1107,6 +1201,7 @@ func _arrive(p: Dictionary) -> void:
 
 func _next_target(p: Dictionary) -> void:
 	p["kind"] = KIND_WALK
+	p["activity"] = ""
 	if int(p["mode"]) == MODE_BEACH:
 		p["target"] = beach_goal(p)
 		return
@@ -1140,10 +1235,28 @@ func _write_models() -> void:
 			continue
 		var p: Dictionary = peds[i]
 		var pos: Vector2 = p["pos"]
-		root.position = Vector3(pos.x, Cfg.surface_at(pos.x, pos.y), pos.y)
 		var down := float(p["down_until"]) > _clock
 		var kind: int = p["kind"]
 		var moving := kind == KIND_WALK or kind == KIND_CROSS
+		# Atividade (B-82): o que a pessoa FAZ parada ali. Esperar o sinal e o
+		# balconista tem atividade propria; quem anda ou esta no chao nao tem.
+		var acts := {}
+		if i < _acts.size():
+			acts = _acts[i]
+		var act := ""
+		if not moving and not down:
+			if kind == KIND_WAIT:
+				act = "wait"
+			elif kind == KIND_SHOP:
+				act = "work"
+			else:
+				act = String(p.get("activity", ""))
+		if act != "" and not acts.has(act):
+			act = ""
+		var y := Cfg.surface_at(pos.x, pos.y)
+		if act == "sit":
+			y -= SIT_DROP
+		root.position = Vector3(pos.x, y, pos.y)
 		# Quem espera OLHA em volta: um giro lento de +/-12 graus no corpo. Sem
 		# isso o pedestre parado parece um poste, mesmo com o clipe de parado.
 		var look := 0.0
@@ -1157,12 +1270,12 @@ func _write_models() -> void:
 		var ap: AnimationPlayer = _anims[i]
 		if ap == null:
 			continue
-		# Vida (B-64): atropelado, gesticulando, correndo ou andando — quem decide
-		# e uma funcao pura, e a troca de clipe e SUAVE (blend), nao um corte seco.
+		# Vida (B-64/B-82): atropelado, na atividade, gesticulando, correndo ou
+		# andando — quem decide e uma funcao pura, e a troca de clipe e SUAVE.
 		var role := clip_for(down, float(p["gesture_until"]) > _clock, moving,
 				float(p["speed"]), _clip_down != "", _clip_gesture != "",
-				_clip_run != "", _walk_anim != "")
-		var nm := _clip_name(role)
+				_clip_run != "", _walk_anim != "", act)
+		var nm := _clip_name(role, acts)
 		if nm == "":
 			continue
 		if down:
@@ -1174,8 +1287,11 @@ func _write_models() -> void:
 				BLEND_ONCE if once else BLEND_WALK)
 
 
-## Nome do clipe de um papel ("idle", "walk", "run", "gesture", "down").
-func _clip_name(role: String) -> String:
+## Nome do clipe de um papel ("idle", "walk", "run", "gesture", "down" e as
+## atividades de B-82, que vem do dicionario do corpo em `acts`).
+func _clip_name(role: String, acts: Dictionary = {}) -> String:
+	if acts.has(role):
+		return String(acts[role])
 	match role:
 		"walk":
 			return _walk_anim
@@ -1245,9 +1361,23 @@ func describe() -> String:
 		if int(p["kind"]) == KIND_SHOP:
 			keepers += 1
 	if _use_model:
-		return "pedestres: %d pessoas (%d balconistas) com corpo CC0 Quaternius (1 desenho cada) - clipes: %s" % [
-			_visible, keepers, _roles_text()]
+		return "pedestres: %d pessoas (%d balconistas) com corpo CC0 Quaternius (1 desenho cada) - clipes: %s%s" % [
+			_visible, keepers, _roles_text(), _acts_text()]
 	return "pedestres: %d pessoas em caixas (3 desenhos por quadro) - modelo nao carregou" % _visible
+
+
+## Quais ATIVIDADES (B-82) foram construidas para os corpos que estao na rua.
+func _acts_text() -> String:
+	for d in _acts:
+		var acts: Dictionary = d
+		if acts.is_empty():
+			continue
+		var parts := PackedStringArray()
+		for k in acts.keys():
+			parts.append(String(k))
+		parts.sort()
+		return " + atividades: " + " ".join(parts)
+	return " + atividades: nenhuma (rig nao reconhecido)"
 
 
 ## Quais animacoes estao de fato em uso (as que faltaram aparecem com "-").

@@ -31,7 +31,9 @@ de acreditar em qualquer coisa aqui.
   em legenda, polícia roteirizada e recompensa em dinheiro. O roteiro
   (`scripts/game/missions.gd`) é puro; a cena só executa.
 - **Combate**: punho e pistola (12 balas), mira pela câmera, clarão do cano,
-  dano em viatura e crime registrado. Vida e colete em barras.
+  dano em viatura e crime registrado. Vida e colete em barras. O corpo tem pose
+  de **soco**, de **mira** e de **dano** (B-82, animações construídas por código
+  — o modelo do autor não traz nenhuma delas).
 - **Roubo de carro**: `ENTRAR` ao lado de um carro de rua toma o carro — modelo,
   ficha (massa/motor/pneus do SUV, do esportivo ou do táxi) e posição. O carro
   tomado some da rua e volta a circular longe, 30 s depois.
@@ -161,6 +163,21 @@ de acreditar em qualquer coisa aqui.
   frente quando você chega perto e corre se um carro aparece em cima dele na
   travessia. À noite a rua esvazia. Sem os modelos, o jogo volta sozinho para
   bonecos de caixa (3 desenhos para todos).
+- **Atividades dos NPCs e do protagonista** (B-82): os arquivos dos corpos só
+  trazem parado/andar/correr, então as atividades são **construídas em código**,
+  osso por osso, em `scripts/world/bone_anim.gd`: na calçada o NPC fala no
+  celular, conversa, espera o sinal batendo o pé e acena; na areia ele **senta**
+  ou põe a mão na testa para olhar o mar; o balconista **trabalha** atrás do
+  balcão. O mesmo módulo dá ao protagonista **soco**, **mira de pistola**, pulo
+  no ar e pose de dano — nenhum desses clipes existe no `PROTAGONISTA.fbx`
+  (que traz só Idle/Walk/Run), então antes o golpe era invisível. O osso é
+  reconhecido pelo **nome** (serve rig Quaternius "UpperArm.L" e Mixamo
+  "LeftArm"), a conversão da rotação sai da própria composição do Godot
+  (`pose = Bp⁻¹ · r · Bb`, com Bp/Bb medidos no repouso) e o "braço caído" é
+  medido, não chutado — funciona em T-pose e em A-pose. O CI prova a conta (giro
+  zero devolve exatamente o repouso do osso), o ciclo que fecha e o clipe montado
+  nos oito corpos. Corpo cujo rig não for reconhecido fica sem atividade e o jogo
+  segue como antes.
 - Semáforos: quatro postes por cruzamento com ciclo verde/amarelo/vermelho
   defasado; os carros param na linha de retenção e atravessam no verde. A
   cidade inteira de semáforos custa 2 desenhos por quadro.

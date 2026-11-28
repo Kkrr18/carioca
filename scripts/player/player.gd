@@ -12,6 +12,7 @@ const Cfg = preload("res://scripts/core/cfg.gd")
 const TouchControls = preload("res://scripts/ui/touch_controls.gd")
 const ModelProp = preload("res://scripts/world/model_prop.gd")
 const Pedestrians = preload("res://scripts/world/pedestrians.gd")
+const BoneAnim = preload("res://scripts/world/bone_anim.gd")
 
 const WALK_SPEED := 4.2
 const RUN_SPEED := 8.5
@@ -41,6 +42,13 @@ const HAIR_COL := Color(0.09, 0.08, 0.08)
 const MAX_HEALTH := 100.0
 const MAX_ARMOR := 100.0
 const START_MONEY := 350
+
+## Acoes de atividade (B-82). `ACT_BLEND` e a mistura ao entrar e sair de um
+## soco/mira/dano (corte seco de pose aparece na tela); os dois HOLD sao quanto
+## tempo a pose fica no ar depois do gatilho (o clipe ja faz a volta sozinho).
+const ACT_BLEND := 0.12
+const FIRE_HOLD := 0.32
+const HURT_HOLD := 0.30
 
 ## Ficha das armas. `range` em metros, `cone` em radianos (abertura do tiro),
 ## `cool` em segundos entre golpes.
@@ -123,6 +131,13 @@ var _walk_anim := ""
 var _idle_anim := ""
 var _run_anim := ""
 var _jump_anim := ""
+## B-82: acoes construidas por codigo no esqueleto deste modelo — soco, mira,
+## pulo e dano. O arquivo do protagonista so traz Idle/Walk/Run: sem isso o
+## golpe era invisivel (o corpo nao mudava de pose ao bater) e o pulo tambem.
+var _act: Dictionary = {}
+## Tempo que falta para a acao de combate/dano terminar (s).
+var _fire_t := 0.0
+var _hurt_t := 0.0
 
 
 func _ready() -> void:
@@ -160,6 +175,7 @@ func _build_model_avatar(path: String, model_yaw: float) -> bool:
 	var scene := Pedestrians.load_scene(path)
 	if scene == null:
 		return false
+	_act = {}
 	# A rotacao do filho e a FRENTE do modelo (comentario em _build_avatar).
 	var holder := Node3D.new()
 	holder.rotation.y = model_yaw
@@ -236,6 +252,24 @@ func _build_model_avatar(path: String, model_yaw: float) -> bool:
 	inst.scale = Vector3.ONE * k
 	inst.position = Vector3(-box.get_center().x, -box.position.y, -box.get_center().z) * k
 	_using_model = _ap != null
+	# Acoes (B-82): soco, mira, pulo e dano construidos no esqueleto DESTE
+	# modelo. Se o rig nao for reconhecido o dicionario fica vazio e o jogo
+	# segue exatamente como antes (o arquivo nao traz esses clipes).
+	if _ap != null and sk != null:
+		var skel_path := Pedestrians.anim_skel_path(_ap, inst)
+		if skel_path != "":
+			# O modelo que entra com rotacao 0 (o PROTAGONISTA.fbx) olha para +Z;
+			# as poses autorais sao escritas para quem olha para -Z (o CC0), e
+			# precisam ser giradas para nao sair o soco para tras.
+			var faces_z := absf(model_yaw) < 0.01
+			for kind in BoneAnim.PLAYER_ACTIVITIES:
+				var a := BoneAnim.build(String(kind), sk, skel_path, faces_z)
+				if a == null or a.get_track_count() == 0:
+					continue
+				var nm := "act_" + String(kind)
+				if not _ap.has_animation(StringName(nm)):
+					_ap.add_animation(StringName(nm), a)
+				_act[String(kind)] = nm
 	# Cabeca 3D (B-77): so para o corpo CC0, que vem de cabeca lisa. O
 	# PROTAGONISTA.fbx traz o rosto dele — uma cabeca por cima seria a segunda.
 	if path == AVATAR_PATH:
@@ -576,12 +610,33 @@ func _physics_process(delta: float) -> void:
 
 
 ## Animacao: clipes do MODELO quando ele existe (parado / andando / correndo /
-## pulando) e, no boneco de caixas, o balanco antigo de bracos e pernas.
+## pulando), as ACOES construidas por codigo (soco, mira, pulo, dano — B-82) e,
+## no boneco de caixas, o balanco antigo de bracos e pernas.
 func _update_anim(hv: Vector2, delta: float) -> void:
+	_fire_t = maxf(0.0, _fire_t - delta)
+	_hurt_t = maxf(0.0, _hurt_t - delta)
 	if _using_model and _ap != null:
 		var sp := hv.length()
+		# As acoes vem antes de tudo: um soco no meio da corrida tem de aparecer.
+		if _hurt_t > 0.0 and _act.has("hurt"):
+			_play_anim(String(_act["hurt"]), 1.0, ACT_BLEND)
+			_idle_hold()
+			return
+		if _fire_t > 0.0 and armed() and _act.has("aim"):
+			_play_anim(String(_act["aim"]), 1.0, ACT_BLEND)
+			_idle_hold()
+			return
+		if _fire_t > 0.0 and not armed() and _act.has("punch"):
+			_play_anim(String(_act["punch"]), 1.0, ACT_BLEND)
+			_idle_hold()
+			return
 		if not _grounded and _jump_anim != "":
 			_play_anim(_jump_anim, 1.0)
+			_idle_hold()
+		elif not _grounded and _act.has("jump"):
+			# O arquivo do protagonista nao traz clipe de pulo: as pernas
+			# recolhidas no ar sao construidas por codigo.
+			_play_anim(String(_act["jump"]), 1.0, ACT_BLEND)
 			_idle_hold()
 		elif sp > 2.2 and _run_anim != "":
 			# O clipe de corrida cobre ~4,6 m/s no compasso 1.
@@ -609,13 +664,13 @@ func _update_anim(hv: Vector2, delta: float) -> void:
 			a.rotation.x = lerpf(a.rotation.x, 0.0, 0.2)
 
 
-func _play_anim(nm: String, spd: float) -> void:
+func _play_anim(nm: String, spd: float, blend: float = 0.0) -> void:
 	if _ap == null or nm == "":
 		return
 	# `is_playing()` falso = o clipe acabou (pulo, por exemplo): recomeca, senao o
 	# personagem fica congelado no ultimo quadro daquele clipe para sempre.
 	if _ap.current_animation != StringName(nm) or not _ap.is_playing():
-		_ap.play(StringName(nm))
+		_ap.play(StringName(nm), blend)
 	_ap.speed_scale = spd
 
 
@@ -648,11 +703,11 @@ func describe() -> String:
 	var playing := "parada"
 	if _ap != null and _ap.is_playing():
 		playing = "tocando"
-	return "avatar: %s 1,80 m (%s; idle=%s walk=%s run=%s jump=%s; parado=%s; frente=%.0f°; cabeca=%s %d tris)" % [
+	return "avatar: %s 1,80 m (%s; idle=%s walk=%s run=%s jump=%s; parado=%s; frente=%.0f°; cabeca=%s %d tris; acoes=%d)" % [
 		_avatar_source, playing, _idle_anim, _walk_anim, _run_anim, _jump_anim,
 		"estatico+balanco" if _idle_static else "animado",
 		rad_to_deg(_model_yaw),
-		"sim" if _head != null else "nao", _head_tris]
+		"sim" if _head != null else "nao", _head_tris, _act.size()]
 
 
 func _update_camera(delta: float) -> void:
@@ -693,6 +748,8 @@ func add_damage(amount: float) -> void:
 		armor = maxf(0.0, armor - absorbed)
 		left -= absorbed
 	health = maxf(0.0, health - left)
+	# B-82: o corpo acusa o golpe (pose de dano), nao so a barra de vida.
+	_hurt_t = HURT_HOLD
 	damaged.emit(amount)
 	if health <= 0.0:
 		died.emit()
@@ -769,6 +826,8 @@ func consume_fire() -> void:
 		ammo = maxi(0, ammo - 1)
 	face_dir(aim_dir())
 	flash_muzzle()
+	# B-82: o golpe tem pose. Com a pistola a mira fica no ar; de punho, o soco.
+	_fire_t = FIRE_HOLD
 
 
 func flash_muzzle() -> void:
