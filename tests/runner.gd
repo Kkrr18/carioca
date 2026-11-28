@@ -1943,7 +1943,8 @@ func _test_bone_activities() -> void:
 	check(Pedestrians.activity_for(Pedestrians.MODE_BEACH, 0.10) == "sit", "na areia: senta")
 	check(Pedestrians.activity_for(Pedestrians.MODE_BEACH, 0.50) == "sea", "na areia: olha o mar")
 	check(Pedestrians.activity_for(Pedestrians.MODE_BLOCK, 0.10) == "phone", "na calcada: celular")
-	check(Pedestrians.activity_for(Pedestrians.MODE_BLOCK, 0.70) == "wait", "na calcada: espera")
+	check(Pedestrians.activity_for(Pedestrians.MODE_BLOCK, 0.60) == "wait", "na calcada: espera")
+	check(Pedestrians.activity_for(Pedestrians.MODE_BLOCK, 0.75) == "wave", "na calcada: acena")
 	check(Pedestrians.activity_for(Pedestrians.MODE_BLOCK, 0.95) == "",
 		"e as vezes so fica parado olhando a rua")
 	check(Pedestrians.clip_for(false, false, false, 0.0, true, true, true, true, "phone") == "phone",

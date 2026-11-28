@@ -228,12 +228,14 @@ static func activity_for(mode: int, r: float) -> String:
 		if r < 0.82:
 			return "talk"
 		return "phone"
-	if r < 0.34:
+	if r < 0.30:
 		return "phone"
-	if r < 0.60:
+	if r < 0.54:
 		return "talk"
-	if r < 0.78:
+	if r < 0.70:
 		return "wait"
+	if r < 0.80:
+		return "wave"
 	return ""
 
 
